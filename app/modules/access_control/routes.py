@@ -34,13 +34,17 @@ def client_list():
 
     rows = payload.get("rows", [])
     filter_department = current_app.config.get("ACCESS_CONTROL_FILTER_DEPARTMENT")
-    filtered_rows = []
+    department_rows = []
     for row in rows:
         if filter_department and row.get("strdeptname") != filter_department:
             continue
-        if search and not row_matches(row, search):
-            continue
-        filtered_rows.append(row)
+        department_rows.append(row)
+
+    cached_names = valid_name_cache_map(extract_client_mobiles(department_rows)) if search else {}
+    filtered_rows = [
+        row for row in department_rows
+        if not search or row_matches(row, search, cached_real_name(row, cached_names))
+    ]
 
     status_counts = client_status_counts(filtered_rows)
     all_filtered_mobiles = extract_client_mobiles(filtered_rows)
@@ -49,12 +53,11 @@ def client_list():
     total = len(filtered_rows)
     start = (page - 1) * per_page
     page_rows = filtered_rows[start:start + per_page]
-    cached_names = valid_name_cache_map(extract_client_mobiles(page_rows))
+    page_cached_names = cached_names or valid_name_cache_map(extract_client_mobiles(page_rows))
 
     clients = []
     for row in page_rows:
-        mobile = extract_mobile(row.get("strusername"))
-        real_name = cached_names.get(mobile)
+        real_name = cached_real_name(row, page_cached_names)
         os_info = get_device_os_info(row.get("strdevip"), row)
         clients.append(normalize_client_row(row, real_name=real_name, os_info=os_info))
 
@@ -165,10 +168,17 @@ def int_arg(name, default, minimum, maximum):
     return max(minimum, min(maximum, parsed))
 
 
-def row_matches(row, keyword):
+def cached_real_name(row, cached_names):
+    mobile = extract_mobile(row.get("strusername"))
+    return cached_names.get(mobile)
+
+
+def row_matches(row, keyword, real_name=None):
     fields = [
         row.get("strdevip"),
         row.get("strusername"),
+        row.get("struserdes"),
+        real_name,
         row.get("strdevname"),
         row.get("strmac"),
         row.get("strswitchname"),

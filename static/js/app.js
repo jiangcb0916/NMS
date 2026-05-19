@@ -786,7 +786,7 @@ async function loadClients(options = {}) {
         const clients = data.client_list || [];
         summary.textContent = `${renderClientSummaryPrefix()}共 ${data.total || 0} 条，当前显示 ${data.returned || clients.length} 条，${renderClientNameCacheSummary(data.name_cache_refresh)}`;
         if (!clients.length) {
-            body.innerHTML = `<tr><td colspan="8">${escapeHtml(result.message || '暂无数据')}</td></tr>`;
+            body.innerHTML = '<tr><td colspan="8">暂无数据</td></tr>';
             return;
         }
         body.innerHTML = clients.map((client) => `

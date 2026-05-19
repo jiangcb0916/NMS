@@ -97,6 +97,13 @@ def main():
         assert client_list_data["client_list"][0]["real_name"] == "张三"
         assert client_list_data["client_list"][0]["os"] == "Windows"
         assert client_list_data["client_list"][0]["os_version"] == "11 Pro"
+
+        name_search_response = client.get("/api/access-control/client-list?q=张三&page=1&per_page=10")
+        assert name_search_response.status_code == 200, name_search_response.get_data(as_text=True)
+        name_search_data = name_search_response.get_json()["data"]
+        assert name_search_data["total"] == 1
+        assert name_search_data["client_list"][0]["username"] == "13800000001"
+        assert name_search_data["client_list"][0]["real_name"] == "张三"
     finally:
         access_control_routes.AccessControlClient = original_access_control_client
 
