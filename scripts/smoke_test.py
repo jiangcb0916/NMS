@@ -128,6 +128,15 @@ def main():
             "send_rate": "768 Kbps",
             "stable_id": "ip_192.0.2.103",
         },
+        {
+            "user_index": "4",
+            "phone_number": "A8-B5-8E-E9-D8-D7",
+            "real_name": "无",
+            "ip_address": "N/A",
+            "recv_rate": "0 bps",
+            "send_rate": "0 bps",
+            "stable_id": "temp_index_4",
+        },
     ]
     wireless_routes.wireless_user_cache["last_update"] = time.time()
     wireless_users_response = client.get("/api/statistics/online-user-list?page=1&per_page=10&q=13800000001")
@@ -139,6 +148,12 @@ def main():
     assert wireless_users_data["user_list"][0]["real_name"] == "张三"
     assert wireless_routes.extract_mobile_number("审核人:13800000001") == "13800000001"
     assert wireless_routes.extract_mobile_number("A8-B5-8E-E9-D8-D7") is None
+    first_stable_id = wireless_routes.wireless_user_stable_id("13800000001", "192.0.2.101", "1")
+    same_stable_id = wireless_routes.wireless_user_stable_id("13800000001", "192.0.2.101", "99")
+    different_stable_id = wireless_routes.wireless_user_stable_id("13800000001", "192.0.2.102", "1")
+    assert first_stable_id == same_stable_id
+    assert first_stable_id != different_stable_id
+    assert wireless_routes.wireless_user_stable_id("无", "N/A", "4") == "temp_index_4"
 
     create_device_response = client.post("/api/access-control/device-list", json={
         "username": "smoke-device",

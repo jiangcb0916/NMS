@@ -392,7 +392,7 @@ async function loadWirelessUsers(options = {}) {
     showWirelessSubview('users');
     const body = document.getElementById('wireless-users-table-body');
     const summary = document.getElementById('wireless-users-summary');
-    body.innerHTML = '<tr><td colspan="6">加载中</td></tr>';
+    body.innerHTML = '<tr><td colspan="5">加载中</td></tr>';
     summary.textContent = '加载中';
 
     try {
@@ -414,7 +414,7 @@ async function loadWirelessUsers(options = {}) {
         renderWirelessUserPager();
 
         if (result.code !== 0) {
-            body.innerHTML = `<tr><td colspan="6">${escapeHtml(result.message || '请求失败')}</td></tr>`;
+            body.innerHTML = `<tr><td colspan="5">${escapeHtml(result.message || '请求失败')}</td></tr>`;
             summary.textContent = '无法获取在线用户数据';
             return;
         }
@@ -422,7 +422,7 @@ async function loadWirelessUsers(options = {}) {
         const users = data.user_list || [];
         summary.textContent = `共 ${wirelessUserState.total} 个在线用户，当前显示 ${data.returned || users.length} 个${data.names_resolved ? '，已解析当前页姓名' : ''}${wirelessUserState.cached ? '，使用缓存' : ''}`;
         if (!users.length) {
-            body.innerHTML = `<tr><td colspan="6">${escapeHtml(result.message || '暂无在线用户')}</td></tr>`;
+            body.innerHTML = `<tr><td colspan="5">${escapeHtml(result.message || '暂无在线用户')}</td></tr>`;
             return;
         }
         body.innerHTML = users.map((user) => `
@@ -432,11 +432,10 @@ async function loadWirelessUsers(options = {}) {
                 <td>${escapeHtml(user.ip_address || '-')}</td>
                 <td>${escapeHtml(user.recv_rate || '-')}</td>
                 <td>${escapeHtml(user.send_rate || '-')}</td>
-                <td>${escapeHtml(user.user_index || '-')}</td>
             </tr>
         `).join('');
     } catch (error) {
-        body.innerHTML = `<tr><td colspan="6">${escapeHtml(error.message)}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="5">${escapeHtml(error.message)}</td></tr>`;
         summary.textContent = '加载失败';
     }
 }

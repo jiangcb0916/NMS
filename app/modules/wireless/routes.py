@@ -1,3 +1,4 @@
+import hashlib
 import re
 from datetime import datetime
 
@@ -349,6 +350,7 @@ def get_wireless_online_users():
     now = time.time()
     if wireless_user_cache["data"] and now - wireless_user_cache["last_update"] < wireless_user_cache["cache_ttl"]:
         enrich_wireless_real_names(wireless_user_cache["data"])
+        wireless_user_cache["data"] = filter_meaningful_wireless_users(wireless_user_cache["data"])
         return wireless_user_cache["data"], True, True
 
     client = PrometheusClient()
@@ -367,7 +369,6 @@ def get_wireless_online_users():
         raw_user = names.get(index, "无")
         mobile_number = extract_mobile_number(raw_user)
         ip_address = ips.get(index, "N/A")
-        stable_id = f"ip_{ip_address}" if ip_address != "N/A" else f"index_{index}"
         users.append({
             "user_index": index,
             "phone_number": raw_user,
@@ -376,12 +377,31 @@ def get_wireless_online_users():
             "ip_address": ip_address,
             "recv_rate": recv_rates.get(index, "N/A"),
             "send_rate": send_rates.get(index, "N/A"),
-            "stable_id": stable_id,
+            "stable_id": wireless_user_stable_id(raw_user, ip_address, index),
         })
 
+    users = filter_meaningful_wireless_users(users)
     wireless_user_cache["data"] = users
     wireless_user_cache["last_update"] = now
     return users, False, True
+
+
+def filter_meaningful_wireless_users(users):
+    return [user for user in users if is_meaningful_wireless_user(user)]
+
+
+def is_meaningful_wireless_user(user):
+    if extract_mobile_number(user.get("phone_number")):
+        return True
+    return is_valid_ip_address(user.get("ip_address"))
+
+
+def is_valid_ip_address(value):
+    text = str(value or "").strip()
+    if text in {"", "N/A", "无", "-"}:
+        return False
+    parts = text.split(".")
+    return len(parts) == 4 and all(part.isdigit() and 0 <= int(part) <= 255 for part in parts)
 
 
 def enrich_wireless_real_names(users):
@@ -426,6 +446,22 @@ def is_mobile_number(value):
 def extract_mobile_number(value):
     match = re.search(r"(?<!\d)1\d{10}(?!\d)", str(value or ""))
     return match.group(0) if match else None
+
+
+def wireless_user_stable_id(raw_user, ip_address, index):
+    user_value = normalize_stable_part(raw_user)
+    ip_value = normalize_stable_part(ip_address)
+    parts = [part for part in (user_value, ip_value) if part]
+    if parts:
+        return "user_" + hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:16]
+    return f"temp_index_{index}"
+
+
+def normalize_stable_part(value):
+    text = str(value or "").strip()
+    if not text or text in {"N/A", "无", "未知用户", "-"}:
+        return ""
+    return text
 
 
 def filter_wireless_users(users, search=""):
