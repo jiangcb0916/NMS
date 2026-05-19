@@ -200,10 +200,20 @@
 <section class="panel wireless-panel app-view" id="wireless-panel" hidden>
     <div class="panel-header">
         <h2>无线控制器</h2>
-        <button class="small-button" id="reload-wireless" type="button">
-            <i class="bi bi-arrow-clockwise"></i>
-            <span>刷新</span>
-        </button>
+        <div class="button-row">
+            <button class="small-button active" id="wireless-ap-view-button" type="button">
+                <i class="bi bi-router"></i>
+                <span>AP 列表</span>
+            </button>
+            <button class="small-button" id="wireless-user-view-button" type="button">
+                <i class="bi bi-people"></i>
+                <span>在线用户</span>
+            </button>
+            <button class="small-button" id="reload-wireless" type="button">
+                <i class="bi bi-arrow-clockwise"></i>
+                <span>刷新</span>
+            </button>
+        </div>
     </div>
     <section class="metric-grid compact">
         <article class="metric">
@@ -228,25 +238,107 @@
             </div>
         </article>
     </section>
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>AP</th>
-                    <th>IP</th>
-                    <th>MAC</th>
-                    <th>状态</th>
-                    <th>用户数</th>
-                    <th>上行</th>
-                    <th>下行</th>
-                </tr>
-            </thead>
-            <tbody id="wireless-ap-table-body">
-                <tr>
-                    <td colspan="7">暂无数据</td>
-                </tr>
-            </tbody>
-        </table>
+    <div id="wireless-ap-view">
+        <div class="toolbar-row wireless-ap-toolbar">
+            <input id="wireless-ap-search" placeholder="搜索 AP、IP、MAC、状态">
+            <select id="wireless-ap-page-size" aria-label="每页数量">
+                <option value="10" selected>10 / 页</option>
+                <option value="20">20 / 页</option>
+                <option value="50">50 / 页</option>
+                <option value="100">100 / 页</option>
+                <option value="200">200 / 页</option>
+            </select>
+        </div>
+        <div class="list-summary" id="wireless-ap-summary">-</div>
+        <div class="quick-filter-row" id="wireless-ap-status-filter" aria-label="AP 状态筛选">
+            <button class="filter-chip active" type="button" data-wireless-ap-status="">
+                <span>全部</span>
+                <strong id="wireless-ap-status-all">0</strong>
+            </button>
+            <button class="filter-chip" type="button" data-wireless-ap-status="online">
+                <span>在线</span>
+                <strong id="wireless-ap-status-online">0</strong>
+            </button>
+            <button class="filter-chip" type="button" data-wireless-ap-status="offline">
+                <span>离线</span>
+                <strong id="wireless-ap-status-offline">0</strong>
+            </button>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>AP</th>
+                        <th>IP</th>
+                        <th>MAC</th>
+                        <th>状态</th>
+                        <th>用户数</th>
+                        <th>上行</th>
+                        <th>下行</th>
+                    </tr>
+                </thead>
+                <tbody id="wireless-ap-table-body">
+                    <tr>
+                        <td colspan="7">暂无数据</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="pagination-row">
+            <button class="small-button" id="wireless-ap-prev" type="button">
+                <i class="bi bi-chevron-left"></i>
+                <span>上一页</span>
+            </button>
+            <span id="wireless-ap-page">-</span>
+            <button class="small-button" id="wireless-ap-next" type="button">
+                <span>下一页</span>
+                <i class="bi bi-chevron-right"></i>
+            </button>
+        </div>
+    </div>
+
+    <div id="wireless-user-view" hidden>
+        <div class="toolbar-row wireless-user-toolbar">
+            <input id="wireless-user-search" placeholder="搜索用户数据、姓名、IP">
+            <select id="wireless-user-page-size" aria-label="每页数量">
+                <option value="10" selected>10 / 页</option>
+                <option value="20">20 / 页</option>
+                <option value="50">50 / 页</option>
+                <option value="100">100 / 页</option>
+                <option value="200">200 / 页</option>
+            </select>
+        </div>
+        <div class="list-summary" id="wireless-users-summary">-</div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>用户数据</th>
+                        <th>姓名</th>
+                        <th>IP</th>
+                        <th>上行</th>
+                        <th>下行</th>
+                        <th>索引</th>
+                    </tr>
+                </thead>
+                <tbody id="wireless-users-table-body">
+                    <tr>
+                        <td colspan="6">暂无数据</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="pagination-row">
+            <button class="small-button" id="wireless-users-prev" type="button">
+                <i class="bi bi-chevron-left"></i>
+                <span>上一页</span>
+            </button>
+            <span id="wireless-users-page">-</span>
+            <button class="small-button" id="wireless-users-next" type="button">
+                <span>下一页</span>
+                <i class="bi bi-chevron-right"></i>
+            </button>
+        </div>
     </div>
 </section>
 

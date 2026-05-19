@@ -73,8 +73,8 @@ class Config:
     DINGTALK_APPSECRET = os.environ.get("DINGTALK_APPSECRET")
     DINGTALK_TOKEN_TTL = env_int("DINGTALK_TOKEN_TTL", 7000)
 
-    PROMETHEUS_QUERY_URL = os.environ.get("PROMETHEUS_QUERY_URL")
-    PROMETHEUS_METRICS_URL = os.environ.get("PROMETHEUS_METRICS_URL")
+    PROMETHEUS_QUERY_URL = os.environ.get("PROMETHEUS_QUERY_URL", "http://172.16.80.125:9090/api/v1/query")
+    PROMETHEUS_METRICS_URL = os.environ.get("PROMETHEUS_METRICS_URL", "http://172.16.80.125:9191/metrics")
     WIRELESS_INSTANCE = os.environ.get("WIRELESS_INSTANCE", "172.16.100.7")
     WIRELESS_JOB = os.environ.get("WIRELESS_JOB", "ND")
     WIRELESS_AUTH = os.environ.get("WIRELESS_AUTH", "nac")

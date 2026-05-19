@@ -103,7 +103,7 @@ const clientState = {
     page: 1,
     perPage: 10,
     query: '',
-    resolveNames: false,
+    resolveNames: true,
     pages: 0,
     total: 0
 };
@@ -124,9 +124,36 @@ const deviceState = {
     }
 };
 
+const wirelessUserState = {
+    page: 1,
+    perPage: 10,
+    query: '',
+    resolveNames: false,
+    pages: 0,
+    total: 0,
+    allTotal: 0,
+    cached: false
+};
+
+const wirelessApState = {
+    page: 1,
+    perPage: 10,
+    query: '',
+    status: '',
+    pages: 0,
+    total: 0,
+    allTotal: 0,
+    statusCounts: {
+        all: 0,
+        online: 0,
+        offline: 0
+    }
+};
+
 let currentUser = null;
 let usersCache = [];
 let devicesCache = [];
+let wirelessActiveView = 'aps';
 
 function showView(viewId, navId, titleKey) {
     document.querySelectorAll('.app-view').forEach((view) => {
@@ -269,24 +296,55 @@ async function loadDevices(options = {}) {
     }
 }
 
-async function loadWireless() {
+async function loadWireless(options = {}) {
+    wirelessApState.page = options.page || wirelessApState.page;
+    wirelessApState.perPage = options.perPage || wirelessApState.perPage;
+    wirelessApState.query = options.query !== undefined ? options.query : wirelessApState.query;
+    wirelessApState.status = options.status !== undefined ? options.status : wirelessApState.status;
+
+    const searchControl = document.getElementById('wireless-ap-search');
+    const pageSizeControl = document.getElementById('wireless-ap-page-size');
+    if (options.query === undefined && searchControl) {
+        wirelessApState.query = searchControl.value.trim();
+    }
+    if (options.perPage === undefined && pageSizeControl) {
+        wirelessApState.perPage = Number(pageSizeControl.value);
+    }
+
     showView('wireless-panel', 'wireless-nav', 'wireless');
+    showWirelessSubview('aps');
     const panel = document.getElementById('wireless-panel');
     const body = document.getElementById('wireless-ap-table-body');
+    const summary = document.getElementById('wireless-ap-summary');
     panel.hidden = false;
     body.innerHTML = '<tr><td colspan="7">加载中</td></tr>';
+    summary.textContent = '加载中';
 
     try {
-        const status = await apiGetResult('/api/status/wireless-controller');
-        const apInfo = await apiGetResult('/api/statistics/ap-info');
-        const data = status.data || {};
-        document.getElementById('wireless-users').textContent = data.wireless_users ?? 0;
-        document.getElementById('wireless-ap-online').textContent = data.ap_online ?? 0;
-        document.getElementById('wireless-cpu').textContent = `${data.cpu_usage ?? 0}%`;
+        const status = await loadWirelessMetrics();
+        const params = new URLSearchParams({
+            page: wirelessApState.page,
+            per_page: wirelessApState.perPage,
+            q: wirelessApState.query,
+            status: wirelessApState.status
+        });
+        const apInfo = await apiGetResult(`/api/statistics/ap-info?${params.toString()}`);
+        const apData = apInfo.data || {};
 
-        const apList = (apInfo.data && apInfo.data.ap_list) || [];
+        const apList = apData.ap_list || [];
+        wirelessApState.page = apData.page || wirelessApState.page;
+        wirelessApState.pages = apData.pages || 0;
+        wirelessApState.total = apData.total_aps || 0;
+        wirelessApState.allTotal = apData.all_total_aps || apData.total_aps || 0;
+        wirelessApState.status = apData.status || '';
+        wirelessApState.statusCounts = apData.status_counts || {all: 0, online: 0, offline: 0};
+        renderWirelessApStatusFilters();
+        renderWirelessApPager();
+
+        summary.textContent = `${renderWirelessApSummaryPrefix()}共 ${wirelessApState.total} 个 AP，当前显示 ${apData.returned || apList.length} 个，承载 ${apData.total_users || 0} 个用户`;
         if (!apList.length) {
             body.innerHTML = `<tr><td colspan="7">${escapeHtml(apInfo.message || status.message || '暂无数据')}</td></tr>`;
+            summary.textContent = apInfo.message || status.message || '暂无 AP 数据';
             return;
         }
         body.innerHTML = apList.map((ap) => `
@@ -294,7 +352,7 @@ async function loadWireless() {
                 <td>${escapeHtml(ap.ap_name || '-')}</td>
                 <td>${escapeHtml(ap.ap_ip || '-')}</td>
                 <td>${escapeHtml(ap.ap_mac_address || '-')}</td>
-                <td>${escapeHtml(ap.status_text || ap.status || '-')}</td>
+                <td>${renderWirelessApStatus(ap)}</td>
                 <td>${escapeHtml(ap.user_count ?? 0)}</td>
                 <td>${escapeHtml(ap.ap_recv_rate || '-')}</td>
                 <td>${escapeHtml(ap.ap_send_rate || '-')}</td>
@@ -302,6 +360,84 @@ async function loadWireless() {
         `).join('');
     } catch (error) {
         body.innerHTML = `<tr><td colspan="7">${escapeHtml(error.message)}</td></tr>`;
+        summary.textContent = '加载失败';
+    }
+}
+
+async function loadWirelessMetrics() {
+    const status = await apiGetResult('/api/status/wireless-controller');
+    const data = status.data || {};
+    document.getElementById('wireless-users').textContent = data.wireless_users ?? 0;
+    document.getElementById('wireless-ap-online').textContent = data.ap_online ?? 0;
+    document.getElementById('wireless-cpu').textContent = `${data.cpu_usage ?? 0}%`;
+    return status;
+}
+
+async function loadWirelessUsers(options = {}) {
+    wirelessUserState.page = options.page || wirelessUserState.page;
+    wirelessUserState.perPage = options.perPage || wirelessUserState.perPage;
+    wirelessUserState.query = options.query !== undefined ? options.query : wirelessUserState.query;
+    wirelessUserState.resolveNames = options.resolveNames !== undefined ? options.resolveNames : wirelessUserState.resolveNames;
+
+    const searchControl = document.getElementById('wireless-user-search');
+    const pageSizeControl = document.getElementById('wireless-user-page-size');
+    if (options.query === undefined && searchControl) {
+        wirelessUserState.query = searchControl.value.trim();
+    }
+    if (options.perPage === undefined && pageSizeControl) {
+        wirelessUserState.perPage = Number(pageSizeControl.value);
+    }
+
+    showView('wireless-panel', 'wireless-nav', 'wireless');
+    showWirelessSubview('users');
+    const body = document.getElementById('wireless-users-table-body');
+    const summary = document.getElementById('wireless-users-summary');
+    body.innerHTML = '<tr><td colspan="6">加载中</td></tr>';
+    summary.textContent = '加载中';
+
+    try {
+        await loadWirelessMetrics();
+        const params = new URLSearchParams({
+            page: wirelessUserState.page,
+            per_page: wirelessUserState.perPage,
+            q: wirelessUserState.query,
+            resolve_names: wirelessUserState.resolveNames ? '1' : '0'
+        });
+        const result = await apiGetResult(`/api/statistics/online-user-list?${params.toString()}`);
+        const data = result.data || {};
+
+        wirelessUserState.page = data.page || wirelessUserState.page;
+        wirelessUserState.pages = data.pages || 0;
+        wirelessUserState.total = data.total_users || 0;
+        wirelessUserState.allTotal = data.all_total_users || data.total_users || 0;
+        wirelessUserState.cached = Boolean(data.cached);
+        renderWirelessUserPager();
+
+        if (result.code !== 0) {
+            body.innerHTML = `<tr><td colspan="6">${escapeHtml(result.message || '请求失败')}</td></tr>`;
+            summary.textContent = '无法获取在线用户数据';
+            return;
+        }
+
+        const users = data.user_list || [];
+        summary.textContent = `共 ${wirelessUserState.total} 个在线用户，当前显示 ${data.returned || users.length} 个${data.names_resolved ? '，已解析当前页姓名' : ''}${wirelessUserState.cached ? '，使用缓存' : ''}`;
+        if (!users.length) {
+            body.innerHTML = `<tr><td colspan="6">${escapeHtml(result.message || '暂无在线用户')}</td></tr>`;
+            return;
+        }
+        body.innerHTML = users.map((user) => `
+            <tr>
+                <td>${escapeHtml(user.phone_number || '-')}</td>
+                <td>${escapeHtml(user.real_name || '无')}</td>
+                <td>${escapeHtml(user.ip_address || '-')}</td>
+                <td>${escapeHtml(user.recv_rate || '-')}</td>
+                <td>${escapeHtml(user.send_rate || '-')}</td>
+                <td>${escapeHtml(user.user_index || '-')}</td>
+            </tr>
+        `).join('');
+    } catch (error) {
+        body.innerHTML = `<tr><td colspan="6">${escapeHtml(error.message)}</td></tr>`;
+        summary.textContent = '加载失败';
     }
 }
 
@@ -625,6 +761,80 @@ function renderClientPager() {
     pageText.textContent = clientState.pages ? `${clientState.page} / ${clientState.pages}` : '-';
     prev.disabled = clientState.page <= 1;
     next.disabled = clientState.pages === 0 || clientState.page >= clientState.pages;
+}
+
+function showWirelessSubview(view) {
+    wirelessActiveView = view;
+    const apView = document.getElementById('wireless-ap-view');
+    const userView = document.getElementById('wireless-user-view');
+    const apButton = document.getElementById('wireless-ap-view-button');
+    const userButton = document.getElementById('wireless-user-view-button');
+
+    if (apView) {
+        apView.hidden = view !== 'aps';
+    }
+    if (userView) {
+        userView.hidden = view !== 'users';
+    }
+    if (apButton) {
+        apButton.classList.toggle('active', view === 'aps');
+    }
+    if (userButton) {
+        userButton.classList.toggle('active', view === 'users');
+    }
+}
+
+function renderWirelessApPager() {
+    const pageText = document.getElementById('wireless-ap-page');
+    const prev = document.getElementById('wireless-ap-prev');
+    const next = document.getElementById('wireless-ap-next');
+    if (!pageText || !prev || !next) {
+        return;
+    }
+    pageText.textContent = wirelessApState.pages ? `${wirelessApState.page} / ${wirelessApState.pages}` : '-';
+    prev.disabled = wirelessApState.page <= 1;
+    next.disabled = wirelessApState.pages === 0 || wirelessApState.page >= wirelessApState.pages;
+}
+
+function renderWirelessApStatusFilters() {
+    const counts = wirelessApState.statusCounts || {};
+    document.querySelectorAll('[data-wireless-ap-status]').forEach((button) => {
+        button.classList.toggle('active', button.dataset.wirelessApStatus === wirelessApState.status);
+    });
+    ['all', 'online', 'offline'].forEach((key) => {
+        const target = document.getElementById(`wireless-ap-status-${key}`);
+        if (target) {
+            target.textContent = counts[key] ?? 0;
+        }
+    });
+}
+
+function renderWirelessApSummaryPrefix() {
+    if (wirelessApState.status === 'online') {
+        return '在线 AP，';
+    }
+    if (wirelessApState.status === 'offline') {
+        return '离线 AP，';
+    }
+    return '';
+}
+
+function renderWirelessApStatus(ap) {
+    return ap.is_online || ap.status === 'Online'
+        ? '<span class="status-badge ok">在线</span>'
+        : '<span class="status-badge bad">离线</span>';
+}
+
+function renderWirelessUserPager() {
+    const pageText = document.getElementById('wireless-users-page');
+    const prev = document.getElementById('wireless-users-prev');
+    const next = document.getElementById('wireless-users-next');
+    if (!pageText || !prev || !next) {
+        return;
+    }
+    pageText.textContent = wirelessUserState.pages ? `${wirelessUserState.page} / ${wirelessUserState.pages}` : '-';
+    prev.disabled = wirelessUserState.page <= 1;
+    next.disabled = wirelessUserState.pages === 0 || wirelessUserState.page >= wirelessUserState.pages;
 }
 
 function debounce(fn, delay = 300) {
@@ -1029,7 +1239,93 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const reloadWireless = document.getElementById('reload-wireless');
     if (reloadWireless) {
-        reloadWireless.addEventListener('click', loadWireless);
+        reloadWireless.addEventListener('click', () => {
+            if (wirelessActiveView === 'users') {
+                loadWirelessUsers();
+            } else {
+                loadWireless();
+            }
+        });
+    }
+
+    const wirelessApViewButton = document.getElementById('wireless-ap-view-button');
+    if (wirelessApViewButton) {
+        wirelessApViewButton.addEventListener('click', loadWireless);
+    }
+
+    const wirelessApSearch = document.getElementById('wireless-ap-search');
+    if (wirelessApSearch) {
+        wirelessApSearch.addEventListener('input', debounce((event) => {
+            loadWireless({page: 1, query: event.target.value.trim()});
+        }));
+    }
+
+    const wirelessApPageSize = document.getElementById('wireless-ap-page-size');
+    if (wirelessApPageSize) {
+        wirelessApPageSize.addEventListener('change', (event) => {
+            loadWireless({page: 1, perPage: Number(event.target.value)});
+        });
+    }
+
+    document.querySelectorAll('[data-wireless-ap-status]').forEach((button) => {
+        button.addEventListener('click', () => {
+            loadWireless({page: 1, status: button.dataset.wirelessApStatus || ''});
+        });
+    });
+
+    const wirelessApPrev = document.getElementById('wireless-ap-prev');
+    if (wirelessApPrev) {
+        wirelessApPrev.addEventListener('click', () => {
+            if (wirelessApState.page > 1) {
+                loadWireless({page: wirelessApState.page - 1});
+            }
+        });
+    }
+
+    const wirelessApNext = document.getElementById('wireless-ap-next');
+    if (wirelessApNext) {
+        wirelessApNext.addEventListener('click', () => {
+            if (wirelessApState.page < wirelessApState.pages) {
+                loadWireless({page: wirelessApState.page + 1});
+            }
+        });
+    }
+
+    const wirelessUserViewButton = document.getElementById('wireless-user-view-button');
+    if (wirelessUserViewButton) {
+        wirelessUserViewButton.addEventListener('click', () => loadWirelessUsers({page: 1}));
+    }
+
+    const wirelessUserSearch = document.getElementById('wireless-user-search');
+    if (wirelessUserSearch) {
+        wirelessUserSearch.addEventListener('input', debounce((event) => {
+            loadWirelessUsers({page: 1, query: event.target.value.trim(), resolveNames: true});
+        }));
+    }
+
+    const wirelessUserPageSize = document.getElementById('wireless-user-page-size');
+    if (wirelessUserPageSize) {
+        wirelessUserPageSize.addEventListener('change', (event) => {
+            loadWirelessUsers({page: 1, perPage: Number(event.target.value), resolveNames: true});
+        });
+    }
+
+    const wirelessUsersPrev = document.getElementById('wireless-users-prev');
+    if (wirelessUsersPrev) {
+        wirelessUsersPrev.addEventListener('click', () => {
+            if (wirelessUserState.page > 1) {
+                loadWirelessUsers({page: wirelessUserState.page - 1});
+            }
+        });
+    }
+
+    const wirelessUsersNext = document.getElementById('wireless-users-next');
+    if (wirelessUsersNext) {
+        wirelessUsersNext.addEventListener('click', () => {
+            if (wirelessUserState.page < wirelessUserState.pages) {
+                loadWirelessUsers({page: wirelessUserState.page + 1});
+            }
+        });
     }
 
     const reloadClients = document.getElementById('reload-clients');

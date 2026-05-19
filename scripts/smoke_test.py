@@ -2,6 +2,8 @@
 import io
 import os
 import sys
+import time
+from datetime import timedelta
 from pathlib import Path
 
 
@@ -11,7 +13,14 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 from app import create_app
 from app.extensions import db
+from app.models.base import now_local
+from app.models.cache import UserNameCache
 from app.models.user import User
+from app.modules.wireless import routes as wireless_routes
+
+
+def hex_text(value):
+    return "0x" + value.encode("utf-8").hex()
 
 
 def main():
@@ -22,6 +31,11 @@ def main():
         user = User(username="admin", full_name="系统管理员", role="admin", is_superuser=True)
         user.set_password("admin123")
         db.session.add(user)
+        db.session.add(UserNameCache(
+            mobile="13800000001",
+            real_name="张三",
+            expires_at=now_local() + timedelta(hours=24),
+        ))
         db.session.commit()
 
     client = app.test_client()
@@ -36,6 +50,95 @@ def main():
 
     health_response = client.get("/api/health")
     assert health_response.status_code == 200, health_response.get_data(as_text=True)
+
+    class FakePrometheusClient:
+        query_configured = True
+        metrics_configured = False
+
+        def query(self, expression):
+            assert 'auth="nac"' in expression
+            assert 'instance="172.16.100.7"' in expression
+            assert 'job="ND"' in expression
+            assert 'module="mgmt,private"' in expression
+            values = {
+                "sfApName": {"1": hex_text("AP-A"), "2": hex_text("AP-B")},
+                "sfApStatus": {"1": hex_text("Online"), "2": hex_text("Offline")},
+                "sfApIP": {"1": "192.0.2.201", "2": "192.0.2.202"},
+                "sfApMAC": {"1": "001122334455", "2": "001122334466"},
+                "sfApRecvRate": {"1": hex_text("1 Mbps"), "2": hex_text("0 bps")},
+                "sfApSendRate": {"1": hex_text("2 Mbps"), "2": hex_text("0 bps")},
+            }
+            if "sfApUsrNum" in expression:
+                return [
+                    {"metric": {"apIndex": "1"}, "value": [0, "3"]},
+                    {"metric": {"apIndex": "2"}, "value": [0, "0"]},
+                ]
+            for metric_name, metric_values in values.items():
+                if metric_name in expression:
+                    return [
+                        {"metric": {"apIndex": index, metric_name: value}, "value": [0, "1"]}
+                        for index, value in metric_values.items()
+                    ]
+            return []
+
+        def metrics_text(self):
+            return ""
+
+    original_prometheus_client = wireless_routes.PrometheusClient
+    wireless_routes.PrometheusClient = FakePrometheusClient
+    try:
+        ap_response = client.get("/api/statistics/ap-info?page=1&per_page=10&status=online&q=AP-A")
+        assert ap_response.status_code == 200, ap_response.get_data(as_text=True)
+        ap_data = ap_response.get_json()["data"]
+        assert ap_data["total_aps"] == 1
+        assert ap_data["status_counts"] == {"all": 1, "online": 1, "offline": 0}
+        assert ap_data["ap_list"][0]["ap_name"] == "AP-A"
+
+        offline_ap_response = client.get("/api/statistics/ap-info?page=1&per_page=10&status=offline")
+        assert offline_ap_response.status_code == 200, offline_ap_response.get_data(as_text=True)
+        assert offline_ap_response.get_json()["data"]["total_aps"] == 1
+    finally:
+        wireless_routes.PrometheusClient = original_prometheus_client
+
+    wireless_routes.wireless_user_cache["data"] = [
+        {
+            "user_index": "1",
+            "phone_number": "13800000001",
+            "real_name": "无",
+            "ip_address": "192.0.2.101",
+            "recv_rate": "1 Mbps",
+            "send_rate": "512 Kbps",
+            "stable_id": "ip_192.0.2.101",
+        },
+        {
+            "user_index": "2",
+            "phone_number": "审核人:13800000002",
+            "real_name": "无",
+            "ip_address": "192.0.2.102",
+            "recv_rate": "2 Mbps",
+            "send_rate": "768 Kbps",
+            "stable_id": "ip_192.0.2.102",
+        },
+        {
+            "user_index": "3",
+            "phone_number": "无",
+            "real_name": "无",
+            "ip_address": "192.0.2.103",
+            "recv_rate": "2 Mbps",
+            "send_rate": "768 Kbps",
+            "stable_id": "ip_192.0.2.103",
+        },
+    ]
+    wireless_routes.wireless_user_cache["last_update"] = time.time()
+    wireless_users_response = client.get("/api/statistics/online-user-list?page=1&per_page=10&q=13800000001")
+    assert wireless_users_response.status_code == 200, wireless_users_response.get_data(as_text=True)
+    wireless_users_data = wireless_users_response.get_json()["data"]
+    assert wireless_users_data["total_users"] == 1
+    assert wireless_users_data["all_total_users"] == 3
+    assert wireless_users_data["ssids"] == []
+    assert wireless_users_data["user_list"][0]["real_name"] == "张三"
+    assert wireless_routes.extract_mobile_number("审核人:13800000001") == "13800000001"
+    assert wireless_routes.extract_mobile_number("A8-B5-8E-E9-D8-D7") is None
 
     create_device_response = client.post("/api/access-control/device-list", json={
         "username": "smoke-device",

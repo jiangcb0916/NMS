@@ -1,9 +1,12 @@
+import re
 from datetime import datetime
 
-from flask import Blueprint, current_app
+from flask import Blueprint, current_app, request
 from flask_login import login_required
 
 from app.common.responses import success
+from app.models.base import now_local
+from app.models.cache import UserNameCache
 from app.modules.integrations.prometheus import (
     PrometheusClient,
     hex_to_ip,
@@ -12,6 +15,7 @@ from app.modules.integrations.prometheus import (
     metric_value,
     parse_user_names_metrics,
 )
+from app.modules.integrations.dingtalk import DingTalkClient
 
 
 wireless_bp = Blueprint("wireless_api", __name__)
@@ -29,10 +33,9 @@ def wireless_controller():
     if not client.query_configured:
         return success(empty_wireless_data(), message="Prometheus 查询接口未配置", code=1)
 
-    query = wireless_query
-    users = metric_value(client.query(query("sfUserNum")), 0)
-    cpu = metric_value(client.query(query("sfSysCpuCostRate")), 0)
-    ap_online = metric_value(client.query(query("sfApOnlineNum")), 0)
+    users = metric_value(client.query(wireless_query("sfUserNum")), 0)
+    cpu = metric_value(client.query(wireless_query("sfSysCpuCostRate")), 0)
+    ap_online = metric_value(client.query(wireless_query("sfApOnlineNum")), 0)
     ssid_stats = build_ssid_stats(client)
 
     return success({
@@ -56,44 +59,37 @@ def wireless_statistics():
 def ap_info():
     client = PrometheusClient()
     if not client.query_configured:
-        return success({
-            "ap_list": [],
-            "total_aps": 0,
-            "online_aps": 0,
-            "total_users": 0,
-            "configured": False,
-        }, message="Prometheus 查询接口未配置", code=1)
+        return success(empty_ap_payload(configured=False), message="Prometheus 查询接口未配置", code=1)
 
-    names = metric_label_map(client.query(wireless_query("sfApName")), "apIndex", "sfApName", decode=hex_to_string)
-    statuses = metric_label_map(client.query(wireless_query("sfApStatus")), "apIndex", "sfApStatus", decode=hex_to_string)
-    user_counts = metric_value_map(client.query(wireless_query("sfApUsrNum")), "apIndex")
-    ips = metric_label_map(client.query(wireless_query("sfApIP")), "apIndex", "sfApIP")
-    macs = metric_label_map(client.query(wireless_query("sfApMAC")), "apIndex", "sfApMAC", decode=hex_to_mac)
-    recv_rates = metric_label_map(client.query(wireless_query("sfApRecvRate")), "apIndex", "sfApRecvRate", decode=hex_to_string)
-    send_rates = metric_label_map(client.query(wireless_query("sfApSendRate")), "apIndex", "sfApSendRate", decode=hex_to_string)
+    page = int_arg("page", default=1, minimum=1, maximum=100000)
+    per_page = int_arg("per_page", default=10, minimum=10, maximum=500)
+    search = (request.args.get("q") or "").strip().lower()
+    status = normalize_ap_status(request.args.get("status"))
 
-    ap_list = []
-    indices = set(names) | set(statuses) | set(user_counts) | set(ips) | set(macs) | set(recv_rates) | set(send_rates)
-    for index in sorted(indices, key=lambda value: int(value) if str(value).isdigit() else 999999):
-        status = statuses.get(index, "Unknown")
-        ap_list.append({
-            "ap_index": index,
-            "ap_name": names.get(index, f"AP-{index}"),
-            "status": status,
-            "status_text": "在线" if status == "Online" else "离线",
-            "status_class": "success" if status == "Online" else "danger",
-            "user_count": int(user_counts.get(index, 0)),
-            "ap_ip": ips.get(index, "N/A"),
-            "ap_mac_address": macs.get(index, "N/A"),
-            "ap_recv_rate": recv_rates.get(index, "0.00 bps"),
-            "ap_send_rate": send_rates.get(index, "0.00 bps"),
-        })
+    ap_list = build_ap_list(client)
+    status_counts = ap_status_counts(filter_aps(ap_list, search=search, status=""))
+    filtered_aps = filter_aps(ap_list, search=search, status=status)
+    total = len(filtered_aps)
+    pages = (total + per_page - 1) // per_page if total else 0
+    if pages and page > pages:
+        page = pages
 
+    start = (page - 1) * per_page
+    page_aps = filtered_aps[start:start + per_page]
     return success({
-        "ap_list": ap_list,
-        "total_aps": len(ap_list),
-        "online_aps": sum(1 for ap in ap_list if ap["status"] == "Online"),
-        "total_users": sum(ap["user_count"] for ap in ap_list),
+        "ap_list": page_aps,
+        "total_aps": total,
+        "all_total_aps": len(ap_list),
+        "online_aps": status_counts["online"],
+        "offline_aps": status_counts["offline"],
+        "total_users": sum(ap["user_count"] for ap in filtered_aps),
+        "returned": len(page_aps),
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
+        "q": search,
+        "status": status,
+        "status_counts": status_counts,
         "configured": True,
     })
 
@@ -101,54 +97,39 @@ def ap_info():
 @wireless_bp.route("/api/statistics/online-user-list", methods=["GET"])
 @login_required
 def wireless_online_users():
-    import time
+    page = int_arg("page", default=1, minimum=1, maximum=100000)
+    per_page = int_arg("per_page", default=10, minimum=10, maximum=500)
+    search = (request.args.get("q") or "").strip().lower()
+    resolve_names = (request.args.get("resolve_names") or "1").lower() in {"1", "true", "yes", "on"}
 
-    now = time.time()
-    if wireless_user_cache["data"] and now - wireless_user_cache["last_update"] < wireless_user_cache["cache_ttl"]:
-        return success({
-            "user_list": wireless_user_cache["data"],
-            "total_users": len(wireless_user_cache["data"]),
-            "cached": True,
-        })
+    users, cached, configured = get_wireless_online_users()
+    if not configured:
+        return success(empty_wireless_user_payload(configured=False), message="Prometheus 查询接口未配置", code=1)
 
-    client = PrometheusClient()
-    if not client.query_configured:
-        return success({
-            "user_list": [],
-            "total_users": 0,
-            "cached": False,
-            "configured": False,
-        }, message="Prometheus 查询接口未配置", code=1)
+    filtered_users = filter_wireless_users(users, search=search)
+    total = len(filtered_users)
+    pages = (total + per_page - 1) // per_page if total else 0
+    if pages and page > pages:
+        page = pages
 
-    ips = metric_label_map(client.query(wireless_query("sfStaIp")), "UserIndex", "sfStaIp", decode=hex_to_ip)
-    macs = metric_label_map(client.query(wireless_query("sfStaMacAddress")), "UserIndex", "sfStaMacAddress", decode=hex_to_mac)
-    recv_rates = metric_label_map(client.query(wireless_query("sfStaRecvRate")), "UserIndex", "sfStaRecvRate", decode=hex_to_string)
-    send_rates = metric_label_map(client.query(wireless_query("sfStaSendRate")), "UserIndex", "sfStaSendRate", decode=hex_to_string)
-    ssids = metric_label_map(client.query(wireless_query("sfStaSsid")), "UserIndex", "sfStaSsid", decode=hex_to_string)
-    names = metric_label_map(client.query(wireless_query("sfUserName")), "UserIndex", "sfUserName", decode=hex_to_string)
+    start = (page - 1) * per_page
+    page_users = filtered_users[start:start + per_page]
+    if resolve_names:
+        resolve_wireless_real_names(page_users)
 
-    users = []
-    indices = set(ips) | set(macs) | set(recv_rates) | set(send_rates) | set(ssids) | set(names)
-    for index in sorted(indices, key=lambda value: int(value) if str(value).isdigit() else 999999):
-        ip_address = ips.get(index, "N/A")
-        stable_id = f"ip_{ip_address}" if ip_address != "N/A" else f"index_{index}"
-        users.append({
-            "user_index": index,
-            "phone_number": names.get(index, "未知用户"),
-            "ip_address": ip_address,
-            "mac_address": macs.get(index, "N/A"),
-            "ssid": ssids.get(index, "N/A"),
-            "recv_rate": recv_rates.get(index, "N/A"),
-            "send_rate": send_rates.get(index, "N/A"),
-            "stable_id": stable_id,
-        })
-
-    wireless_user_cache["data"] = users
-    wireless_user_cache["last_update"] = now
     return success({
-        "user_list": users,
-        "total_users": len(users),
-        "cached": False,
+        "user_list": page_users,
+        "total_users": total,
+        "returned": len(page_users),
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
+        "q": search,
+        "ssid": "",
+        "ssids": [],
+        "all_total_users": len(users),
+        "cached": cached,
+        "names_resolved": resolve_names,
         "configured": True,
     })
 
@@ -165,22 +146,20 @@ def user_names():
 @wireless_bp.route("/api/validation/wireless-user-data", methods=["GET"])
 @login_required
 def validate_wireless_user_data():
-    response, _ = wireless_online_users()
-    data = response.get_json()["data"]
-    users = data.get("user_list", [])
+    users, _, configured = get_wireless_online_users()
+    if not configured:
+        users = []
     missing_ip = sum(1 for user in users if user.get("ip_address") == "N/A")
-    missing_mac = sum(1 for user in users if user.get("mac_address") == "N/A")
     return success({
         "validation": {
             "timestamp": datetime.now().isoformat(),
             "status": "success",
             "issues": [],
             "warnings": [],
-            "data_quality": "good" if not missing_ip and not missing_mac else "fair",
+            "data_quality": "good" if not missing_ip else "fair",
             "statistics": {
                 "total_users": len(users),
                 "empty_ips": missing_ip,
-                "empty_macs": missing_mac,
             },
         }
     })
@@ -223,18 +202,6 @@ def ssid_health():
     })
 
 
-def wireless_query(metric_name):
-    config = current_app.config
-    labels = {
-        "auth": config["WIRELESS_AUTH"],
-        "instance": config["WIRELESS_INSTANCE"],
-        "job": config["WIRELESS_JOB"],
-        "module": config["WIRELESS_MODULE"],
-    }
-    label_text = ",".join(f'{key}="{value}"' for key, value in labels.items())
-    return f"{metric_name}{{{label_text}}}"
-
-
 def build_ssid_stats(client):
     users = metric_value_map(client.query(wireless_query("sfSsidUsrNum")), "SsidIndex")
     names = metric_label_map(client.query(wireless_query("sfSsidName")), "SsidIndex", "sfSsidName", decode=hex_to_string)
@@ -245,6 +212,22 @@ def build_ssid_stats(client):
             "users": int(users.get(index, 0)),
         })
     return sorted(stats, key=lambda item: item["users"], reverse=True)
+
+
+def wireless_query(metric_name):
+    config = current_app.config
+    labels = {
+        "auth": config["WIRELESS_AUTH"],
+        "instance": config["WIRELESS_INSTANCE"],
+        "job": config["WIRELESS_JOB"],
+        "module": config["WIRELESS_MODULE"],
+    }
+    label_text = ",".join(f'{key}="{escape_label_value(value)}"' for key, value in labels.items())
+    return f"{metric_name}{{{label_text}}}"
+
+
+def escape_label_value(value):
+    return str(value).replace("\\", "\\\\").replace('"', '\\"')
 
 
 def metric_value_map(results, index_label):
@@ -265,6 +248,237 @@ def metric_label_map(results, index_label, value_label, decode=None):
         if index is not None and raw_value is not None:
             values[index] = decode(raw_value) if decode else raw_value
     return values
+
+
+def build_ap_list(client):
+    names = metric_label_map(client.query(wireless_query("sfApName")), "apIndex", "sfApName", decode=hex_to_string)
+    statuses = metric_label_map(client.query(wireless_query("sfApStatus")), "apIndex", "sfApStatus", decode=hex_to_string)
+    user_counts = metric_value_map(client.query(wireless_query("sfApUsrNum")), "apIndex")
+    ips = metric_label_map(client.query(wireless_query("sfApIP")), "apIndex", "sfApIP")
+    macs = metric_label_map(client.query(wireless_query("sfApMAC")), "apIndex", "sfApMAC", decode=hex_to_mac)
+    recv_rates = metric_label_map(client.query(wireless_query("sfApRecvRate")), "apIndex", "sfApRecvRate", decode=hex_to_string)
+    send_rates = metric_label_map(client.query(wireless_query("sfApSendRate")), "apIndex", "sfApSendRate", decode=hex_to_string)
+
+    ap_list = []
+    indices = set(names) | set(statuses) | set(user_counts) | set(ips) | set(macs) | set(recv_rates) | set(send_rates)
+    for index in sorted(indices, key=lambda value: int(value) if str(value).isdigit() else 999999):
+        status = statuses.get(index, "Unknown")
+        is_online = status == "Online"
+        ap_list.append({
+            "ap_index": index,
+            "ap_name": names.get(index, f"AP-{index}"),
+            "status": status,
+            "status_text": "在线" if is_online else "离线",
+            "status_class": "success" if is_online else "danger",
+            "is_online": is_online,
+            "user_count": int(user_counts.get(index, 0)),
+            "ap_ip": ips.get(index, "N/A"),
+            "ap_mac_address": macs.get(index, "N/A"),
+            "ap_recv_rate": recv_rates.get(index, "0.00 bps"),
+            "ap_send_rate": send_rates.get(index, "0.00 bps"),
+        })
+    return ap_list
+
+
+def filter_aps(ap_list, search="", status=""):
+    filtered = []
+    for ap in ap_list:
+        if status == "online" and not ap.get("is_online"):
+            continue
+        if status == "offline" and ap.get("is_online"):
+            continue
+        if search and not ap_matches(ap, search):
+            continue
+        filtered.append(ap)
+    return filtered
+
+
+def ap_matches(ap, keyword):
+    fields = [
+        ap.get("ap_name"),
+        ap.get("ap_ip"),
+        ap.get("ap_mac_address"),
+        ap.get("status_text"),
+        ap.get("status"),
+        ap.get("ap_index"),
+    ]
+    return any(keyword in str(value).lower() for value in fields if value)
+
+
+def ap_status_counts(ap_list):
+    online = sum(1 for ap in ap_list if ap.get("is_online"))
+    total = len(ap_list)
+    return {
+        "all": total,
+        "online": online,
+        "offline": total - online,
+    }
+
+
+def normalize_ap_status(value):
+    status = (value or "").strip().lower()
+    if status in {"online", "1", "true", "up"}:
+        return "online"
+    if status in {"offline", "0", "false", "down"}:
+        return "offline"
+    return ""
+
+
+def empty_ap_payload(configured):
+    return {
+        "ap_list": [],
+        "total_aps": 0,
+        "all_total_aps": 0,
+        "online_aps": 0,
+        "offline_aps": 0,
+        "total_users": 0,
+        "returned": 0,
+        "page": 1,
+        "per_page": 10,
+        "pages": 0,
+        "q": "",
+        "status": "",
+        "status_counts": {"all": 0, "online": 0, "offline": 0},
+        "configured": configured,
+    }
+
+
+def get_wireless_online_users():
+    import time
+
+    now = time.time()
+    if wireless_user_cache["data"] and now - wireless_user_cache["last_update"] < wireless_user_cache["cache_ttl"]:
+        enrich_wireless_real_names(wireless_user_cache["data"])
+        return wireless_user_cache["data"], True, True
+
+    client = PrometheusClient()
+    if not client.query_configured:
+        return [], False, False
+
+    ips = metric_label_map(client.query(wireless_query("sfStaIp")), "UserIndex", "sfStaIp", decode=hex_to_ip)
+    recv_rates = metric_label_map(client.query(wireless_query("sfStaRecvRate")), "UserIndex", "sfStaRecvRate", decode=hex_to_string)
+    send_rates = metric_label_map(client.query(wireless_query("sfStaSendRate")), "UserIndex", "sfStaSendRate", decode=hex_to_string)
+    names = metric_label_map(client.query(wireless_query("sfUserName")), "UserIndex", "sfUserName", decode=hex_to_string)
+    real_names = cached_real_name_map(names.values())
+
+    users = []
+    indices = set(ips) | set(recv_rates) | set(send_rates) | set(names)
+    for index in sorted(indices, key=lambda value: int(value) if str(value).isdigit() else 999999):
+        raw_user = names.get(index, "无")
+        mobile_number = extract_mobile_number(raw_user)
+        ip_address = ips.get(index, "N/A")
+        stable_id = f"ip_{ip_address}" if ip_address != "N/A" else f"index_{index}"
+        users.append({
+            "user_index": index,
+            "phone_number": raw_user,
+            "mobile_number": mobile_number or "",
+            "real_name": real_names.get(mobile_number, "无") if mobile_number else "无",
+            "ip_address": ip_address,
+            "recv_rate": recv_rates.get(index, "N/A"),
+            "send_rate": send_rates.get(index, "N/A"),
+            "stable_id": stable_id,
+        })
+
+    wireless_user_cache["data"] = users
+    wireless_user_cache["last_update"] = now
+    return users, False, True
+
+
+def enrich_wireless_real_names(users):
+    real_names = cached_real_name_map(user.get("phone_number") for user in users)
+    for user in users:
+        mobile_number = extract_mobile_number(user.get("phone_number"))
+        user["mobile_number"] = mobile_number or ""
+        user["real_name"] = real_names.get(mobile_number, "无") if mobile_number else "无"
+    return users
+
+
+def resolve_wireless_real_names(users):
+    dingtalk = DingTalkClient()
+    for user in users:
+        mobile_number = extract_mobile_number(user.get("phone_number"))
+        user["mobile_number"] = mobile_number or ""
+        if not mobile_number:
+            user["real_name"] = "无"
+            continue
+        try:
+            user["real_name"] = dingtalk.get_name_by_mobile(mobile_number) or "无"
+        except Exception:
+            user["real_name"] = "无"
+    return users
+
+
+def cached_real_name_map(values):
+    mobiles = sorted({mobile for value in values if (mobile := extract_mobile_number(value))})
+    if not mobiles:
+        return {}
+    rows = UserNameCache.query.filter(
+        UserNameCache.mobile.in_(mobiles),
+        UserNameCache.expires_at >= now_local(),
+    ).all()
+    return {row.mobile: row.real_name for row in rows}
+
+
+def is_mobile_number(value):
+    return bool(re.fullmatch(r"1\d{10}", str(value or "").strip()))
+
+
+def extract_mobile_number(value):
+    match = re.search(r"(?<!\d)1\d{10}(?!\d)", str(value or ""))
+    return match.group(0) if match else None
+
+
+def filter_wireless_users(users, search=""):
+    filtered = []
+    for user in users:
+        if search and not wireless_user_matches(user, search):
+            continue
+        filtered.append(user)
+    return filtered
+
+
+def wireless_user_matches(user, keyword):
+    fields = [
+        user.get("phone_number"),
+        user.get("mobile_number"),
+        user.get("real_name"),
+        user.get("ip_address"),
+        user.get("recv_rate"),
+        user.get("send_rate"),
+        user.get("user_index"),
+    ]
+    return any(keyword in str(value).lower() for value in fields if value)
+
+
+def wireless_user_ssids(users):
+    return []
+
+
+def empty_wireless_user_payload(configured):
+    return {
+        "user_list": [],
+        "total_users": 0,
+        "returned": 0,
+        "page": 1,
+        "per_page": 10,
+        "pages": 0,
+        "q": "",
+        "ssid": "",
+        "ssids": [],
+        "all_total_users": 0,
+        "cached": False,
+        "names_resolved": False,
+        "configured": configured,
+    }
+
+
+def int_arg(name, default, minimum, maximum):
+    value = request.args.get(name)
+    try:
+        parsed = int(value) if value is not None else default
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, min(maximum, parsed))
 
 
 def empty_wireless_data():

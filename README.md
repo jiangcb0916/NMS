@@ -9,8 +9,8 @@
 - 设备列表：搜索、分类筛选、新增、编辑、删除、状态检测、CSV 导入导出
 - 客户端列表：分页、搜索、姓名解析
 - 缓存管理：姓名缓存、设备系统缓存状态
-- 无线控制器状态：AP、SSID、无线用户等 Prometheus 数据
-- 外部接口状态检查：深信服 AC、Prometheus、钉钉、联软准入
+- 无线控制器状态：AP、SSID、在线用户等固定 Prometheus label 查询数据
+- 外部接口状态检查：深信服 AC、无线 Prometheus 查询、用户名 Metrics、钉钉、联软准入
 - 旧数据迁移：用户、设备、姓名缓存、设备系统缓存
 
 ## 技术栈
@@ -88,8 +88,11 @@ SANGFOR_AC_PORT=9999
 SANGFOR_AC_SHARED_SECRET=
 DINGTALK_APPKEY=
 DINGTALK_APPSECRET=
-PROMETHEUS_QUERY_URL=
-PROMETHEUS_METRICS_URL=
+PROMETHEUS_QUERY_URL=http://172.16.80.125:9090/api/v1/query
+PROMETHEUS_METRICS_URL=http://172.16.80.125:9191/metrics
+WIRELESS_INSTANCE=172.16.100.7
+WIRELESS_AUTH=nac
+WIRELESS_MODULE=mgmt,private
 ACCESS_CONTROL_API_URL=
 ACCESS_CONTROL_API_USERNAME=
 ACCESS_CONTROL_API_PASSWORD=
@@ -188,8 +191,12 @@ docker compose exec web python scripts/migrate_legacy_data.py
 | `SANGFOR_AC_SHARED_SECRET` | 深信服 AC 共享密钥 | 空 |
 | `DINGTALK_APPKEY` | 钉钉应用 AppKey | 空 |
 | `DINGTALK_APPSECRET` | 钉钉应用 AppSecret | 空 |
-| `PROMETHEUS_QUERY_URL` | Prometheus 查询接口 | 空 |
-| `PROMETHEUS_METRICS_URL` | Prometheus 指标接口 | 空 |
+| `PROMETHEUS_QUERY_URL` | Prometheus 查询接口，无线 AP/SSID/在线用户主数据使用此接口 | `http://172.16.80.125:9090/api/v1/query` |
+| `PROMETHEUS_METRICS_URL` | Prometheus metrics 文本接口，仅用于 `/api/statistics/user-names` 解析用户名 | `http://172.16.80.125:9191/metrics` |
+| `WIRELESS_INSTANCE` | 无线固定查询 `instance` label | `172.16.100.7` |
+| `WIRELESS_JOB` | 无线固定查询 `job` label | `ND` |
+| `WIRELESS_AUTH` | 无线固定查询 `auth` label | `nac` |
+| `WIRELESS_MODULE` | 无线固定查询 `module` label | `mgmt,private` |
 | `ACCESS_CONTROL_API_URL` | 联软准入接口地址 | 空 |
 | `ACCESS_CONTROL_API_USERNAME` | 联软准入账号 | 空 |
 | `ACCESS_CONTROL_API_PASSWORD` | 联软准入密码 | 空 |

@@ -306,6 +306,12 @@ select {
     color: #fff;
 }
 
+.small-button.active {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
 .small-button.danger {
     border-color: var(--red);
     background: var(--red);
@@ -360,6 +366,14 @@ select {
 
 .toolbar-row.device-toolbar {
     grid-template-columns: minmax(260px, 1fr) 160px 120px;
+}
+
+.toolbar-row.wireless-user-toolbar {
+    grid-template-columns: minmax(260px, 1fr) 180px 120px;
+}
+
+.toolbar-row.wireless-ap-toolbar {
+    grid-template-columns: minmax(260px, 1fr) 120px;
 }
 
 .toolbar-row input,

@@ -38,13 +38,13 @@ def check_prometheus_query():
     url = current_app.config.get("PROMETHEUS_QUERY_URL")
 
     def probe():
-        response = requests.get(url, params={"query": "up"}, timeout=3)
+        response = requests.get(url, params={"query": wireless_query("sfStaIp")}, timeout=3)
         payload = response.json()
         count = len(payload.get("data", {}).get("result", []))
         ok = response.status_code == 200 and payload.get("status") == "success"
-        return ok, f"查询成功，样本 {count} 条" if ok else "查询失败", {"result_count": count}
+        return ok, f"固定查询成功，在线用户样本 {count} 条" if ok else "固定查询失败", {"result_count": count}
 
-    return run_probe("prometheus_query", "Prometheus 查询", configured=bool(url), probe=probe)
+    return run_probe("prometheus_query", "无线 Prometheus 查询", configured=bool(url), probe=probe)
 
 
 def check_prometheus_metrics():
@@ -53,10 +53,26 @@ def check_prometheus_metrics():
     def probe():
         response = requests.get(url, timeout=3)
         text = response.text
-        ok = response.status_code == 200 and "sf" in text[:200000]
-        return ok, "指标可读取" if ok else "未识别到无线指标", {"bytes": len(text)}
+        ok = response.status_code == 200 and "sfUserName" in text[:200000]
+        return ok, "用户名指标可读取" if ok else "未识别到用户名指标", {"bytes": len(text)}
 
-    return run_probe("prometheus_metrics", "Prometheus 指标", configured=bool(url), probe=probe)
+    return run_probe("prometheus_metrics", "用户名 Metrics", configured=bool(url), probe=probe)
+
+
+def wireless_query(metric_name):
+    config = current_app.config
+    labels = {
+        "auth": config["WIRELESS_AUTH"],
+        "instance": config["WIRELESS_INSTANCE"],
+        "job": config["WIRELESS_JOB"],
+        "module": config["WIRELESS_MODULE"],
+    }
+    label_text = ",".join(f'{key}="{escape_label_value(value)}"' for key, value in labels.items())
+    return f"{metric_name}{{{label_text}}}"
+
+
+def escape_label_value(value):
+    return str(value).replace("\\", "\\\\").replace('"', '\\"')
 
 
 def check_huawei_snmp():
