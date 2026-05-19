@@ -1,0 +1,16 @@
+.git
+.venv
+venv
+__pycache__
+*.py[cod]
+.DS_Store
+.env
+.env.*
+!.env.example
+instance
+flask_session
+*.log
+.pytest_cache
+.coverage
+dist
+build

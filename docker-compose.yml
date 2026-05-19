@@ -1,0 +1,24 @@
+services:
+  web:
+    build:
+      context: .
+    image: sangfor-nms-next:latest
+    container_name: sangfor-nms-next
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 5001
+      DATABASE_URL: sqlite:////app/instance/network_management_next.db
+      SESSION_FILE_DIR: /app/instance/flask_session
+    ports:
+      - "${HOST_PORT:-5001}:5001"
+    volumes:
+      - ./instance:/app/instance
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

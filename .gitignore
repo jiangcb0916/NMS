@@ -1,0 +1,15 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.DS_Store
+instance/
+flask_session/
+*.log
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.coverage
+dist/
+build/

@@ -1,0 +1,444 @@
+{% extends "base.html" %}
+
+{% block title %}仪表盘 - 网络管理系统{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <div>
+        <h1 id="page-title">仪表盘</h1>
+        <p id="page-subtitle">系统运行概览</p>
+    </div>
+    <button class="refresh-button" id="refresh-summary" type="button" title="刷新">
+        <i class="bi bi-arrow-clockwise"></i>
+    </button>
+</header>
+
+<section class="dashboard-view app-view" id="dashboard-panel">
+    <section class="metric-grid" id="metric-grid">
+        <article class="metric">
+            <div class="metric-icon users"><i class="bi bi-people"></i></div>
+            <div>
+                <div class="metric-label">用户</div>
+                <div class="metric-value" id="metric-users">-</div>
+            </div>
+        </article>
+        <article class="metric">
+            <div class="metric-icon devices"><i class="bi bi-laptop"></i></div>
+            <div>
+                <div class="metric-label">设备</div>
+                <div class="metric-value" id="metric-devices">-</div>
+            </div>
+        </article>
+        <article class="metric">
+            <div class="metric-icon cache"><i class="bi bi-database"></i></div>
+            <div>
+                <div class="metric-label">缓存</div>
+                <div class="metric-value" id="metric-cache">-</div>
+            </div>
+        </article>
+    </section>
+
+    <section class="panel-grid">
+        <section class="panel">
+            <div class="panel-header">
+                <h2>系统状态</h2>
+                <span class="status-pill" id="health-pill">检查中</span>
+            </div>
+            <dl class="info-list">
+                <div>
+                    <dt>版本</dt>
+                    <dd id="system-version">-</dd>
+                </div>
+                <div>
+                    <dt>数据库</dt>
+                    <dd id="database-status">-</dd>
+                </div>
+            </dl>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <h2>外部接口状态</h2>
+                <button class="small-button" id="check-integrations" type="button">
+                    <i class="bi bi-plug"></i>
+                    <span>检查</span>
+                </button>
+            </div>
+            <div class="status-list" id="integration-status-list">
+                <div class="empty-state">点击检查查看实际连通性</div>
+            </div>
+        </section>
+    </section>
+</section>
+
+<section class="panel users-panel app-view" id="users-panel" hidden>
+    <div class="panel-header">
+        <h2>用户列表</h2>
+        <div class="button-row">
+            <button class="small-button primary" id="create-user-button" type="button">
+                <i class="bi bi-person-plus"></i>
+                <span>新增用户</span>
+            </button>
+            <button class="small-button" id="reload-users" type="button">
+                <i class="bi bi-arrow-clockwise"></i>
+                <span>刷新</span>
+            </button>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>用户名</th>
+                    <th>姓名</th>
+                    <th>邮箱</th>
+                    <th>角色</th>
+                    <th>状态</th>
+                    <th>最后登录</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="users-table-body">
+                <tr>
+                    <td colspan="7">暂无数据</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="panel devices-panel app-view" id="devices-panel" hidden>
+    <div class="panel-header">
+        <h2>设备列表</h2>
+        <div class="button-row">
+            <button class="small-button primary" id="create-device-button" type="button">
+                <i class="bi bi-plus-lg"></i>
+                <span>新增设备</span>
+            </button>
+            <button class="small-button" id="import-devices-button" type="button">
+                <i class="bi bi-upload"></i>
+                <span>导入</span>
+            </button>
+            <button class="small-button" id="export-devices-button" type="button">
+                <i class="bi bi-download"></i>
+                <span>导出</span>
+            </button>
+            <button class="small-button" id="refresh-device-status" type="button">
+                <i class="bi bi-wifi"></i>
+                <span>刷新状态</span>
+            </button>
+            <button class="small-button" id="reload-devices" type="button">
+                <i class="bi bi-arrow-clockwise"></i>
+                <span>刷新</span>
+            </button>
+        </div>
+    </div>
+
+    <input id="device-import-file" type="file" accept=".csv,text/csv" hidden>
+    <div class="toolbar-row device-toolbar">
+        <input id="device-search" placeholder="搜索名称、IP、MAC、分类、备注">
+        <select id="device-category-filter" aria-label="设备分类">
+            <option value="">全部分类</option>
+        </select>
+        <select id="device-page-size" aria-label="每页数量">
+            <option value="50">50 / 页</option>
+            <option value="100" selected>100 / 页</option>
+            <option value="200">200 / 页</option>
+        </select>
+    </div>
+    <div class="list-summary" id="devices-summary">-</div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>名称</th>
+                    <th>IP</th>
+                    <th>MAC</th>
+                    <th>分类</th>
+                    <th>状态</th>
+                    <th>最后检查</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="devices-table-body">
+                <tr>
+                    <td colspan="7">暂无数据</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="pagination-row">
+        <button class="small-button" id="devices-prev" type="button">
+            <i class="bi bi-chevron-left"></i>
+            <span>上一页</span>
+        </button>
+        <span id="devices-page">-</span>
+        <button class="small-button" id="devices-next" type="button">
+            <span>下一页</span>
+            <i class="bi bi-chevron-right"></i>
+        </button>
+    </div>
+</section>
+
+<section class="panel wireless-panel app-view" id="wireless-panel" hidden>
+    <div class="panel-header">
+        <h2>无线控制器</h2>
+        <button class="small-button" id="reload-wireless" type="button">
+            <i class="bi bi-arrow-clockwise"></i>
+            <span>刷新</span>
+        </button>
+    </div>
+    <section class="metric-grid compact">
+        <article class="metric">
+            <div class="metric-icon devices"><i class="bi bi-wifi"></i></div>
+            <div>
+                <div class="metric-label">无线用户</div>
+                <div class="metric-value" id="wireless-users">-</div>
+            </div>
+        </article>
+        <article class="metric">
+            <div class="metric-icon cache"><i class="bi bi-router"></i></div>
+            <div>
+                <div class="metric-label">在线 AP</div>
+                <div class="metric-value" id="wireless-ap-online">-</div>
+            </div>
+        </article>
+        <article class="metric">
+            <div class="metric-icon users"><i class="bi bi-cpu"></i></div>
+            <div>
+                <div class="metric-label">CPU</div>
+                <div class="metric-value" id="wireless-cpu">-</div>
+            </div>
+        </article>
+    </section>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>AP</th>
+                    <th>IP</th>
+                    <th>MAC</th>
+                    <th>状态</th>
+                    <th>用户数</th>
+                    <th>上行</th>
+                    <th>下行</th>
+                </tr>
+            </thead>
+            <tbody id="wireless-ap-table-body">
+                <tr>
+                    <td colspan="7">暂无数据</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="panel clients-panel app-view" id="clients-panel" hidden>
+    <div class="panel-header">
+        <h2>客户端列表</h2>
+        <div class="button-row">
+            <button class="small-button" id="resolve-client-names" type="button">
+                <i class="bi bi-person-badge"></i>
+                <span>解析姓名</span>
+            </button>
+            <button class="small-button" id="reload-clients" type="button">
+                <i class="bi bi-arrow-clockwise"></i>
+                <span>刷新</span>
+            </button>
+        </div>
+    </div>
+    <div class="toolbar-row">
+        <input id="client-search" placeholder="搜索 IP、用户、设备名、MAC、部门">
+        <select id="client-page-size" aria-label="每页数量">
+            <option value="50">50 / 页</option>
+            <option value="100" selected>100 / 页</option>
+            <option value="200">200 / 页</option>
+        </select>
+    </div>
+    <div class="list-summary" id="clients-summary">-</div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>IP</th>
+                    <th>用户</th>
+                    <th>姓名</th>
+                    <th>设备名</th>
+                    <th>MAC</th>
+                    <th>部门</th>
+                    <th>状态</th>
+                </tr>
+            </thead>
+            <tbody id="clients-table-body">
+                <tr>
+                    <td colspan="7">暂无数据</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="pagination-row">
+        <button class="small-button" id="clients-prev" type="button">
+            <i class="bi bi-chevron-left"></i>
+            <span>上一页</span>
+        </button>
+        <span id="clients-page">-</span>
+        <button class="small-button" id="clients-next" type="button">
+            <span>下一页</span>
+            <i class="bi bi-chevron-right"></i>
+        </button>
+    </div>
+</section>
+
+<section class="panel cache-panel app-view" id="cache-panel" hidden>
+    <div class="panel-header">
+        <h2>缓存管理</h2>
+        <button class="small-button" id="reload-cache" type="button">
+            <i class="bi bi-arrow-clockwise"></i>
+            <span>刷新</span>
+        </button>
+    </div>
+    <dl class="info-list">
+        <div>
+            <dt>姓名缓存</dt>
+            <dd id="cache-user-names">-</dd>
+        </div>
+        <div>
+            <dt>系统缓存</dt>
+            <dd id="cache-device-os">-</dd>
+        </div>
+        <div>
+            <dt>过期系统缓存</dt>
+            <dd id="cache-expired-os">-</dd>
+        </div>
+    </dl>
+</section>
+
+<div class="modal-backdrop" id="device-modal" hidden>
+    <form class="modal-card" id="device-form">
+        <div class="modal-header">
+            <h2 id="device-modal-title">新增设备</h2>
+            <button class="icon-button" type="button" data-close-modal="device-modal" title="关闭">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <input type="hidden" id="device-id">
+        <div class="form-grid">
+            <label>
+                <span>名称</span>
+                <input id="device-username" name="username" autocomplete="off" required>
+            </label>
+            <label>
+                <span>IP 地址</span>
+                <input id="device-ip" name="ip_address" autocomplete="off" required>
+            </label>
+            <label>
+                <span>MAC 地址</span>
+                <input id="device-mac" name="mac_address" autocomplete="off">
+            </label>
+            <label>
+                <span>分类</span>
+                <input id="device-category" name="category" autocomplete="off" placeholder="未分类">
+            </label>
+            <label class="full-field">
+                <span>备注</span>
+                <textarea id="device-details" name="details" rows="4"></textarea>
+            </label>
+        </div>
+        <div class="form-message" id="device-form-message" role="alert"></div>
+        <div class="modal-actions">
+            <button class="small-button" type="button" data-close-modal="device-modal">取消</button>
+            <button class="small-button primary" id="save-device-button" type="submit">保存</button>
+        </div>
+    </form>
+</div>
+
+<div class="modal-backdrop" id="user-modal" hidden>
+    <form class="modal-card" id="user-form">
+        <div class="modal-header">
+            <h2 id="user-modal-title">新增用户</h2>
+            <button class="icon-button" type="button" data-close-modal="user-modal" title="关闭">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <input type="hidden" id="user-id">
+        <div class="form-grid">
+            <label>
+                <span>用户名</span>
+                <input id="user-username" name="username" autocomplete="off" required>
+            </label>
+            <label>
+                <span>姓名</span>
+                <input id="user-full-name" name="full_name" autocomplete="off">
+            </label>
+            <label>
+                <span>邮箱</span>
+                <input id="user-email" name="email" type="email" autocomplete="off">
+            </label>
+            <label>
+                <span>角色</span>
+                <select id="user-role" name="role">
+                    <option value="user">普通用户</option>
+                    <option value="operator">操作员</option>
+                    <option value="admin">管理员</option>
+                </select>
+            </label>
+            <label id="user-password-row">
+                <span>初始密码</span>
+                <input id="user-password" name="password" type="password" autocomplete="new-password">
+            </label>
+            <label class="checkbox-line form-checkbox">
+                <input id="user-is-active" name="is_active" type="checkbox" checked>
+                <span>启用账号</span>
+            </label>
+        </div>
+        <div class="form-message" id="user-form-message" role="alert"></div>
+        <div class="modal-actions">
+            <button class="small-button" type="button" data-close-modal="user-modal">取消</button>
+            <button class="small-button primary" id="save-user-button" type="submit">保存</button>
+        </div>
+    </form>
+</div>
+
+<div class="modal-backdrop" id="password-modal" hidden>
+    <form class="modal-card compact-modal" id="password-form">
+        <div class="modal-header">
+            <h2>重置密码</h2>
+            <button class="icon-button" type="button" data-close-modal="password-modal" title="关闭">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <input type="hidden" id="password-user-id">
+        <label class="single-field">
+            <span>新密码</span>
+            <input id="new-password" type="password" autocomplete="new-password" required>
+        </label>
+        <div class="form-message" id="password-form-message" role="alert"></div>
+        <div class="modal-actions">
+            <button class="small-button" type="button" data-close-modal="password-modal">取消</button>
+            <button class="small-button primary" type="submit">确认重置</button>
+        </div>
+    </form>
+</div>
+
+<div class="modal-backdrop" id="lock-modal" hidden>
+    <form class="modal-card compact-modal" id="lock-form">
+        <div class="modal-header">
+            <h2>锁定用户</h2>
+            <button class="icon-button" type="button" data-close-modal="lock-modal" title="关闭">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <input type="hidden" id="lock-user-id">
+        <label class="single-field">
+            <span>锁定时长（分钟）</span>
+            <input id="lock-minutes" type="number" min="1" max="1440" value="30" required>
+        </label>
+        <div class="form-message" id="lock-form-message" role="alert"></div>
+        <div class="modal-actions">
+            <button class="small-button" type="button" data-close-modal="lock-modal">取消</button>
+            <button class="small-button danger" type="submit">确认锁定</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
