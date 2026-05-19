@@ -62,6 +62,8 @@ http://127.0.0.1:5001
 
 项目已提供 `Dockerfile`、`docker-compose.yml` 和 `.dockerignore`。Docker 部署默认使用 gunicorn 启动 Flask，SQLite 数据库和 session 文件会保存在宿主机 `./instance` 目录。
 
+如果采用服务器本地构建并部署，建议直接参考：[服务器 Docker 部署文档](docs/server-docker-deploy.md)。
+
 1. 准备环境变量：
 
 ```bash
