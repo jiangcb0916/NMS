@@ -8,6 +8,7 @@ from app.models.device import Device
 from app.models.user import User
 from app.modules.firewall.routes import default_payload as default_firewall_payload
 from app.modules.firewall.routes import fetch_huawei_firewall_status
+from app.modules.integrations.access_control import AccessControlClient
 from app.modules.wireless import routes as wireless_routes
 
 
@@ -37,6 +38,7 @@ def overview():
     wireless_data = dashboard_wireless_payload()
     return success({
         "summary": summary_data,
+        "access_clients": dashboard_access_clients_payload(),
         "wireless": wireless_data,
         "firewall": dashboard_firewall_payload(),
         "tops": {
@@ -61,6 +63,32 @@ def summary_payload():
             "device_os": DeviceOsCache.query.count(),
         },
     }
+
+
+def dashboard_access_clients_payload():
+    client = AccessControlClient()
+    if not client.configured:
+        return {"total": 0, "configured": False, "ok": False, "error": "联软准入 API 未配置"}
+
+    try:
+        client.timeout = 5
+        payload = client.query_devices(terminaltype="1")
+        if payload.get("status") != "SUCCESS":
+            return {
+                "total": 0,
+                "configured": True,
+                "ok": False,
+                "error": payload.get("msg", "联软准入 API 调用失败"),
+            }
+
+        filter_department = current_app.config.get("ACCESS_CONTROL_FILTER_DEPARTMENT")
+        rows = payload.get("rows", [])
+        if filter_department:
+            rows = [row for row in rows if row.get("strdeptname") == filter_department]
+        return {"total": len(rows), "configured": True, "ok": True, "error": ""}
+    except Exception as exc:
+        current_app.logger.warning("Dashboard 准入客户端统计读取失败: %s", exc)
+        return {"total": 0, "configured": True, "ok": False, "error": str(exc)}
 
 
 def dashboard_firewall_payload():

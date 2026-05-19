@@ -220,6 +220,11 @@ select {
     color: #c2410c;
 }
 
+.metric-icon.clients {
+    background: #eef2ff;
+    color: #4f46e5;
+}
+
 .metric-label {
     color: var(--muted);
     font-size: 13px;

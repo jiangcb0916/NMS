@@ -17,6 +17,7 @@ from app.models.base import now_local
 from app.models.cache import UserNameCache
 from app.models.user import User
 from app.modules.access_control import routes as access_control_routes
+from app.modules.dashboard import routes as dashboard_routes
 from app.modules.firewall import routes as firewall_routes
 from app.modules.wireless import routes as wireless_routes
 
@@ -247,6 +248,7 @@ def main():
     original_prometheus_client = wireless_routes.PrometheusClient
     original_firewall_get = firewall_routes.requests.get
     original_bandwidth_history = firewall_routes.bandwidth_history
+    original_dashboard_access_control_client = dashboard_routes.AccessControlClient
     wireless_routes.PrometheusClient = FakePrometheusClient
     firewall_routes.requests.get = fake_firewall_get
     firewall_routes.bandwidth_history = {
@@ -256,10 +258,12 @@ def main():
         "unicom_in": 1000000000,
         "unicom_out": 1000000000,
     }
+    dashboard_routes.AccessControlClient = FakeAccessControlClient
     try:
         overview_response = client.get("/api/dashboard/overview")
         assert overview_response.status_code == 200, overview_response.get_data(as_text=True)
         overview_data = overview_response.get_json()["data"]
+        assert overview_data["access_clients"]["total"] == 2
         assert overview_data["firewall"]["configured"] is True
         assert overview_data["firewall"]["cpu_usage"] == 11
         assert overview_data["firewall"]["total_upload"] > 0
@@ -272,6 +276,7 @@ def main():
         wireless_routes.PrometheusClient = original_prometheus_client
         firewall_routes.requests.get = original_firewall_get
         firewall_routes.bandwidth_history = original_bandwidth_history
+        dashboard_routes.AccessControlClient = original_dashboard_access_control_client
 
     create_device_response = client.post("/api/access-control/device-list", json={
         "username": "smoke-device",

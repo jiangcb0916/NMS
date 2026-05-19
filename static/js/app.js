@@ -190,10 +190,11 @@ async function loadSummary() {
     const data = await apiGet('/api/dashboard/overview');
     const summary = data.summary || {};
     const wireless = data.wireless || {};
-    document.getElementById('metric-users').textContent = `${summary.users?.active ?? 0}/${summary.users?.total ?? 0}`;
+    const accessClients = data.access_clients || {};
     document.getElementById('metric-devices').textContent = `${summary.devices?.online ?? 0}/${summary.devices?.total ?? 0}`;
     document.getElementById('metric-wireless-users').textContent = wireless.wireless_users ?? 0;
-    document.getElementById('metric-wireless-ap').textContent = `${wireless.ap_online ?? 0}/${wireless.total_aps ?? 0}`;
+    document.getElementById('metric-wireless-ap').textContent = wireless.ap_online ?? 0;
+    document.getElementById('metric-access-clients').textContent = accessClients.total ?? 0;
     renderFirewallDashboard(data.firewall || {});
     renderTrafficTopList('wireless-user-upload-top', data.tops?.wireless_users?.upload || []);
     renderTrafficTopList('wireless-user-download-top', data.tops?.wireless_users?.download || []);
