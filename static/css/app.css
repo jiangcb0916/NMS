@@ -763,42 +763,6 @@ th {
     color: var(--red);
 }
 
-.status-list {
-    display: grid;
-    gap: 10px;
-    margin-top: 14px;
-}
-
-.status-row {
-    display: grid;
-    grid-template-columns: 10px minmax(0, 1fr);
-    align-items: start;
-    gap: 10px;
-    padding: 9px 0;
-    border-top: 1px solid #edf1f3;
-}
-
-.status-dot {
-    width: 9px;
-    height: 9px;
-    margin-top: 6px;
-    border-radius: 50%;
-    background: var(--red);
-}
-
-.status-dot.ok {
-    background: var(--accent);
-}
-
-.status-dot.bad {
-    background: var(--red);
-}
-
-.status-name {
-    font-weight: 600;
-}
-
-.status-detail,
 .empty-state {
     margin-top: 2px;
     color: var(--muted);

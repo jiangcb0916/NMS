@@ -823,26 +823,6 @@ function exportDevices() {
     window.location.href = `/api/access-control/device-list/export${query ? `?${query}` : ''}`;
 }
 
-async function loadIntegrationStatus() {
-    const list = document.getElementById('integration-status-list');
-    list.innerHTML = '<div class="empty-state">检查中</div>';
-
-    try {
-        const services = await apiGet('/api/integrations/status');
-        list.innerHTML = services.map((service) => `
-            <div class="status-row">
-                <span class="status-dot ${service.ok ? 'ok' : 'bad'}"></span>
-                <div>
-                    <div class="status-name">${escapeHtml(service.label)}</div>
-                    <div class="status-detail">${escapeHtml(service.message)} · ${escapeHtml(service.seconds)}s</div>
-                </div>
-            </div>
-        `).join('');
-    } catch (error) {
-        list.innerHTML = `<div class="empty-state error-text">${escapeHtml(error.message)}</div>`;
-    }
-}
-
 function renderClientPager() {
     const pageText = document.getElementById('clients-page');
     const prev = document.getElementById('clients-prev');
@@ -1559,11 +1539,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshDeviceStatusButton = document.getElementById('refresh-device-status');
     if (refreshDeviceStatusButton) {
         refreshDeviceStatusButton.addEventListener('click', refreshDeviceStatus);
-    }
-
-    const checkIntegrations = document.getElementById('check-integrations');
-    if (checkIntegrations) {
-        checkIntegrations.addEventListener('click', loadIntegrationStatus);
     }
 
     document.querySelectorAll('[data-close-modal]').forEach((button) => {
