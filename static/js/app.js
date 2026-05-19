@@ -95,7 +95,6 @@ const viewTitles = {
     wireless: ['无线控制器', 'AP、SSID 与无线用户状态'],
     devices: ['设备列表', '本地设备清单和在线状态'],
     clients: ['客户端列表', '联软准入终端数据'],
-    cache: ['缓存管理', '姓名与设备系统信息缓存'],
     users: ['用户管理', '系统账号与权限']
 };
 
@@ -104,7 +103,6 @@ const clientState = {
     perPage: 10,
     query: '',
     status: '',
-    resolveNames: true,
     pages: 0,
     total: 0,
     statusCounts: {
@@ -469,7 +467,6 @@ async function loadClients(options = {}) {
     clientState.perPage = options.perPage || clientState.perPage;
     clientState.query = options.query !== undefined ? options.query : clientState.query;
     clientState.status = options.status !== undefined ? options.status : clientState.status;
-    clientState.resolveNames = options.resolveNames !== undefined ? options.resolveNames : clientState.resolveNames;
 
     showView('clients-panel', 'clients-nav', 'clients');
     const panel = document.getElementById('clients-panel');
@@ -484,8 +481,7 @@ async function loadClients(options = {}) {
             page: clientState.page,
             per_page: clientState.perPage,
             q: clientState.query,
-            status: clientState.status,
-            resolve_names: clientState.resolveNames ? '1' : '0'
+            status: clientState.status
         });
         const result = await apiGetResult(`/api/access-control/client-list?${params.toString()}`);
         const data = result.data || {};
@@ -504,7 +500,7 @@ async function loadClients(options = {}) {
         }
 
         const clients = data.client_list || [];
-        summary.textContent = `${renderClientSummaryPrefix()}共 ${data.total || 0} 条，当前显示 ${data.returned || clients.length} 条，姓名${data.names_resolved ? '已解析当前页' : '优先使用缓存'}`;
+        summary.textContent = `${renderClientSummaryPrefix()}共 ${data.total || 0} 条，当前显示 ${data.returned || clients.length} 条，${renderClientNameCacheSummary(data.name_cache_refresh)}`;
         if (!clients.length) {
             body.innerHTML = `<tr><td colspan="8">${escapeHtml(result.message || '暂无数据')}</td></tr>`;
             return;
@@ -518,27 +514,12 @@ async function loadClients(options = {}) {
                 <td>${escapeHtml(client.mac_address || '-')}</td>
                 <td>${escapeHtml(client.os || '-')}</td>
                 <td>${escapeHtml(client.os_version || '-')}</td>
-                <td>${client.is_online ? '在线' : '离线'}</td>
+                <td>${renderClientStatus(client)}</td>
             </tr>
         `).join('');
     } catch (error) {
         body.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
         summary.textContent = '加载失败';
-    }
-}
-
-async function loadCacheStatus() {
-    showView('cache-panel', 'cache-nav', 'cache');
-    const panel = document.getElementById('cache-panel');
-    panel.hidden = false;
-    try {
-        const data = await apiGet('/api/access-control/cache-status');
-        const osStats = await apiGet('/api/cache/os-stats');
-        document.getElementById('cache-user-names').textContent = `${data.user_name_cache.valid_cached}/${data.user_name_cache.database_cached}`;
-        document.getElementById('cache-device-os').textContent = `${data.device_os_cache.valid_cached}/${data.device_os_cache.database_cached}`;
-        document.getElementById('cache-expired-os').textContent = osStats.expired_caches;
-    } catch (error) {
-        showToast(error.message, 'error');
     }
 }
 
@@ -813,6 +794,29 @@ function renderClientSummaryPrefix() {
         return '离线客户端，';
     }
     return '';
+}
+
+function renderClientStatus(client) {
+    return client.is_online
+        ? '<span class="status-badge ok">在线</span>'
+        : '<span class="status-badge bad">离线</span>';
+}
+
+function renderClientNameCacheSummary(cache) {
+    if (!cache) {
+        return '姓名使用缓存';
+    }
+    if (!cache.configured) {
+        return '姓名使用缓存，后台解析未配置';
+    }
+    if (cache.running || cache.queued > 0 || cache.missing > 0) {
+        const countText = cache.missing ? `（${cache.missing} 个待解析）` : '';
+        return `姓名使用缓存，后台更新中${countText}`;
+    }
+    if (cache.last_error) {
+        return '姓名使用缓存，后台更新异常';
+    }
+    return '姓名使用缓存';
 }
 
 function showWirelessSubview(view) {
@@ -1196,15 +1200,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (clientsNav) {
         clientsNav.addEventListener('click', (event) => {
             event.preventDefault();
-            loadClients({page: 1, resolveNames: false});
-        });
-    }
-
-    const cacheNav = document.getElementById('cache-nav');
-    if (cacheNav) {
-        cacheNav.addEventListener('click', (event) => {
-            event.preventDefault();
-            loadCacheStatus();
+            loadClients({page: 1});
         });
     }
 
@@ -1432,34 +1428,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const reloadClients = document.getElementById('reload-clients');
     if (reloadClients) {
-        reloadClients.addEventListener('click', () => loadClients({page: clientState.page, resolveNames: false}));
-    }
-
-    const resolveClientNames = document.getElementById('resolve-client-names');
-    if (resolveClientNames) {
-        resolveClientNames.addEventListener('click', () => {
-            showToast('开始解析当前页姓名');
-            loadClients({resolveNames: true});
-        });
+        reloadClients.addEventListener('click', () => loadClients({page: clientState.page}));
     }
 
     const clientSearch = document.getElementById('client-search');
     if (clientSearch) {
         clientSearch.addEventListener('input', debounce((event) => {
-            loadClients({page: 1, query: event.target.value.trim(), resolveNames: false});
+            loadClients({page: 1, query: event.target.value.trim()});
         }));
     }
 
     const clientPageSize = document.getElementById('client-page-size');
     if (clientPageSize) {
         clientPageSize.addEventListener('change', (event) => {
-            loadClients({page: 1, perPage: Number(event.target.value), resolveNames: false});
+            loadClients({page: 1, perPage: Number(event.target.value)});
         });
     }
 
     document.querySelectorAll('[data-client-status]').forEach((button) => {
         button.addEventListener('click', () => {
-            loadClients({page: 1, status: button.dataset.clientStatus || '', resolveNames: false});
+            loadClients({page: 1, status: button.dataset.clientStatus || ''});
         });
     });
 
@@ -1467,7 +1455,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (clientsPrev) {
         clientsPrev.addEventListener('click', () => {
             if (clientState.page > 1) {
-                loadClients({page: clientState.page - 1, resolveNames: false});
+                loadClients({page: clientState.page - 1});
             }
         });
     }
@@ -1476,7 +1464,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (clientsNext) {
         clientsNext.addEventListener('click', () => {
             if (clientState.page < clientState.pages) {
-                loadClients({page: clientState.page + 1, resolveNames: false});
+                loadClients({page: clientState.page + 1});
             }
         });
     }
@@ -1489,11 +1477,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshDeviceStatusButton = document.getElementById('refresh-device-status');
     if (refreshDeviceStatusButton) {
         refreshDeviceStatusButton.addEventListener('click', refreshDeviceStatus);
-    }
-
-    const reloadCache = document.getElementById('reload-cache');
-    if (reloadCache) {
-        reloadCache.addEventListener('click', loadCacheStatus);
     }
 
     const checkIntegrations = document.getElementById('check-integrations');

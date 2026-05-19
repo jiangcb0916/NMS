@@ -345,10 +345,6 @@
     <div class="panel-header">
         <h2>客户端列表</h2>
         <div class="button-row">
-            <button class="small-button" id="resolve-client-names" type="button">
-                <i class="bi bi-person-badge"></i>
-                <span>解析姓名</span>
-            </button>
             <button class="small-button" id="reload-clients" type="button">
                 <i class="bi bi-arrow-clockwise"></i>
                 <span>刷新</span>
@@ -412,30 +408,6 @@
             <i class="bi bi-chevron-right"></i>
         </button>
     </div>
-</section>
-
-<section class="panel cache-panel app-view" id="cache-panel" hidden>
-    <div class="panel-header">
-        <h2>缓存管理</h2>
-        <button class="small-button" id="reload-cache" type="button">
-            <i class="bi bi-arrow-clockwise"></i>
-            <span>刷新</span>
-        </button>
-    </div>
-    <dl class="info-list">
-        <div>
-            <dt>姓名缓存</dt>
-            <dd id="cache-user-names">-</dd>
-        </div>
-        <div>
-            <dt>系统缓存</dt>
-            <dd id="cache-device-os">-</dd>
-        </div>
-        <div>
-            <dt>过期系统缓存</dt>
-            <dd id="cache-expired-os">-</dd>
-        </div>
-    </dl>
 </section>
 
 <div class="modal-backdrop" id="device-modal" hidden>

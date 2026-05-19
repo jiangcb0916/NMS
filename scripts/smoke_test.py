@@ -91,6 +91,8 @@ def main():
         assert client_list_data["total"] == 1
         assert client_list_data["status"] == "online"
         assert client_list_data["status_counts"] == {"all": 1, "online": 1, "offline": 0}
+        assert client_list_data["name_cache_refresh"]["missing"] == 0
+        assert client_list_data["client_list"][0]["real_name"] == "张三"
         assert client_list_data["client_list"][0]["os"] == "Windows"
         assert client_list_data["client_list"][0]["os_version"] == "11 Pro"
     finally:

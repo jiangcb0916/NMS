@@ -3,6 +3,12 @@ from flask_login import login_required
 
 from app.common.responses import success
 from app.modules.cache.service import get_device_os_info
+from app.modules.access_control.name_cache import (
+    extract_client_mobiles,
+    extract_mobile,
+    schedule_client_name_cache_refresh,
+    valid_name_cache_map,
+)
 from app.modules.integrations.access_control import AccessControlClient, normalize_client_row
 from app.modules.integrations.dingtalk import DingTalkClient
 
@@ -21,7 +27,6 @@ def client_list():
     per_page = int_arg("per_page", default=10, minimum=10, maximum=500)
     search = (request.args.get("q") or "").strip().lower()
     status = normalize_client_status(request.args.get("status"))
-    resolve_names = (request.args.get("resolve_names") or "0").lower() in {"1", "true", "yes", "on"}
 
     payload = client.query_devices(terminaltype="1")
     if payload.get("status") != "SUCCESS":
@@ -29,7 +34,6 @@ def client_list():
 
     rows = payload.get("rows", [])
     filter_department = current_app.config.get("ACCESS_CONTROL_FILTER_DEPARTMENT")
-    dingtalk = DingTalkClient()
     filtered_rows = []
     for row in rows:
         if filter_department and row.get("strdeptname") != filter_department:
@@ -39,15 +43,18 @@ def client_list():
         filtered_rows.append(row)
 
     status_counts = client_status_counts(filtered_rows)
+    all_filtered_mobiles = extract_client_mobiles(filtered_rows)
+    name_cache_refresh = schedule_client_name_cache_refresh(all_filtered_mobiles)
     filtered_rows = filter_client_rows_by_status(filtered_rows, status)
     total = len(filtered_rows)
     start = (page - 1) * per_page
     page_rows = filtered_rows[start:start + per_page]
+    cached_names = valid_name_cache_map(extract_client_mobiles(page_rows))
 
     clients = []
     for row in page_rows:
-        mobile = row.get("strusername")
-        real_name = dingtalk.get_name_by_mobile(mobile) if resolve_names else dingtalk.get_cached_name(mobile)
+        mobile = extract_mobile(row.get("strusername"))
+        real_name = cached_names.get(mobile)
         os_info = get_device_os_info(row.get("strdevip"), row)
         clients.append(normalize_client_row(row, real_name=real_name, os_info=os_info))
 
@@ -63,7 +70,7 @@ def client_list():
         "per_page": per_page,
         "pages": (total + per_page - 1) // per_page if total else 0,
         "returned": len(clients),
-        "names_resolved": resolve_names,
+        "name_cache_refresh": name_cache_refresh,
     })
 
 
@@ -135,7 +142,17 @@ def empty_client_payload(configured):
         "per_page": 10,
         "pages": 0,
         "returned": 0,
-        "names_resolved": False,
+        "name_cache_refresh": {
+            "configured": False,
+            "running": False,
+            "queued": 0,
+            "missing": 0,
+            "last_started_at": None,
+            "last_finished_at": None,
+            "last_batch_size": 0,
+            "last_success_count": 0,
+            "last_error": None,
+        },
     }
 
 
