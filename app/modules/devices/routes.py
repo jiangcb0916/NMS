@@ -27,8 +27,9 @@ device_bp = Blueprint("device_api", __name__, url_prefix="/api/access-control")
 @login_required
 def list_devices():
     page = int_arg("page", 1, min_value=1, max_value=100000)
-    per_page = int_arg("per_page", 100, min_value=10, max_value=500)
+    per_page = int_arg("per_page", 10, min_value=10, max_value=500)
     query = filtered_device_query()
+    status_counts = device_status_counts(filtered_device_query(apply_status=False))
     total = query.count()
     pages = (total + per_page - 1) // per_page if total else 0
     if pages and page > pages:
@@ -48,6 +49,8 @@ def list_devices():
         "per_page": per_page,
         "pages": pages,
         "categories": device_categories(),
+        "status": normalize_status(request.args.get("status")),
+        "status_counts": status_counts,
     })
 
 
@@ -316,10 +319,11 @@ def parse_device_payload(data):
     }
 
 
-def filtered_device_query():
+def filtered_device_query(apply_status=True):
     query = Device.query
     keyword = (request.args.get("q") or request.args.get("search") or "").strip()
     category = (request.args.get("category") or "").strip()
+    status = normalize_status(request.args.get("status")) if apply_status else ""
 
     if keyword:
         like_value = f"%{keyword}%"
@@ -332,8 +336,31 @@ def filtered_device_query():
         ))
     if category:
         query = query.filter(Device.category == category)
+    if status == "online":
+        query = query.filter(Device.is_online.is_(True))
+    elif status == "offline":
+        query = query.filter(Device.is_online.is_(False))
 
     return query
+
+
+def device_status_counts(query):
+    total = query.count()
+    online = query.filter(Device.is_online.is_(True)).count()
+    return {
+        "all": total,
+        "online": online,
+        "offline": total - online,
+    }
+
+
+def normalize_status(value):
+    status = (value or "").strip().lower()
+    if status in {"online", "1", "true", "up"}:
+        return "online"
+    if status in {"offline", "0", "false", "down"}:
+        return "offline"
+    return ""
 
 
 def device_categories():

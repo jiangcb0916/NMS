@@ -378,6 +378,42 @@ select {
     font-size: 13px;
 }
 
+.quick-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--panel-border);
+    border-radius: 999px;
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.filter-chip strong {
+    color: var(--text);
+    font-size: 13px;
+}
+
+.filter-chip.active {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.filter-chip.active strong {
+    color: var(--accent);
+}
+
 .pagination-row {
     display: flex;
     align-items: center;

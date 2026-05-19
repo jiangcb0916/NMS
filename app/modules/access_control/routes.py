@@ -18,7 +18,7 @@ def client_list():
         return success(empty_client_payload(configured=False), message="联软准入 API 未配置", code=1)
 
     page = int_arg("page", default=1, minimum=1, maximum=10000)
-    per_page = int_arg("per_page", default=100, minimum=10, maximum=500)
+    per_page = int_arg("per_page", default=10, minimum=10, maximum=500)
     search = (request.args.get("q") or "").strip().lower()
     resolve_names = (request.args.get("resolve_names") or "0").lower() in {"1", "true", "yes", "on"}
 
@@ -125,7 +125,7 @@ def empty_client_payload(configured):
         "offline_count": 0,
         "configured": configured,
         "page": 1,
-        "per_page": 100,
+        "per_page": 10,
         "pages": 0,
         "returned": 0,
         "names_resolved": False,

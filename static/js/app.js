@@ -101,7 +101,7 @@ const viewTitles = {
 
 const clientState = {
     page: 1,
-    perPage: 100,
+    perPage: 10,
     query: '',
     resolveNames: false,
     pages: 0,
@@ -110,12 +110,18 @@ const clientState = {
 
 const deviceState = {
     page: 1,
-    perPage: 100,
+    perPage: 10,
     query: '',
     category: '',
+    status: '',
     pages: 0,
     total: 0,
-    categories: []
+    categories: [],
+    statusCounts: {
+        all: 0,
+        online: 0,
+        offline: 0
+    }
 };
 
 let currentUser = null;
@@ -197,6 +203,7 @@ async function loadDevices(options = {}) {
     deviceState.perPage = options.perPage || deviceState.perPage;
     deviceState.query = options.query !== undefined ? options.query : deviceState.query;
     deviceState.category = options.category !== undefined ? options.category : deviceState.category;
+    deviceState.status = options.status !== undefined ? options.status : deviceState.status;
 
     const searchControl = document.getElementById('device-search');
     const categoryControl = document.getElementById('device-category-filter');
@@ -224,7 +231,8 @@ async function loadDevices(options = {}) {
             page: deviceState.page,
             per_page: deviceState.perPage,
             q: deviceState.query,
-            category: deviceState.category
+            category: deviceState.category,
+            status: deviceState.status
         });
         const result = await apiGet(`/api/access-control/device-list?${params.toString()}`);
         const devices = result.devices || [];
@@ -233,10 +241,13 @@ async function loadDevices(options = {}) {
         deviceState.pages = result.pages || 0;
         deviceState.total = result.total || 0;
         deviceState.categories = result.categories || [];
+        deviceState.status = result.status || '';
+        deviceState.statusCounts = result.status_counts || {all: 0, online: 0, offline: 0};
         renderDeviceCategoryOptions();
+        renderDeviceStatusFilters();
         renderDevicePager();
 
-        summary.textContent = `共 ${deviceState.total} 台，当前显示 ${result.returned || devices.length} 台`;
+        summary.textContent = `${renderDeviceSummaryPrefix()}共 ${deviceState.total} 台，当前显示 ${result.returned || devices.length} 台`;
         if (!devices.length) {
             body.innerHTML = '<tr><td colspan="7">暂无数据</td></tr>';
             return;
@@ -436,6 +447,35 @@ function renderDeviceCategoryOptions() {
     select.value = deviceState.category;
 }
 
+function renderDeviceStatusFilters() {
+    const statusMap = {
+        '': 'all',
+        online: 'online',
+        offline: 'offline'
+    };
+    document.querySelectorAll('[data-device-status]').forEach((button) => {
+        button.classList.toggle('active', button.dataset.deviceStatus === deviceState.status);
+    });
+
+    const counts = deviceState.statusCounts || {};
+    Object.entries(statusMap).forEach(([, key]) => {
+        const target = document.getElementById(`device-status-${key}`);
+        if (target) {
+            target.textContent = counts[key] ?? 0;
+        }
+    });
+}
+
+function renderDeviceSummaryPrefix() {
+    if (deviceState.status === 'online') {
+        return '在线设备，';
+    }
+    if (deviceState.status === 'offline') {
+        return '离线设备，';
+    }
+    return '';
+}
+
 function renderDeviceStatus(device) {
     return device.is_online
         ? '<span class="status-badge ok">在线</span>'
@@ -547,6 +587,9 @@ function exportDevices() {
     }
     if (deviceState.category) {
         params.set('category', deviceState.category);
+    }
+    if (deviceState.status) {
+        params.set('status', deviceState.status);
     }
     const query = params.toString();
     window.location.href = `/api/access-control/device-list/export${query ? `?${query}` : ''}`;
@@ -941,6 +984,12 @@ document.addEventListener('DOMContentLoaded', () => {
             loadDevices({page: 1, perPage: Number(event.target.value)});
         });
     }
+
+    document.querySelectorAll('[data-device-status]').forEach((button) => {
+        button.addEventListener('click', () => {
+            loadDevices({page: 1, status: button.dataset.deviceStatus || ''});
+        });
+    });
 
     const devicesPrev = document.getElementById('devices-prev');
     if (devicesPrev) {

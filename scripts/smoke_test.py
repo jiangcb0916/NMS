@@ -50,6 +50,15 @@ def main():
     device_list_response = client.get("/api/access-control/device-list?q=smoke&category=smoke&page=1&per_page=10")
     assert device_list_response.status_code == 200, device_list_response.get_data(as_text=True)
     assert device_list_response.get_json()["data"]["total"] == 1
+    assert device_list_response.get_json()["data"]["status_counts"]["offline"] == 1
+
+    offline_device_response = client.get("/api/access-control/device-list?q=smoke&status=offline&page=1&per_page=10")
+    assert offline_device_response.status_code == 200, offline_device_response.get_data(as_text=True)
+    assert offline_device_response.get_json()["data"]["total"] == 1
+
+    online_device_response = client.get("/api/access-control/device-list?q=smoke&status=online&page=1&per_page=10")
+    assert online_device_response.status_code == 200, online_device_response.get_data(as_text=True)
+    assert online_device_response.get_json()["data"]["total"] == 0
 
     update_device_response = client.put(f"/api/access-control/device-list/{created_device['id']}", json={
         "username": "smoke-device-edited",
@@ -60,7 +69,7 @@ def main():
     })
     assert update_device_response.status_code == 200, update_device_response.get_data(as_text=True)
 
-    export_device_response = client.get("/api/access-control/device-list/export?q=smoke")
+    export_device_response = client.get("/api/access-control/device-list/export?q=smoke&status=offline")
     assert export_device_response.status_code == 200, export_device_response.get_data(as_text=True)
     assert b"smoke-device-edited" in export_device_response.data
 

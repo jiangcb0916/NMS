@@ -141,12 +141,28 @@
             <option value="">全部分类</option>
         </select>
         <select id="device-page-size" aria-label="每页数量">
+            <option value="10" selected>10 / 页</option>
+            <option value="20">20 / 页</option>
             <option value="50">50 / 页</option>
-            <option value="100" selected>100 / 页</option>
+            <option value="100">100 / 页</option>
             <option value="200">200 / 页</option>
         </select>
     </div>
     <div class="list-summary" id="devices-summary">-</div>
+    <div class="quick-filter-row" id="device-status-filter" aria-label="设备状态筛选">
+        <button class="filter-chip active" type="button" data-device-status="">
+            <span>全部</span>
+            <strong id="device-status-all">0</strong>
+        </button>
+        <button class="filter-chip" type="button" data-device-status="online">
+            <span>在线</span>
+            <strong id="device-status-online">0</strong>
+        </button>
+        <button class="filter-chip" type="button" data-device-status="offline">
+            <span>离线</span>
+            <strong id="device-status-offline">0</strong>
+        </button>
+    </div>
 
     <div class="table-wrap">
         <table>
@@ -251,8 +267,10 @@
     <div class="toolbar-row">
         <input id="client-search" placeholder="搜索 IP、用户、设备名、MAC、部门">
         <select id="client-page-size" aria-label="每页数量">
+            <option value="10" selected>10 / 页</option>
+            <option value="20">20 / 页</option>
             <option value="50">50 / 页</option>
-            <option value="100" selected>100 / 页</option>
+            <option value="100">100 / 页</option>
             <option value="200">200 / 页</option>
         </select>
     </div>
