@@ -12,38 +12,53 @@
     <div class="app-shell">
         <aside class="sidebar">
             <div class="brand">
-                <i class="bi bi-shield-check"></i>
+                <div class="brand-mark"><i class="bi bi-shield-check"></i></div>
                 <div>
                     <div class="brand-title">网络管理系统</div>
-                    <div class="brand-version">{{ config.VERSION }}</div>
+                    <div class="brand-version">运维控制台 · {{ config.VERSION }}</div>
                 </div>
             </div>
 
             <nav class="nav-list">
-                <a class="nav-item active" href="#" id="dashboard-nav" data-section="dashboard">
-                    <i class="bi bi-speedometer2"></i>
-                    <span>仪表盘</span>
-                </a>
-                <a class="nav-item" href="#" id="firewall-bandwidth-nav" data-section="firewall-bandwidth">
-                    <i class="bi bi-graph-up"></i>
-                    <span>防火墙带宽</span>
-                </a>
-                <a class="nav-item" href="#" id="wireless-nav" data-section="status">
-                    <i class="bi bi-activity"></i>
-                    <span>无线控制器</span>
-                </a>
-                <a class="nav-item" href="#" id="devices-nav" data-section="access">
-                    <i class="bi bi-hdd-network"></i>
-                    <span>设备列表</span>
-                </a>
-                <a class="nav-item" href="#" id="clients-nav" data-section="clients">
-                    <i class="bi bi-pc-display"></i>
-                    <span>客户端列表</span>
-                </a>
-                <a class="nav-item" href="#" id="users-nav">
-                    <i class="bi bi-people"></i>
-                    <span>用户管理</span>
-                </a>
+                <div class="nav-section">
+                    <div class="nav-section-title">总览</div>
+                    <a class="nav-item active" href="#" id="dashboard-nav" data-section="dashboard">
+                        <i class="bi bi-speedometer2"></i>
+                        <span>仪表盘</span>
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">网络监控</div>
+                    <a class="nav-item" href="#" id="firewall-bandwidth-nav" data-section="firewall-bandwidth">
+                        <i class="bi bi-graph-up"></i>
+                        <span>防火墙带宽</span>
+                    </a>
+                    <a class="nav-item" href="#" id="wireless-nav" data-section="status">
+                        <i class="bi bi-activity"></i>
+                        <span>无线控制器</span>
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">准入资产</div>
+                    <a class="nav-item" href="#" id="devices-nav" data-section="access">
+                        <i class="bi bi-hdd-network"></i>
+                        <span>设备列表</span>
+                    </a>
+                    <a class="nav-item" href="#" id="clients-nav" data-section="clients">
+                        <i class="bi bi-pc-display"></i>
+                        <span>客户端列表</span>
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">系统管理</div>
+                    <a class="nav-item" href="#" id="users-nav">
+                        <i class="bi bi-people"></i>
+                        <span>用户管理</span>
+                    </a>
+                </div>
             </nav>
 
             <div class="sidebar-footer">
@@ -53,11 +68,10 @@
                         <div id="current-user-name">-</div>
                         <div id="current-user-role">-</div>
                     </div>
+                    <button class="logout-icon-button" id="logout-button" type="button" title="退出">
+                        <i class="bi bi-box-arrow-right"></i>
+                    </button>
                 </div>
-                <button class="icon-text-button" id="logout-button" type="button">
-                    <i class="bi bi-box-arrow-right"></i>
-                    <span>退出</span>
-                </button>
             </div>
         </aside>
 
