@@ -369,7 +369,7 @@ select {
 }
 
 .toolbar-row.wireless-user-toolbar {
-    grid-template-columns: minmax(260px, 1fr) 180px 120px;
+    grid-template-columns: minmax(260px, 1fr) 120px;
 }
 
 .toolbar-row.wireless-ap-toolbar {

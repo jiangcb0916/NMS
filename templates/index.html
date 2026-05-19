@@ -356,7 +356,7 @@
         </div>
     </div>
     <div class="toolbar-row">
-        <input id="client-search" placeholder="搜索 IP、用户、设备名、MAC、部门">
+        <input id="client-search" placeholder="搜索 IP、用户、设备名、MAC、系统">
         <select id="client-page-size" aria-label="每页数量">
             <option value="10" selected>10 / 页</option>
             <option value="20">20 / 页</option>
@@ -366,6 +366,20 @@
         </select>
     </div>
     <div class="list-summary" id="clients-summary">-</div>
+    <div class="quick-filter-row" id="client-status-filter" aria-label="客户端状态筛选">
+        <button class="filter-chip active" type="button" data-client-status="">
+            <span>全部</span>
+            <strong id="client-status-all">0</strong>
+        </button>
+        <button class="filter-chip" type="button" data-client-status="online">
+            <span>在线</span>
+            <strong id="client-status-online">0</strong>
+        </button>
+        <button class="filter-chip" type="button" data-client-status="offline">
+            <span>离线</span>
+            <strong id="client-status-offline">0</strong>
+        </button>
+    </div>
     <div class="table-wrap">
         <table>
             <thead>
@@ -375,13 +389,14 @@
                     <th>姓名</th>
                     <th>设备名</th>
                     <th>MAC</th>
-                    <th>部门</th>
+                    <th>操作系统</th>
+                    <th>系统版本</th>
                     <th>状态</th>
                 </tr>
             </thead>
             <tbody id="clients-table-body">
                 <tr>
-                    <td colspan="7">暂无数据</td>
+                    <td colspan="8">暂无数据</td>
                 </tr>
             </tbody>
         </table>

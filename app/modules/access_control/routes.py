@@ -20,6 +20,7 @@ def client_list():
     page = int_arg("page", default=1, minimum=1, maximum=10000)
     per_page = int_arg("per_page", default=10, minimum=10, maximum=500)
     search = (request.args.get("q") or "").strip().lower()
+    status = normalize_client_status(request.args.get("status"))
     resolve_names = (request.args.get("resolve_names") or "0").lower() in {"1", "true", "yes", "on"}
 
     payload = client.query_devices(terminaltype="1")
@@ -37,6 +38,8 @@ def client_list():
             continue
         filtered_rows.append(row)
 
+    status_counts = client_status_counts(filtered_rows)
+    filtered_rows = filter_client_rows_by_status(filtered_rows, status)
     total = len(filtered_rows)
     start = (page - 1) * per_page
     page_rows = filtered_rows[start:start + per_page]
@@ -53,6 +56,8 @@ def client_list():
         "total": total,
         "online_count": sum(1 for item in clients if item["is_online"]),
         "offline_count": sum(1 for item in clients if not item["is_online"]),
+        "status": status,
+        "status_counts": status_counts,
         "configured": True,
         "page": page,
         "per_page": per_page,
@@ -123,6 +128,8 @@ def empty_client_payload(configured):
         "total": 0,
         "online_count": 0,
         "offline_count": 0,
+        "status": "",
+        "status_counts": {"all": 0, "online": 0, "offline": 0},
         "configured": configured,
         "page": 1,
         "per_page": 10,
@@ -147,10 +154,38 @@ def row_matches(row, keyword):
         row.get("strusername"),
         row.get("strdevname"),
         row.get("strmac"),
-        row.get("strdeptname"),
         row.get("strswitchname"),
         row.get("strlocation"),
         row.get("stros"),
+        row.get("strosversion"),
+        row.get("strversion"),
         row.get("strdevtype"),
     ]
     return any(keyword in str(value).lower() for value in fields if value)
+
+
+def normalize_client_status(value):
+    status = (value or "").strip().lower()
+    if status in {"online", "1", "true", "up"}:
+        return "online"
+    if status in {"offline", "0", "false", "down"}:
+        return "offline"
+    return ""
+
+
+def filter_client_rows_by_status(rows, status):
+    if status == "online":
+        return [row for row in rows if row.get("status") == 1]
+    if status == "offline":
+        return [row for row in rows if row.get("status") != 1]
+    return rows
+
+
+def client_status_counts(rows):
+    online = sum(1 for row in rows if row.get("status") == 1)
+    total = len(rows)
+    return {
+        "all": total,
+        "online": online,
+        "offline": total - online,
+    }

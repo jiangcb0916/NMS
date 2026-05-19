@@ -16,6 +16,7 @@ from app.extensions import db
 from app.models.base import now_local
 from app.models.cache import UserNameCache
 from app.models.user import User
+from app.modules.access_control import routes as access_control_routes
 from app.modules.wireless import routes as wireless_routes
 
 
@@ -50,6 +51,50 @@ def main():
 
     health_response = client.get("/api/health")
     assert health_response.status_code == 200, health_response.get_data(as_text=True)
+
+    class FakeAccessControlClient:
+        configured = True
+
+        def query_devices(self, **params):
+            return {
+                "status": "SUCCESS",
+                "rows": [
+                    {
+                        "strdevip": "192.0.2.31",
+                        "strusername": "13800000001",
+                        "strdevname": "PC-A",
+                        "strmac": "00:11:22:33:44:31",
+                        "strdeptname": "LDAP",
+                        "status": 1,
+                        "stros": "Windows",
+                        "strosversion": "11 Pro",
+                    },
+                    {
+                        "strdevip": "192.0.2.32",
+                        "strusername": "13800000002",
+                        "strdevname": "PC-B",
+                        "strmac": "00:11:22:33:44:32",
+                        "strdeptname": "LDAP",
+                        "status": 0,
+                        "stros": "macOS",
+                        "strosversion": "14.5",
+                    },
+                ],
+            }
+
+    original_access_control_client = access_control_routes.AccessControlClient
+    access_control_routes.AccessControlClient = FakeAccessControlClient
+    try:
+        client_list_response = client.get("/api/access-control/client-list?q=windows&status=online&page=1&per_page=10")
+        assert client_list_response.status_code == 200, client_list_response.get_data(as_text=True)
+        client_list_data = client_list_response.get_json()["data"]
+        assert client_list_data["total"] == 1
+        assert client_list_data["status"] == "online"
+        assert client_list_data["status_counts"] == {"all": 1, "online": 1, "offline": 0}
+        assert client_list_data["client_list"][0]["os"] == "Windows"
+        assert client_list_data["client_list"][0]["os_version"] == "11 Pro"
+    finally:
+        access_control_routes.AccessControlClient = original_access_control_client
 
     class FakePrometheusClient:
         query_configured = True

@@ -103,9 +103,15 @@ const clientState = {
     page: 1,
     perPage: 10,
     query: '',
+    status: '',
     resolveNames: true,
     pages: 0,
-    total: 0
+    total: 0,
+    statusCounts: {
+        all: 0,
+        online: 0,
+        offline: 0
+    }
 };
 
 const deviceState = {
@@ -462,6 +468,7 @@ async function loadClients(options = {}) {
     clientState.page = options.page || clientState.page;
     clientState.perPage = options.perPage || clientState.perPage;
     clientState.query = options.query !== undefined ? options.query : clientState.query;
+    clientState.status = options.status !== undefined ? options.status : clientState.status;
     clientState.resolveNames = options.resolveNames !== undefined ? options.resolveNames : clientState.resolveNames;
 
     showView('clients-panel', 'clients-nav', 'clients');
@@ -469,7 +476,7 @@ async function loadClients(options = {}) {
     const body = document.getElementById('clients-table-body');
     const summary = document.getElementById('clients-summary');
     panel.hidden = false;
-    body.innerHTML = '<tr><td colspan="7">加载中</td></tr>';
+    body.innerHTML = '<tr><td colspan="8">加载中</td></tr>';
     summary.textContent = '加载中';
 
     try {
@@ -477,6 +484,7 @@ async function loadClients(options = {}) {
             page: clientState.page,
             per_page: clientState.perPage,
             q: clientState.query,
+            status: clientState.status,
             resolve_names: clientState.resolveNames ? '1' : '0'
         });
         const result = await apiGetResult(`/api/access-control/client-list?${params.toString()}`);
@@ -484,18 +492,21 @@ async function loadClients(options = {}) {
         clientState.page = data.page || clientState.page;
         clientState.pages = data.pages || 0;
         clientState.total = data.total || 0;
+        clientState.status = data.status || '';
+        clientState.statusCounts = data.status_counts || {all: 0, online: 0, offline: 0};
         renderClientPager();
+        renderClientStatusFilters();
 
         if (result.code !== 0) {
-            body.innerHTML = `<tr><td colspan="7">${escapeHtml(result.message || '请求失败')}</td></tr>`;
+            body.innerHTML = `<tr><td colspan="8">${escapeHtml(result.message || '请求失败')}</td></tr>`;
             summary.textContent = '无法获取客户端数据';
             return;
         }
 
         const clients = data.client_list || [];
-        summary.textContent = `共 ${data.total || 0} 条，当前显示 ${data.returned || clients.length} 条，姓名${data.names_resolved ? '已解析当前页' : '优先使用缓存'}`;
+        summary.textContent = `${renderClientSummaryPrefix()}共 ${data.total || 0} 条，当前显示 ${data.returned || clients.length} 条，姓名${data.names_resolved ? '已解析当前页' : '优先使用缓存'}`;
         if (!clients.length) {
-            body.innerHTML = `<tr><td colspan="7">${escapeHtml(result.message || '暂无数据')}</td></tr>`;
+            body.innerHTML = `<tr><td colspan="8">${escapeHtml(result.message || '暂无数据')}</td></tr>`;
             return;
         }
         body.innerHTML = clients.map((client) => `
@@ -505,12 +516,13 @@ async function loadClients(options = {}) {
                 <td>${escapeHtml(client.real_name || '-')}</td>
                 <td>${escapeHtml(client.device_name || '-')}</td>
                 <td>${escapeHtml(client.mac_address || '-')}</td>
-                <td>${escapeHtml(client.department || '-')}</td>
+                <td>${escapeHtml(client.os || '-')}</td>
+                <td>${escapeHtml(client.os_version || '-')}</td>
                 <td>${client.is_online ? '在线' : '离线'}</td>
             </tr>
         `).join('');
     } catch (error) {
-        body.innerHTML = `<tr><td colspan="7">${escapeHtml(error.message)}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
         summary.textContent = '加载失败';
     }
 }
@@ -778,6 +790,29 @@ function renderClientPager() {
     pageText.textContent = clientState.pages ? `${clientState.page} / ${clientState.pages}` : '-';
     prev.disabled = clientState.page <= 1;
     next.disabled = clientState.pages === 0 || clientState.page >= clientState.pages;
+}
+
+function renderClientStatusFilters() {
+    const counts = clientState.statusCounts || {};
+    document.querySelectorAll('[data-client-status]').forEach((button) => {
+        button.classList.toggle('active', button.dataset.clientStatus === clientState.status);
+    });
+    ['all', 'online', 'offline'].forEach((key) => {
+        const target = document.getElementById(`client-status-${key}`);
+        if (target) {
+            target.textContent = counts[key] ?? 0;
+        }
+    });
+}
+
+function renderClientSummaryPrefix() {
+    if (clientState.status === 'online') {
+        return '在线客户端，';
+    }
+    if (clientState.status === 'offline') {
+        return '离线客户端，';
+    }
+    return '';
 }
 
 function showWirelessSubview(view) {
@@ -1421,6 +1456,12 @@ document.addEventListener('DOMContentLoaded', () => {
             loadClients({page: 1, perPage: Number(event.target.value), resolveNames: false});
         });
     }
+
+    document.querySelectorAll('[data-client-status]').forEach((button) => {
+        button.addEventListener('click', () => {
+            loadClients({page: 1, status: button.dataset.clientStatus || '', resolveNames: false});
+        });
+    });
 
     const clientsPrev = document.getElementById('clients-prev');
     if (clientsPrev) {
