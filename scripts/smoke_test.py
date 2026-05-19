@@ -238,7 +238,47 @@ def main():
         def raise_for_status(self):
             return None
 
+    class FakePrometheusRangeResponse:
+        def __init__(self, query):
+            self.query = query
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            now_ts = int(time.time())
+            values = {
+                "telecom_ifOutOctets_total": "10",
+                "telecom_ifInOctets_total": "40",
+                "unicom_ifOutOctets_total": "20",
+                "unicom_ifInOctets_total": "60",
+            }
+            value = "0"
+            for metric_name, metric_value in values.items():
+                if metric_name in self.query:
+                    value = metric_value
+                    break
+            return {
+                "status": "success",
+                "data": {
+                    "result": [{
+                        "values": [
+                            [now_ts - 120, value],
+                            [now_ts - 60, value],
+                            [now_ts, value],
+                        ]
+                    }]
+                },
+            }
+
     def fake_firewall_get(url, params=None, timeout=10):
+        if url == "http://172.16.80.125:9090/api/v1/query_range":
+            query = params["query"]
+            assert 'auth="secure_v3"' in query
+            assert 'instance="172.16.100.3"' in query
+            assert 'job="USG"' in query
+            assert 'module="hw_health"' in query
+            return FakePrometheusRangeResponse(query)
         assert url == "http://172.16.80.125:9116/snmp"
         assert params["auth"] == "secure_v3"
         assert params["module"] == "hw_health"
@@ -248,9 +288,11 @@ def main():
     original_prometheus_client = wireless_routes.PrometheusClient
     original_firewall_get = firewall_routes.requests.get
     original_bandwidth_history = firewall_routes.bandwidth_history
+    original_bandwidth_samples = list(firewall_routes.bandwidth_samples)
     original_dashboard_access_control_client = dashboard_routes.AccessControlClient
     wireless_routes.PrometheusClient = FakePrometheusClient
     firewall_routes.requests.get = fake_firewall_get
+    firewall_routes.bandwidth_samples = []
     firewall_routes.bandwidth_history = {
         "time": time.time() - 10,
         "telecom_in": 1000000000,
@@ -272,10 +314,20 @@ def main():
         assert overview_data["wireless"]["wireless_users"] == 3
         assert overview_data["tops"]["wireless_users"]["upload"][0]["value"] == "2 Mbps"
         assert overview_data["tops"]["aps"]["download"][0]["label"] == "AP-A"
+
+        history_response = client.get("/api/status/huawei-firewall/bandwidth-history?limit=20&range=5m")
+        assert history_response.status_code == 200, history_response.get_data(as_text=True)
+        history_data = history_response.get_json()["data"]
+        assert history_data["configured"] is True
+        assert history_data["range"] == "5m"
+        assert history_data["range_seconds"] == 300
+        assert history_data["sample_count"] >= 1
+        assert history_data["samples"][-1]["total_download"] >= history_data["samples"][-1]["total_upload"]
     finally:
         wireless_routes.PrometheusClient = original_prometheus_client
         firewall_routes.requests.get = original_firewall_get
         firewall_routes.bandwidth_history = original_bandwidth_history
+        firewall_routes.bandwidth_samples = original_bandwidth_samples
         dashboard_routes.AccessControlClient = original_dashboard_access_control_client
 
     create_device_response = client.post("/api/access-control/device-list", json={

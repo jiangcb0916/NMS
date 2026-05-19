@@ -162,6 +162,102 @@
 
 </section>
 
+<section class="panel firewall-bandwidth-panel app-view" id="firewall-bandwidth-panel" hidden>
+    <div class="panel-header">
+        <div>
+            <h2>华为防火墙带宽</h2>
+            <p class="panel-subtitle" id="firewall-bandwidth-source">-</p>
+        </div>
+        <div class="button-row">
+            <button class="small-button" type="button" data-firewall-range="5m">
+                <span>5 分钟</span>
+            </button>
+            <button class="small-button" type="button" data-firewall-range="15m">
+                <span>15 分钟</span>
+            </button>
+            <button class="small-button" type="button" data-firewall-range="30m">
+                <span>30 分钟</span>
+            </button>
+            <button class="small-button" type="button" data-firewall-range="1h">
+                <span>1 小时</span>
+            </button>
+            <button class="small-button" type="button" data-firewall-range="3h">
+                <span>3 小时</span>
+            </button>
+            <button class="small-button active" type="button" data-firewall-range="6h">
+                <span>6 小时</span>
+            </button>
+            <button class="small-button" type="button" data-firewall-range="12h">
+                <span>12 小时</span>
+            </button>
+            <button class="small-button" type="button" data-firewall-range="24h">
+                <span>24 小时</span>
+            </button>
+            <button class="small-button" type="button" data-firewall-range="2d">
+                <span>2 天</span>
+            </button>
+            <button class="small-button" id="reload-firewall-bandwidth" type="button">
+                <i class="bi bi-arrow-clockwise"></i>
+                <span>刷新</span>
+            </button>
+        </div>
+    </div>
+
+    <section class="chart-grid">
+        <section class="chart-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>联通下行流量</h2>
+                    <p class="panel-subtitle">单位 Mbps</p>
+                </div>
+                <div class="chart-legend">
+                    <span><i class="legend-dot unicom-download"></i>联通下行</span>
+                </div>
+            </div>
+            <canvas id="firewall-unicom-download-chart" class="bandwidth-chart"></canvas>
+        </section>
+
+        <section class="chart-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>联通上行流量</h2>
+                    <p class="panel-subtitle">单位 Mbps</p>
+                </div>
+                <div class="chart-legend">
+                    <span><i class="legend-dot unicom-upload"></i>联通上行</span>
+                </div>
+            </div>
+            <canvas id="firewall-unicom-upload-chart" class="bandwidth-chart"></canvas>
+        </section>
+
+        <section class="chart-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>电信下行流量</h2>
+                    <p class="panel-subtitle">单位 Mbps</p>
+                </div>
+                <div class="chart-legend">
+                    <span><i class="legend-dot telecom-download"></i>电信下行</span>
+                </div>
+            </div>
+            <canvas id="firewall-telecom-download-chart" class="bandwidth-chart"></canvas>
+        </section>
+
+        <section class="chart-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>电信上行流量</h2>
+                    <p class="panel-subtitle">单位 Mbps</p>
+                </div>
+                <div class="chart-legend">
+                    <span><i class="legend-dot telecom-upload"></i>电信上行</span>
+                </div>
+            </div>
+            <canvas id="firewall-telecom-upload-chart" class="bandwidth-chart"></canvas>
+        </section>
+    </section>
+</section>
+
 <section class="panel users-panel app-view" id="users-panel" hidden>
     <div class="panel-header">
         <h2>用户列表</h2>

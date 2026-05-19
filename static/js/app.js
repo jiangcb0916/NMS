@@ -92,6 +92,7 @@ function showToast(message, type = 'info') {
 
 const viewTitles = {
     dashboard: ['仪表盘', '系统运行概览'],
+    firewallBandwidth: ['防火墙带宽', '华为防火墙上下行趋势'],
     wireless: ['无线控制器', 'AP、SSID 与无线用户状态'],
     devices: ['设备列表', '本地设备清单和在线状态'],
     clients: ['客户端列表', '联软准入终端数据'],
@@ -162,6 +163,11 @@ let currentUser = null;
 let usersCache = [];
 let devicesCache = [];
 let wirelessActiveView = 'aps';
+const firewallBandwidthState = {
+    range: '6h',
+    samples: [],
+    latest: null,
+};
 
 function showView(viewId, navId, titleKey) {
     document.querySelectorAll('.app-view').forEach((view) => {
@@ -233,6 +239,166 @@ function renderFirewallDashboard(firewall) {
     document.getElementById('firewall-total-bandwidth').textContent = formatMbps(firewall.total_bandwidth);
 }
 
+async function loadFirewallBandwidth(options = {}) {
+    firewallBandwidthState.range = options.range || firewallBandwidthState.range;
+    showView('firewall-bandwidth-panel', 'firewall-bandwidth-nav', 'firewallBandwidth');
+    try {
+        const params = new URLSearchParams({
+            limit: 720,
+            refresh: '1',
+            range: firewallBandwidthState.range
+        });
+        const data = await apiGet(`/api/status/huawei-firewall/bandwidth-history?${params.toString()}`);
+        renderFirewallBandwidthPage(data);
+        if (options.toast) {
+            showToast('带宽数据已刷新');
+        }
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
+function renderFirewallBandwidthPage(data) {
+    const latest = data.latest || {};
+    const samples = data.samples || [];
+    const configured = Boolean(latest.configured);
+    const ok = Boolean(latest.ok);
+
+    firewallBandwidthState.latest = latest;
+    firewallBandwidthState.samples = samples;
+    firewallBandwidthState.range = data.range || firewallBandwidthState.range;
+
+    document.getElementById('firewall-bandwidth-source').textContent = latest.snmp_target
+        ? `SNMP 目标 ${latest.snmp_target} · ${renderFirewallRangeLabel(firewallBandwidthState.range)} · 样本 ${data.sample_count ?? samples.length} 个`
+        : 'SNMP 目标未配置';
+
+    renderFirewallRangeButtons();
+    drawBandwidthChart('firewall-unicom-download-chart', samples, [
+        {key: 'unicom_download', label: '联通下行', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.14)'},
+    ]);
+    drawBandwidthChart('firewall-unicom-upload-chart', samples, [
+        {key: 'unicom_upload', label: '联通上行', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.14)'},
+    ]);
+    drawBandwidthChart('firewall-telecom-download-chart', samples, [
+        {key: 'telecom_download', label: '电信下行', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.14)'},
+    ]);
+    drawBandwidthChart('firewall-telecom-upload-chart', samples, [
+        {key: 'telecom_upload', label: '电信上行', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.14)'},
+    ]);
+}
+
+function renderFirewallRangeButtons() {
+    document.querySelectorAll('[data-firewall-range]').forEach((button) => {
+        button.classList.toggle('active', button.dataset.firewallRange === firewallBandwidthState.range);
+    });
+}
+
+function drawBandwidthChart(canvasId, samples, series) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) {
+        return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(320, rect.width || canvas.clientWidth || 720);
+    const height = Math.max(220, rect.height || canvas.clientHeight || 280);
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = width * ratio;
+    canvas.height = height * ratio;
+
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+
+    const plot = {left: 60, top: 18, right: 18, bottom: 34};
+    const plotWidth = width - plot.left - plot.right;
+    const plotHeight = height - plot.top - plot.bottom;
+    const values = samples.flatMap((sample) => series.map((item) => Number(sample[item.key] || 0)));
+    const maxValue = Math.max(1, ...values);
+    const yMax = Math.ceil(maxValue * 1.15);
+
+    ctx.strokeStyle = '#edf1f3';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#66737d';
+    ctx.font = '12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif';
+
+    for (let index = 0; index <= 4; index += 1) {
+        const y = plot.top + (plotHeight / 4) * index;
+        const value = yMax - (yMax / 4) * index;
+        ctx.beginPath();
+        ctx.moveTo(plot.left, y);
+        ctx.lineTo(width - plot.right, y);
+        ctx.stroke();
+        ctx.fillText(formatMbps(value), 8, y + 4);
+    }
+
+    ctx.strokeStyle = '#d9e0e4';
+    ctx.beginPath();
+    ctx.moveTo(plot.left, plot.top);
+    ctx.lineTo(plot.left, plot.top + plotHeight);
+    ctx.lineTo(width - plot.right, plot.top + plotHeight);
+    ctx.stroke();
+
+    if (!samples.length) {
+        ctx.fillStyle = '#66737d';
+        ctx.textAlign = 'center';
+        ctx.fillText('暂无带宽历史样本', width / 2, height / 2);
+        ctx.textAlign = 'left';
+        return;
+    }
+
+    const xFor = (sampleIndex) => {
+        if (samples.length === 1) {
+            return plot.left + plotWidth;
+        }
+        return plot.left + (plotWidth * sampleIndex) / (samples.length - 1);
+    };
+    const yFor = (value) => plot.top + plotHeight - (plotHeight * Number(value || 0)) / yMax;
+
+    series.forEach((line) => {
+        const points = samples.map((sample, index) => ({
+            x: xFor(index),
+            y: yFor(sample[line.key]),
+        }));
+        if (line.fill && points.length > 1) {
+            ctx.fillStyle = line.fill;
+            ctx.beginPath();
+            points.forEach((point, index) => {
+                if (index === 0) {
+                    ctx.moveTo(point.x, plot.top + plotHeight);
+                    ctx.lineTo(point.x, point.y);
+                } else {
+                    ctx.lineTo(point.x, point.y);
+                }
+            });
+            ctx.lineTo(points[points.length - 1].x, plot.top + plotHeight);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        ctx.strokeStyle = line.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        points.forEach((point, index) => {
+            if (index === 0) {
+                ctx.moveTo(point.x, point.y);
+            } else {
+                ctx.lineTo(point.x, point.y);
+            }
+        });
+        ctx.stroke();
+    });
+
+    ctx.fillStyle = '#66737d';
+    ctx.textAlign = 'left';
+    ctx.fillText(formatChartTime(samples[0].timestamp), plot.left, height - 10);
+    ctx.textAlign = 'right';
+    ctx.fillText(formatChartTime(samples[samples.length - 1].timestamp), width - plot.right, height - 10);
+    ctx.textAlign = 'left';
+}
+
 function renderTrafficTopList(elementId, items) {
     const list = document.getElementById(elementId);
     if (!list) {
@@ -282,6 +448,42 @@ function formatMbps(value) {
         return `${Math.round(mbps * 1000)} Kbps`;
     }
     return `${mbps.toFixed(1)} Mbps`;
+}
+
+function formatTimestamp(timestamp) {
+    const value = Number(timestamp);
+    if (!Number.isFinite(value) || !value) {
+        return '-';
+    }
+    return new Date(value * 1000).toLocaleString('zh-CN', {hour12: false});
+}
+
+function renderFirewallRangeLabel(value) {
+    const labels = {
+        '5m': '最近 5 分钟',
+        '15m': '最近 15 分钟',
+        '30m': '最近 30 分钟',
+        '1h': '最近 1 小时',
+        '3h': '最近 3 小时',
+        '6h': '最近 6 小时',
+        '12h': '最近 12 小时',
+        '24h': '最近 24 小时',
+        '2d': '最近 2 天',
+    };
+    return labels[value] || labels['6h'];
+}
+
+function formatChartTime(timestamp) {
+    const value = Number(timestamp);
+    if (!Number.isFinite(value) || !value) {
+        return '-';
+    }
+    return new Date(value * 1000).toLocaleTimeString('zh-CN', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+    });
 }
 
 async function loadUsers() {
@@ -1215,7 +1417,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshSummary = document.getElementById('refresh-summary');
     if (refreshSummary) {
         refreshSummary.addEventListener('click', () => {
-            loadSummary()
+            const firewallPanel = document.getElementById('firewall-bandwidth-panel');
+            const task = firewallPanel && !firewallPanel.hidden
+                ? loadFirewallBandwidth({toast: false})
+                : loadSummary();
+            task
                 .then(() => showToast('已刷新'))
                 .catch((error) => showToast(error.message, 'error'));
         });
@@ -1228,6 +1434,14 @@ document.addEventListener('DOMContentLoaded', () => {
             showView('dashboard-panel', 'dashboard-nav', 'dashboard');
             loadSummary()
                 .catch((error) => showToast(error.message, 'error'));
+        });
+    }
+
+    const firewallBandwidthNav = document.getElementById('firewall-bandwidth-nav');
+    if (firewallBandwidthNav) {
+        firewallBandwidthNav.addEventListener('click', (event) => {
+            event.preventDefault();
+            loadFirewallBandwidth();
         });
     }
 
@@ -1270,6 +1484,29 @@ document.addEventListener('DOMContentLoaded', () => {
     if (reloadUsers) {
         reloadUsers.addEventListener('click', loadUsers);
     }
+
+    const reloadFirewallBandwidth = document.getElementById('reload-firewall-bandwidth');
+    if (reloadFirewallBandwidth) {
+        reloadFirewallBandwidth.addEventListener('click', () => loadFirewallBandwidth({toast: true}));
+    }
+
+    document.querySelectorAll('[data-firewall-range]').forEach((button) => {
+        button.addEventListener('click', () => {
+            loadFirewallBandwidth({range: button.dataset.firewallRange});
+        });
+    });
+
+    window.addEventListener('resize', debounce(() => {
+        const firewallPanel = document.getElementById('firewall-bandwidth-panel');
+        if (firewallPanel && !firewallPanel.hidden) {
+            renderFirewallBandwidthPage({
+                latest: firewallBandwidthState.latest || {},
+                samples: firewallBandwidthState.samples || [],
+                sample_count: firewallBandwidthState.samples.length,
+                range: firewallBandwidthState.range,
+            });
+        }
+    }, 150));
 
     const createUserButton = document.getElementById('create-user-button');
     if (createUserButton) {

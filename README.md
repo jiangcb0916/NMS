@@ -201,6 +201,7 @@ docker compose exec web python scripts/migrate_legacy_data.py
 | `HUAWEI_SNMP_AUTH` | 华为防火墙 SNMP exporter auth 参数 | `secure_v3` |
 | `HUAWEI_SNMP_MODULE` | 华为防火墙 SNMP exporter module 参数 | `hw_health` |
 | `HUAWEI_FIREWALL_TARGET` | 华为防火墙 SNMP 目标地址 | `172.16.100.3` |
+| `HUAWEI_PROMETHEUS_JOB` | 华为防火墙 Prometheus 查询使用的 `job` label | `USG` |
 | `HUAWEI_TOTAL_BANDWIDTH_MBPS` | 防火墙总带宽容量，Dashboard 计算占用率使用 | `450` |
 | `ACCESS_CONTROL_API_URL` | 联软准入接口地址 | 空 |
 | `ACCESS_CONTROL_API_USERNAME` | 联软准入账号 | 空 |
