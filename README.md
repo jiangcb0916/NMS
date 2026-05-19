@@ -197,6 +197,11 @@ docker compose exec web python scripts/migrate_legacy_data.py
 | `WIRELESS_JOB` | 无线固定查询 `job` label | `ND` |
 | `WIRELESS_AUTH` | 无线固定查询 `auth` label | `nac` |
 | `WIRELESS_MODULE` | 无线固定查询 `module` label | `mgmt,private` |
+| `HUAWEI_SNMP_URL` | 华为防火墙 SNMP exporter 接口，Dashboard 带宽卡片使用 | `http://172.16.80.125:9116/snmp` |
+| `HUAWEI_SNMP_AUTH` | 华为防火墙 SNMP exporter auth 参数 | `secure_v3` |
+| `HUAWEI_SNMP_MODULE` | 华为防火墙 SNMP exporter module 参数 | `hw_health` |
+| `HUAWEI_FIREWALL_TARGET` | 华为防火墙 SNMP 目标地址 | `172.16.100.3` |
+| `HUAWEI_TOTAL_BANDWIDTH_MBPS` | 防火墙总带宽容量，Dashboard 计算占用率使用 | `450` |
 | `ACCESS_CONTROL_API_URL` | 联软准入接口地址 | 空 |
 | `ACCESS_CONTROL_API_USERNAME` | 联软准入账号 | 空 |
 | `ACCESS_CONTROL_API_PASSWORD` | 联软准入密码 | 空 |

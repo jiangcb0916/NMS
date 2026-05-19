@@ -168,6 +168,10 @@ select {
     margin-top: 22px;
 }
 
+.metric-grid.dashboard-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .metric,
 .panel {
     background: var(--panel);
@@ -206,6 +210,16 @@ select {
     color: #6d28d9;
 }
 
+.metric-icon.wireless {
+    background: #ecfdf5;
+    color: #047857;
+}
+
+.metric-icon.ap {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
 .metric-label {
     color: var(--muted);
     font-size: 13px;
@@ -220,6 +234,17 @@ select {
 .panel-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 14px;
+    margin-top: 14px;
+}
+
+.panel-grid.single-panel-grid {
+    grid-template-columns: 1fr;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr;
     gap: 14px;
     margin-top: 14px;
 }
@@ -244,6 +269,183 @@ select {
 .status-pill.ok {
     background: var(--accent-soft);
     color: var(--accent);
+}
+
+.status-pill.bad {
+    background: #fde8e8;
+    color: var(--red);
+}
+
+.panel-subtitle {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.bandwidth-main {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.bandwidth-total-card {
+    padding: 14px;
+    border: 1px solid #edf1f3;
+    border-radius: 8px;
+    background: #fbfcfd;
+}
+
+.bandwidth-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.bandwidth-card-head strong {
+    color: var(--accent);
+    font-size: 13px;
+}
+
+.bandwidth-value {
+    margin-top: 4px;
+    font-size: 34px;
+    font-weight: 750;
+}
+
+.bandwidth-bar {
+    height: 8px;
+    margin-top: 10px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #edf1f3;
+}
+
+.bandwidth-bar span {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+}
+
+.bandwidth-bar.download span {
+    background: var(--blue);
+}
+
+.bandwidth-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.bandwidth-item {
+    display: grid;
+    gap: 4px;
+    padding: 11px 0;
+    border-top: 1px solid #edf1f3;
+}
+
+.bandwidth-item span,
+.inline-stats dt {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.bandwidth-item strong {
+    font-size: 18px;
+}
+
+.inline-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin: 10px 0 0;
+}
+
+.inline-stats div {
+    padding-top: 10px;
+    border-top: 1px solid #edf1f3;
+}
+
+.inline-stats dd {
+    margin: 4px 0 0;
+    font-weight: 700;
+}
+
+.traffic-top-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 14px;
+}
+
+.top-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin-top: 16px;
+}
+
+.top-column-title {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.traffic-list {
+    display: grid;
+    gap: 0;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.traffic-row {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    border-top: 1px solid #edf1f3;
+}
+
+.traffic-rank {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #edf1f3;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.traffic-main {
+    min-width: 0;
+}
+
+.traffic-main strong,
+.traffic-main small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.traffic-main small {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.traffic-value {
+    color: var(--accent);
+    font-weight: 750;
+    white-space: nowrap;
 }
 
 .info-list {
@@ -823,8 +1025,15 @@ th {
     }
 
 	    .metric-grid,
+	    .metric-grid.dashboard-metrics,
 	    .metric-grid.compact,
 	    .panel-grid,
+        .dashboard-grid,
+        .traffic-top-grid,
+        .top-columns,
+        .bandwidth-main,
+        .bandwidth-grid,
+        .inline-stats,
 	    .inline-form,
 	    .toolbar-row,
         .form-grid {

@@ -6,9 +6,13 @@ from app.extensions import db
 from app.models.cache import DeviceOsCache, UserNameCache
 from app.models.device import Device
 from app.models.user import User
+from app.modules.firewall.routes import default_payload as default_firewall_payload
+from app.modules.firewall.routes import fetch_huawei_firewall_status
+from app.modules.wireless import routes as wireless_routes
 
 
 dashboard_bp = Blueprint("dashboard_api", __name__)
+TOP_LIMIT = 5
 
 
 @dashboard_bp.route("/api/health", methods=["GET"])
@@ -23,7 +27,27 @@ def health():
 @dashboard_bp.route("/api/dashboard/summary", methods=["GET"])
 @login_required
 def summary():
+    return success(summary_payload())
+
+
+@dashboard_bp.route("/api/dashboard/overview", methods=["GET"])
+@login_required
+def overview():
+    summary_data = summary_payload()
+    wireless_data = dashboard_wireless_payload()
     return success({
+        "summary": summary_data,
+        "wireless": wireless_data,
+        "firewall": dashboard_firewall_payload(),
+        "tops": {
+            "wireless_users": wireless_data["user_tops"],
+            "aps": wireless_data["ap_tops"],
+        },
+    })
+
+
+def summary_payload():
+    return {
         "users": {
             "total": User.query.count(),
             "active": User.query.filter_by(is_active=True).count(),
@@ -36,7 +60,118 @@ def summary():
             "user_names": UserNameCache.query.count(),
             "device_os": DeviceOsCache.query.count(),
         },
-    })
+    }
+
+
+def dashboard_firewall_payload():
+    try:
+        payload = fetch_huawei_firewall_status(timeout=5)
+        payload["ok"] = bool(payload.get("configured"))
+        payload["error"] = ""
+        return payload
+    except Exception as exc:
+        current_app.logger.warning("Dashboard 华为防火墙指标读取失败: %s", exc)
+        payload = default_firewall_payload(configured=bool(
+            current_app.config.get("HUAWEI_SNMP_URL") and current_app.config.get("HUAWEI_FIREWALL_TARGET")
+        ))
+        payload["ok"] = False
+        payload["error"] = str(exc)
+        return payload
+
+
+def dashboard_wireless_payload():
+    if not wireless_routes.PrometheusClient().query_configured:
+        return empty_wireless_dashboard(configured=False, error="Prometheus 查询接口未配置")
+
+    try:
+        client = wireless_routes.PrometheusClient()
+        client.timeout = 5
+        controller = {
+            "wireless_users": int(wireless_routes.metric_value(client.query(wireless_routes.wireless_query("sfUserNum")), 0)),
+            "cpu_usage": round(wireless_routes.metric_value(client.query(wireless_routes.wireless_query("sfSysCpuCostRate")), 0), 1),
+            "ap_online": int(wireless_routes.metric_value(client.query(wireless_routes.wireless_query("sfApOnlineNum")), 0)),
+        }
+        users, cached, _ = wireless_routes.get_wireless_online_users()
+        aps = wireless_routes.build_ap_list(client)
+        return {
+            **controller,
+            "total_aps": len(aps),
+            "cached": cached,
+            "configured": True,
+            "ok": True,
+            "error": "",
+            "user_tops": {
+                "upload": wireless_user_top(users, "recv_rate"),
+                "download": wireless_user_top(users, "send_rate"),
+            },
+            "ap_tops": {
+                "upload": ap_top(aps, "ap_recv_rate"),
+                "download": ap_top(aps, "ap_send_rate"),
+            },
+        }
+    except Exception as exc:
+        current_app.logger.warning("Dashboard 无线指标读取失败: %s", exc)
+        return empty_wireless_dashboard(configured=True, error=str(exc))
+
+
+def empty_wireless_dashboard(configured, error=""):
+    return {
+        "wireless_users": 0,
+        "cpu_usage": 0,
+        "ap_online": 0,
+        "total_aps": 0,
+        "cached": False,
+        "configured": configured,
+        "ok": False,
+        "error": error,
+        "user_tops": {"upload": [], "download": []},
+        "ap_tops": {"upload": [], "download": []},
+    }
+
+
+def wireless_user_top(users, rate_key):
+    sorted_users = sorted(
+        users,
+        key=lambda user: wireless_routes.wireless_rate_bps(user.get(rate_key)),
+        reverse=True,
+    )
+    items = []
+    for user in sorted_users:
+        bps = wireless_routes.wireless_rate_bps(user.get(rate_key))
+        if bps < 0:
+            continue
+        user_label = user.get("real_name") if user.get("real_name") not in {"", "无", None} else user.get("phone_number")
+        items.append({
+            "label": user_label or user.get("ip_address") or "未知用户",
+            "sub_label": user.get("ip_address") or user.get("phone_number") or "",
+            "value": user.get(rate_key) or "0 bps",
+            "bps": bps,
+        })
+        if len(items) >= TOP_LIMIT:
+            break
+    return items
+
+
+def ap_top(aps, rate_key):
+    sorted_aps = sorted(
+        aps,
+        key=lambda ap: wireless_routes.wireless_rate_bps(ap.get(rate_key)),
+        reverse=True,
+    )
+    items = []
+    for ap in sorted_aps:
+        bps = wireless_routes.wireless_rate_bps(ap.get(rate_key))
+        if bps < 0:
+            continue
+        items.append({
+            "label": ap.get("ap_name") or f"AP-{ap.get('ap_index')}",
+            "sub_label": ap.get("ap_ip") or ap.get("ap_mac_address") or "",
+            "value": ap.get(rate_key) or "0 bps",
+            "bps": bps,
+        })
+        if len(items) >= TOP_LIMIT:
+            break
+    return items
 
 
 @dashboard_bp.route("/api/status/version", methods=["GET"])

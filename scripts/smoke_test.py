@@ -17,6 +17,7 @@ from app.models.base import now_local
 from app.models.cache import UserNameCache
 from app.models.user import User
 from app.modules.access_control import routes as access_control_routes
+from app.modules.firewall import routes as firewall_routes
 from app.modules.wireless import routes as wireless_routes
 
 
@@ -107,6 +108,12 @@ def main():
             assert 'instance="172.16.100.7"' in expression
             assert 'job="ND"' in expression
             assert 'module="mgmt,private"' in expression
+            if "sfUserNum" in expression:
+                return [{"metric": {}, "value": [0, "3"]}]
+            if "sfSysCpuCostRate" in expression:
+                return [{"metric": {}, "value": [0, "13"]}]
+            if "sfApOnlineNum" in expression:
+                return [{"metric": {}, "value": [0, "1"]}]
             values = {
                 "sfApName": {"1": hex_text("AP-A"), "2": hex_text("AP-B")},
                 "sfApStatus": {"1": hex_text("Online"), "2": hex_text("Offline")},
@@ -216,6 +223,55 @@ def main():
     assert sorted_wireless_data["sort_order"] == "desc"
     assert sorted_wireless_data["user_list"][0]["send_rate"] == "768 Kbps"
     assert wireless_routes.wireless_rate_sort_key("N/A", "asc") > wireless_routes.wireless_rate_sort_key("0 bps", "asc")
+
+    class FakeFirewallResponse:
+        text = "\n".join([
+            "hwCpuUsagePercent 11",
+            "hwMemUsagePercent 22",
+            "telecom_ifInOctets_total 1500000000",
+            "telecom_ifOutOctets_total 1200000000",
+            "unicom_ifInOctets_total 1300000000",
+            "unicom_ifOutOctets_total 1100000000",
+        ])
+
+        def raise_for_status(self):
+            return None
+
+    def fake_firewall_get(url, params=None, timeout=10):
+        assert url == "http://172.16.80.125:9116/snmp"
+        assert params["auth"] == "secure_v3"
+        assert params["module"] == "hw_health"
+        assert params["target"] == "172.16.100.3"
+        return FakeFirewallResponse()
+
+    original_prometheus_client = wireless_routes.PrometheusClient
+    original_firewall_get = firewall_routes.requests.get
+    original_bandwidth_history = firewall_routes.bandwidth_history
+    wireless_routes.PrometheusClient = FakePrometheusClient
+    firewall_routes.requests.get = fake_firewall_get
+    firewall_routes.bandwidth_history = {
+        "time": time.time() - 10,
+        "telecom_in": 1000000000,
+        "telecom_out": 1000000000,
+        "unicom_in": 1000000000,
+        "unicom_out": 1000000000,
+    }
+    try:
+        overview_response = client.get("/api/dashboard/overview")
+        assert overview_response.status_code == 200, overview_response.get_data(as_text=True)
+        overview_data = overview_response.get_json()["data"]
+        assert overview_data["firewall"]["configured"] is True
+        assert overview_data["firewall"]["cpu_usage"] == 11
+        assert overview_data["firewall"]["total_upload"] > 0
+        assert overview_data["firewall"]["total_download"] > overview_data["firewall"]["total_upload"]
+        assert overview_data["firewall"]["download_utilization"] > overview_data["firewall"]["upload_utilization"]
+        assert overview_data["wireless"]["wireless_users"] == 3
+        assert overview_data["tops"]["wireless_users"]["upload"][0]["value"] == "2 Mbps"
+        assert overview_data["tops"]["aps"]["download"][0]["label"] == "AP-A"
+    finally:
+        wireless_routes.PrometheusClient = original_prometheus_client
+        firewall_routes.requests.get = original_firewall_get
+        firewall_routes.bandwidth_history = original_bandwidth_history
 
     create_device_response = client.post("/api/access-control/device-list", json={
         "username": "smoke-device",

@@ -14,11 +14,11 @@
 </header>
 
 <section class="dashboard-view app-view" id="dashboard-panel">
-    <section class="metric-grid" id="metric-grid">
+    <section class="metric-grid dashboard-metrics" id="metric-grid">
         <article class="metric">
             <div class="metric-icon users"><i class="bi bi-people"></i></div>
             <div>
-                <div class="metric-label">用户</div>
+                <div class="metric-label">系统用户</div>
                 <div class="metric-value" id="metric-users">-</div>
             </div>
         </article>
@@ -30,32 +30,137 @@
             </div>
         </article>
         <article class="metric">
-            <div class="metric-icon cache"><i class="bi bi-database"></i></div>
+            <div class="metric-icon wireless"><i class="bi bi-wifi"></i></div>
             <div>
-                <div class="metric-label">缓存</div>
-                <div class="metric-value" id="metric-cache">-</div>
+                <div class="metric-label">无线用户</div>
+                <div class="metric-value" id="metric-wireless-users">-</div>
+            </div>
+        </article>
+        <article class="metric">
+            <div class="metric-icon ap"><i class="bi bi-router"></i></div>
+            <div>
+                <div class="metric-label">在线 AP</div>
+                <div class="metric-value" id="metric-wireless-ap">-</div>
             </div>
         </article>
     </section>
 
-    <section class="panel-grid">
-        <section class="panel">
+    <section class="dashboard-grid">
+        <section class="panel firewall-dashboard-panel">
             <div class="panel-header">
-                <h2>系统状态</h2>
-                <span class="status-pill" id="health-pill">检查中</span>
-            </div>
-            <dl class="info-list">
                 <div>
-                    <dt>版本</dt>
-                    <dd id="system-version">-</dd>
+                    <h2>华为防火墙带宽</h2>
+                    <p class="panel-subtitle" id="firewall-source">-</p>
+                </div>
+                <span class="status-pill" id="firewall-status">检查中</span>
+            </div>
+            <div class="bandwidth-main">
+                <div class="bandwidth-total-card">
+                    <div class="bandwidth-card-head">
+                        <span class="metric-label">总上行</span>
+                        <strong id="firewall-upload-utilization">-</strong>
+                    </div>
+                    <div class="bandwidth-value" id="firewall-total-upload">-</div>
+                    <div class="bandwidth-bar" aria-hidden="true">
+                        <span id="firewall-upload-util-bar"></span>
+                    </div>
+                </div>
+                <div class="bandwidth-total-card">
+                    <div class="bandwidth-card-head">
+                        <span class="metric-label">总下行</span>
+                        <strong id="firewall-download-utilization">-</strong>
+                    </div>
+                    <div class="bandwidth-value" id="firewall-total-download">-</div>
+                    <div class="bandwidth-bar download" aria-hidden="true">
+                        <span id="firewall-download-util-bar"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="bandwidth-grid">
+                <div class="bandwidth-item">
+                    <span>电信上行</span>
+                    <strong id="firewall-telecom-upload">-</strong>
+                </div>
+                <div class="bandwidth-item">
+                    <span>电信下行</span>
+                    <strong id="firewall-telecom-download">-</strong>
+                </div>
+                <div class="bandwidth-item">
+                    <span>联通上行</span>
+                    <strong id="firewall-unicom-upload">-</strong>
+                </div>
+                <div class="bandwidth-item">
+                    <span>联通下行</span>
+                    <strong id="firewall-unicom-download">-</strong>
+                </div>
+            </div>
+            <dl class="inline-stats">
+                <div>
+                    <dt>CPU</dt>
+                    <dd id="firewall-cpu">-</dd>
                 </div>
                 <div>
-                    <dt>数据库</dt>
-                    <dd id="database-status">-</dd>
+                    <dt>内存</dt>
+                    <dd id="firewall-memory">-</dd>
+                </div>
+                <div>
+                    <dt>总带宽</dt>
+                    <dd id="firewall-total-bandwidth">-</dd>
                 </div>
             </dl>
         </section>
 
+    </section>
+
+    <section class="traffic-top-grid">
+        <section class="panel top-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>无线用户上下行 Top</h2>
+                    <p class="panel-subtitle">按实时速率排序</p>
+                </div>
+            </div>
+            <div class="top-columns">
+                <div>
+                    <div class="top-column-title">上行</div>
+                    <ol class="traffic-list" id="wireless-user-upload-top">
+                        <li class="empty-state">加载中</li>
+                    </ol>
+                </div>
+                <div>
+                    <div class="top-column-title">下行</div>
+                    <ol class="traffic-list" id="wireless-user-download-top">
+                        <li class="empty-state">加载中</li>
+                    </ol>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel top-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>AP 上下行 Top</h2>
+                    <p class="panel-subtitle">按 AP 实时速率排序</p>
+                </div>
+            </div>
+            <div class="top-columns">
+                <div>
+                    <div class="top-column-title">上行</div>
+                    <ol class="traffic-list" id="ap-upload-top">
+                        <li class="empty-state">加载中</li>
+                    </ol>
+                </div>
+                <div>
+                    <div class="top-column-title">下行</div>
+                    <ol class="traffic-list" id="ap-download-top">
+                        <li class="empty-state">加载中</li>
+                    </ol>
+                </div>
+            </div>
+        </section>
+    </section>
+
+    <section class="panel-grid single-panel-grid">
         <section class="panel">
             <div class="panel-header">
                 <h2>外部接口状态</h2>

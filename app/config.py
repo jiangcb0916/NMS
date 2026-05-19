@@ -80,10 +80,10 @@ class Config:
     WIRELESS_AUTH = os.environ.get("WIRELESS_AUTH", "nac")
     WIRELESS_MODULE = os.environ.get("WIRELESS_MODULE", "mgmt,private")
 
-    HUAWEI_SNMP_URL = os.environ.get("HUAWEI_SNMP_URL")
+    HUAWEI_SNMP_URL = os.environ.get("HUAWEI_SNMP_URL", "http://172.16.80.125:9116/snmp")
     HUAWEI_SNMP_AUTH = os.environ.get("HUAWEI_SNMP_AUTH", "secure_v3")
     HUAWEI_SNMP_MODULE = os.environ.get("HUAWEI_SNMP_MODULE", "hw_health")
-    HUAWEI_FIREWALL_TARGET = os.environ.get("HUAWEI_FIREWALL_TARGET")
+    HUAWEI_FIREWALL_TARGET = os.environ.get("HUAWEI_FIREWALL_TARGET", "172.16.100.3")
     HUAWEI_TOTAL_BANDWIDTH_MBPS = env_int("HUAWEI_TOTAL_BANDWIDTH_MBPS", 450)
 
     ACCESS_CONTROL_API_URL = os.environ.get("ACCESS_CONTROL_API_URL")

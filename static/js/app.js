@@ -187,19 +187,100 @@ async function loadProfile() {
 }
 
 async function loadSummary() {
-    const data = await apiGet('/api/dashboard/summary');
-    document.getElementById('metric-users').textContent = `${data.users.active}/${data.users.total}`;
-    document.getElementById('metric-devices').textContent = `${data.devices.online}/${data.devices.total}`;
-    document.getElementById('metric-cache').textContent = data.cache.user_names + data.cache.device_os;
+    const data = await apiGet('/api/dashboard/overview');
+    const summary = data.summary || {};
+    const wireless = data.wireless || {};
+    document.getElementById('metric-users').textContent = `${summary.users?.active ?? 0}/${summary.users?.total ?? 0}`;
+    document.getElementById('metric-devices').textContent = `${summary.devices?.online ?? 0}/${summary.devices?.total ?? 0}`;
+    document.getElementById('metric-wireless-users').textContent = wireless.wireless_users ?? 0;
+    document.getElementById('metric-wireless-ap').textContent = `${wireless.ap_online ?? 0}/${wireless.total_aps ?? 0}`;
+    renderFirewallDashboard(data.firewall || {});
+    renderTrafficTopList('wireless-user-upload-top', data.tops?.wireless_users?.upload || []);
+    renderTrafficTopList('wireless-user-download-top', data.tops?.wireless_users?.download || []);
+    renderTrafficTopList('ap-upload-top', data.tops?.aps?.upload || []);
+    renderTrafficTopList('ap-download-top', data.tops?.aps?.download || []);
 }
 
-async function loadHealth() {
-    const data = await apiGet('/api/health');
-    const pill = document.getElementById('health-pill');
-    pill.textContent = data.status;
-    pill.classList.toggle('ok', data.status === 'ok');
-    document.getElementById('system-version').textContent = data.version;
-    document.getElementById('database-status').textContent = data.database;
+function renderFirewallDashboard(firewall) {
+    const configured = Boolean(firewall.configured);
+    const ok = Boolean(firewall.ok);
+    const status = document.getElementById('firewall-status');
+    const totalBandwidth = Number(firewall.total_bandwidth || 0);
+    const totalUpload = Number(firewall.total_upload ?? (Number(firewall.telecom_upload || 0) + Number(firewall.unicom_upload || 0)));
+    const totalDownload = Number(firewall.total_download ?? (Number(firewall.telecom_download || 0) + Number(firewall.unicom_download || 0)));
+    const uploadUtilization = Number(firewall.upload_utilization ?? (totalBandwidth ? (totalUpload / totalBandwidth) * 100 : 0));
+    const downloadUtilization = Number(firewall.download_utilization ?? (totalBandwidth ? (totalDownload / totalBandwidth) * 100 : 0));
+
+    status.textContent = configured ? (ok ? '正常' : '异常') : '未配置';
+    status.classList.toggle('ok', configured && ok);
+    status.classList.toggle('bad', configured && !ok);
+    document.getElementById('firewall-source').textContent = firewall.snmp_target
+        ? `SNMP 目标 ${firewall.snmp_target}`
+        : 'SNMP 目标未配置';
+    document.getElementById('firewall-total-upload').textContent = formatMbps(totalUpload);
+    document.getElementById('firewall-total-download').textContent = formatMbps(totalDownload);
+    document.getElementById('firewall-upload-utilization').textContent = `${formatNumber(uploadUtilization, 1)}%`;
+    document.getElementById('firewall-download-utilization').textContent = `${formatNumber(downloadUtilization, 1)}%`;
+    document.getElementById('firewall-upload-util-bar').style.width = `${clampPercent(uploadUtilization)}%`;
+    document.getElementById('firewall-download-util-bar').style.width = `${clampPercent(downloadUtilization)}%`;
+    document.getElementById('firewall-telecom-upload').textContent = formatMbps(firewall.telecom_upload);
+    document.getElementById('firewall-telecom-download').textContent = formatMbps(firewall.telecom_download);
+    document.getElementById('firewall-unicom-upload').textContent = formatMbps(firewall.unicom_upload);
+    document.getElementById('firewall-unicom-download').textContent = formatMbps(firewall.unicom_download);
+    document.getElementById('firewall-cpu').textContent = `${formatNumber(firewall.cpu_usage, 1)}%`;
+    document.getElementById('firewall-memory').textContent = `${formatNumber(firewall.memory_usage, 1)}%`;
+    document.getElementById('firewall-total-bandwidth').textContent = formatMbps(firewall.total_bandwidth);
+}
+
+function renderTrafficTopList(elementId, items) {
+    const list = document.getElementById(elementId);
+    if (!list) {
+        return;
+    }
+    if (!items.length) {
+        list.innerHTML = '<li class="empty-state">暂无数据</li>';
+        return;
+    }
+    list.innerHTML = items.map((item, index) => `
+        <li class="traffic-row">
+            <span class="traffic-rank">${index + 1}</span>
+            <span class="traffic-main">
+                <strong>${escapeHtml(item.label || '-')}</strong>
+                <small>${escapeHtml(item.sub_label || '-')}</small>
+            </span>
+            <span class="traffic-value">${escapeHtml(item.value || '0 bps')}</span>
+        </li>
+    `).join('');
+}
+
+function formatNumber(value, digits = 0) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+        return digits ? (0).toFixed(digits) : '0';
+    }
+    return number.toFixed(digits);
+}
+
+function clampPercent(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+        return 0;
+    }
+    return Math.max(0, Math.min(number, 100));
+}
+
+function formatMbps(value) {
+    const mbps = Number(value);
+    if (!Number.isFinite(mbps)) {
+        return '-';
+    }
+    if (mbps >= 1000) {
+        return `${(mbps / 1000).toFixed(2)} Gbps`;
+    }
+    if (mbps > 0 && mbps < 1) {
+        return `${Math.round(mbps * 1000)} Kbps`;
+    }
+    return `${mbps.toFixed(1)} Mbps`;
 }
 
 async function loadUsers() {
@@ -1134,7 +1215,7 @@ async function boot() {
     try {
         await loadProfile();
         showView('dashboard-panel', 'dashboard-nav', 'dashboard');
-        await Promise.all([loadSummary(), loadHealth()]);
+        await loadSummary();
     } catch (error) {
         if (error.message.includes('未授权')) {
             window.location.href = '/login';
@@ -1153,7 +1234,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshSummary = document.getElementById('refresh-summary');
     if (refreshSummary) {
         refreshSummary.addEventListener('click', () => {
-            Promise.all([loadSummary(), loadHealth()])
+            loadSummary()
                 .then(() => showToast('已刷新'))
                 .catch((error) => showToast(error.message, 'error'));
         });
@@ -1164,7 +1245,7 @@ document.addEventListener('DOMContentLoaded', () => {
         dashboardNav.addEventListener('click', (event) => {
             event.preventDefault();
             showView('dashboard-panel', 'dashboard-nav', 'dashboard');
-            Promise.all([loadSummary(), loadHealth()])
+            loadSummary()
                 .catch((error) => showToast(error.message, 'error'));
         });
     }
