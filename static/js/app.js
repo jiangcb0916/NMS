@@ -129,6 +129,8 @@ const wirelessUserState = {
     perPage: 10,
     query: '',
     resolveNames: false,
+    sortBy: '',
+    sortOrder: 'desc',
     pages: 0,
     total: 0,
     allTotal: 0,
@@ -140,6 +142,8 @@ const wirelessApState = {
     perPage: 10,
     query: '',
     status: '',
+    sortBy: '',
+    sortOrder: 'desc',
     pages: 0,
     total: 0,
     allTotal: 0,
@@ -301,6 +305,8 @@ async function loadWireless(options = {}) {
     wirelessApState.perPage = options.perPage || wirelessApState.perPage;
     wirelessApState.query = options.query !== undefined ? options.query : wirelessApState.query;
     wirelessApState.status = options.status !== undefined ? options.status : wirelessApState.status;
+    wirelessApState.sortBy = options.sortBy !== undefined ? options.sortBy : wirelessApState.sortBy;
+    wirelessApState.sortOrder = options.sortOrder !== undefined ? options.sortOrder : wirelessApState.sortOrder;
 
     const searchControl = document.getElementById('wireless-ap-search');
     const pageSizeControl = document.getElementById('wireless-ap-page-size');
@@ -326,7 +332,9 @@ async function loadWireless(options = {}) {
             page: wirelessApState.page,
             per_page: wirelessApState.perPage,
             q: wirelessApState.query,
-            status: wirelessApState.status
+            status: wirelessApState.status,
+            sort_by: wirelessApState.sortBy,
+            sort_order: wirelessApState.sortOrder
         });
         const apInfo = await apiGetResult(`/api/statistics/ap-info?${params.toString()}`);
         const apData = apInfo.data || {};
@@ -337,9 +345,12 @@ async function loadWireless(options = {}) {
         wirelessApState.total = apData.total_aps || 0;
         wirelessApState.allTotal = apData.all_total_aps || apData.total_aps || 0;
         wirelessApState.status = apData.status || '';
+        wirelessApState.sortBy = apData.sort_by || wirelessApState.sortBy;
+        wirelessApState.sortOrder = apData.sort_order || wirelessApState.sortOrder;
         wirelessApState.statusCounts = apData.status_counts || {all: 0, online: 0, offline: 0};
         renderWirelessApStatusFilters();
         renderWirelessApPager();
+        renderWirelessApSortIndicators();
 
         summary.textContent = `${renderWirelessApSummaryPrefix()}共 ${wirelessApState.total} 个 AP，当前显示 ${apData.returned || apList.length} 个，承载 ${apData.total_users || 0} 个用户`;
         if (!apList.length) {
@@ -378,6 +389,8 @@ async function loadWirelessUsers(options = {}) {
     wirelessUserState.perPage = options.perPage || wirelessUserState.perPage;
     wirelessUserState.query = options.query !== undefined ? options.query : wirelessUserState.query;
     wirelessUserState.resolveNames = options.resolveNames !== undefined ? options.resolveNames : wirelessUserState.resolveNames;
+    wirelessUserState.sortBy = options.sortBy !== undefined ? options.sortBy : wirelessUserState.sortBy;
+    wirelessUserState.sortOrder = options.sortOrder !== undefined ? options.sortOrder : wirelessUserState.sortOrder;
 
     const searchControl = document.getElementById('wireless-user-search');
     const pageSizeControl = document.getElementById('wireless-user-page-size');
@@ -401,7 +414,9 @@ async function loadWirelessUsers(options = {}) {
             page: wirelessUserState.page,
             per_page: wirelessUserState.perPage,
             q: wirelessUserState.query,
-            resolve_names: wirelessUserState.resolveNames ? '1' : '0'
+            resolve_names: wirelessUserState.resolveNames ? '1' : '0',
+            sort_by: wirelessUserState.sortBy,
+            sort_order: wirelessUserState.sortOrder
         });
         const result = await apiGetResult(`/api/statistics/online-user-list?${params.toString()}`);
         const data = result.data || {};
@@ -411,7 +426,10 @@ async function loadWirelessUsers(options = {}) {
         wirelessUserState.total = data.total_users || 0;
         wirelessUserState.allTotal = data.all_total_users || data.total_users || 0;
         wirelessUserState.cached = Boolean(data.cached);
+        wirelessUserState.sortBy = data.sort_by || wirelessUserState.sortBy;
+        wirelessUserState.sortOrder = data.sort_order || wirelessUserState.sortOrder;
         renderWirelessUserPager();
+        renderWirelessUserSortIndicators();
 
         if (result.code !== 0) {
             body.innerHTML = `<tr><td colspan="5">${escapeHtml(result.message || '请求失败')}</td></tr>`;
@@ -808,6 +826,23 @@ function renderWirelessApStatusFilters() {
     });
 }
 
+function renderWirelessApSortIndicators() {
+    const recv = document.getElementById('wireless-ap-sort-recv');
+    const send = document.getElementById('wireless-ap-sort-send');
+    const icon = (field) => {
+        if (wirelessApState.sortBy !== field) {
+            return '↕';
+        }
+        return wirelessApState.sortOrder === 'asc' ? '↑' : '↓';
+    };
+    if (recv) {
+        recv.textContent = icon('ap_recv_rate');
+    }
+    if (send) {
+        send.textContent = icon('ap_send_rate');
+    }
+}
+
 function renderWirelessApSummaryPrefix() {
     if (wirelessApState.status === 'online') {
         return '在线 AP，';
@@ -834,6 +869,23 @@ function renderWirelessUserPager() {
     pageText.textContent = wirelessUserState.pages ? `${wirelessUserState.page} / ${wirelessUserState.pages}` : '-';
     prev.disabled = wirelessUserState.page <= 1;
     next.disabled = wirelessUserState.pages === 0 || wirelessUserState.page >= wirelessUserState.pages;
+}
+
+function renderWirelessUserSortIndicators() {
+    const recv = document.getElementById('wireless-user-sort-recv');
+    const send = document.getElementById('wireless-user-sort-send');
+    const icon = (field) => {
+        if (wirelessUserState.sortBy !== field) {
+            return '↕';
+        }
+        return wirelessUserState.sortOrder === 'asc' ? '↑' : '↓';
+    };
+    if (recv) {
+        recv.textContent = icon('recv_rate');
+    }
+    if (send) {
+        send.textContent = icon('send_rate');
+    }
 }
 
 function debounce(fn, delay = 300) {
@@ -1272,6 +1324,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    document.querySelectorAll('[data-wireless-ap-sort]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const sortBy = button.dataset.wirelessApSort;
+            const sortOrder = wirelessApState.sortBy === sortBy && wirelessApState.sortOrder === 'desc' ? 'asc' : 'desc';
+            loadWireless({page: 1, sortBy, sortOrder});
+        });
+    });
+
     const wirelessApPrev = document.getElementById('wireless-ap-prev');
     if (wirelessApPrev) {
         wirelessApPrev.addEventListener('click', () => {
@@ -1308,6 +1368,14 @@ document.addEventListener('DOMContentLoaded', () => {
             loadWirelessUsers({page: 1, perPage: Number(event.target.value), resolveNames: true});
         });
     }
+
+    document.querySelectorAll('[data-wireless-user-sort]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const sortBy = button.dataset.wirelessUserSort;
+            const sortOrder = wirelessUserState.sortBy === sortBy && wirelessUserState.sortOrder === 'desc' ? 'asc' : 'desc';
+            loadWirelessUsers({page: 1, sortBy, sortOrder});
+        });
+    });
 
     const wirelessUsersPrev = document.getElementById('wireless-users-prev');
     if (wirelessUsersPrev) {

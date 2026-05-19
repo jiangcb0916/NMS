@@ -484,6 +484,19 @@ th {
     font-weight: 600;
 }
 
+.table-sort-button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+}
+
+.table-sort-button:hover {
+    color: var(--accent);
+}
+
 .action-cell {
     display: flex;
     gap: 6px;

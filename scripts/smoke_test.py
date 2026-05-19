@@ -97,6 +97,13 @@ def main():
         offline_ap_response = client.get("/api/statistics/ap-info?page=1&per_page=10&status=offline")
         assert offline_ap_response.status_code == 200, offline_ap_response.get_data(as_text=True)
         assert offline_ap_response.get_json()["data"]["total_aps"] == 1
+
+        sorted_ap_response = client.get("/api/statistics/ap-info?page=1&per_page=10&sort_by=ap_send_rate&sort_order=desc")
+        assert sorted_ap_response.status_code == 200, sorted_ap_response.get_data(as_text=True)
+        sorted_ap_data = sorted_ap_response.get_json()["data"]
+        assert sorted_ap_data["sort_by"] == "ap_send_rate"
+        assert sorted_ap_data["sort_order"] == "desc"
+        assert sorted_ap_data["ap_list"][0]["ap_name"] == "AP-A"
     finally:
         wireless_routes.PrometheusClient = original_prometheus_client
 
@@ -154,6 +161,14 @@ def main():
     assert first_stable_id == same_stable_id
     assert first_stable_id != different_stable_id
     assert wireless_routes.wireless_user_stable_id("无", "N/A", "4") == "temp_index_4"
+    assert wireless_routes.wireless_rate_bps("1.5 Mbps") == 1500000
+    sorted_wireless_response = client.get("/api/statistics/online-user-list?page=1&per_page=10&sort_by=send_rate&sort_order=desc&resolve_names=0")
+    assert sorted_wireless_response.status_code == 200, sorted_wireless_response.get_data(as_text=True)
+    sorted_wireless_data = sorted_wireless_response.get_json()["data"]
+    assert sorted_wireless_data["sort_by"] == "send_rate"
+    assert sorted_wireless_data["sort_order"] == "desc"
+    assert sorted_wireless_data["user_list"][0]["send_rate"] == "768 Kbps"
+    assert wireless_routes.wireless_rate_sort_key("N/A", "asc") > wireless_routes.wireless_rate_sort_key("0 bps", "asc")
 
     create_device_response = client.post("/api/access-control/device-list", json={
         "username": "smoke-device",

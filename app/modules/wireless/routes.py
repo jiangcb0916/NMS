@@ -66,10 +66,13 @@ def ap_info():
     per_page = int_arg("per_page", default=10, minimum=10, maximum=500)
     search = (request.args.get("q") or "").strip().lower()
     status = normalize_ap_status(request.args.get("status"))
+    sort_by = normalize_ap_sort(request.args.get("sort_by"))
+    sort_order = normalize_sort_order(request.args.get("sort_order"))
 
     ap_list = build_ap_list(client)
     status_counts = ap_status_counts(filter_aps(ap_list, search=search, status=""))
     filtered_aps = filter_aps(ap_list, search=search, status=status)
+    filtered_aps = sort_aps(filtered_aps, sort_by, sort_order)
     total = len(filtered_aps)
     pages = (total + per_page - 1) // per_page if total else 0
     if pages and page > pages:
@@ -90,6 +93,8 @@ def ap_info():
         "pages": pages,
         "q": search,
         "status": status,
+        "sort_by": sort_by,
+        "sort_order": sort_order,
         "status_counts": status_counts,
         "configured": True,
     })
@@ -102,12 +107,15 @@ def wireless_online_users():
     per_page = int_arg("per_page", default=10, minimum=10, maximum=500)
     search = (request.args.get("q") or "").strip().lower()
     resolve_names = (request.args.get("resolve_names") or "1").lower() in {"1", "true", "yes", "on"}
+    sort_by = normalize_wireless_user_sort(request.args.get("sort_by"))
+    sort_order = normalize_sort_order(request.args.get("sort_order"))
 
     users, cached, configured = get_wireless_online_users()
     if not configured:
         return success(empty_wireless_user_payload(configured=False), message="Prometheus 查询接口未配置", code=1)
 
     filtered_users = filter_wireless_users(users, search=search)
+    filtered_users = sort_wireless_users(filtered_users, sort_by, sort_order)
     total = len(filtered_users)
     pages = (total + per_page - 1) // per_page if total else 0
     if pages and page > pages:
@@ -126,6 +134,8 @@ def wireless_online_users():
         "per_page": per_page,
         "pages": pages,
         "q": search,
+        "sort_by": sort_by,
+        "sort_order": sort_order,
         "ssid": "",
         "ssids": [],
         "all_total_users": len(users),
@@ -325,6 +335,17 @@ def normalize_ap_status(value):
     return ""
 
 
+def normalize_ap_sort(value):
+    sort_by = (value or "").strip().lower()
+    return sort_by if sort_by in {"ap_recv_rate", "ap_send_rate"} else ""
+
+
+def sort_aps(ap_list, sort_by="", sort_order="desc"):
+    if not sort_by:
+        return ap_list
+    return sorted(ap_list, key=lambda ap: wireless_rate_sort_key(ap.get(sort_by), sort_order))
+
+
 def empty_ap_payload(configured):
     return {
         "ap_list": [],
@@ -339,6 +360,8 @@ def empty_ap_payload(configured):
         "pages": 0,
         "q": "",
         "status": "",
+        "sort_by": "",
+        "sort_order": "desc",
         "status_counts": {"all": 0, "online": 0, "offline": 0},
         "configured": configured,
     }
@@ -486,6 +509,46 @@ def wireless_user_matches(user, keyword):
     return any(keyword in str(value).lower() for value in fields if value)
 
 
+def normalize_wireless_user_sort(value):
+    sort_by = (value or "").strip().lower()
+    return sort_by if sort_by in {"recv_rate", "send_rate"} else ""
+
+
+def normalize_sort_order(value):
+    sort_order = (value or "desc").strip().lower()
+    return "asc" if sort_order == "asc" else "desc"
+
+
+def sort_wireless_users(users, sort_by="", sort_order="desc"):
+    if not sort_by:
+        return users
+    return sorted(users, key=lambda user: wireless_rate_sort_key(user.get(sort_by), sort_order))
+
+
+def wireless_rate_sort_key(value, sort_order="desc"):
+    bps = wireless_rate_bps(value)
+    if bps < 0:
+        return (1, 0)
+    return (0, bps if sort_order == "asc" else -bps)
+
+
+def wireless_rate_bps(value):
+    text = str(value or "").strip()
+    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)\s*([kmgt]?bps)", text, re.IGNORECASE)
+    if not match:
+        return -1
+    number = float(match.group(1))
+    unit = match.group(2).lower()
+    multipliers = {
+        "bps": 1,
+        "kbps": 1000,
+        "mbps": 1000 ** 2,
+        "gbps": 1000 ** 3,
+        "tbps": 1000 ** 4,
+    }
+    return number * multipliers.get(unit, 1)
+
+
 def wireless_user_ssids(users):
     return []
 
@@ -499,6 +562,8 @@ def empty_wireless_user_payload(configured):
         "per_page": 10,
         "pages": 0,
         "q": "",
+        "sort_by": "",
+        "sort_order": "desc",
         "ssid": "",
         "ssids": [],
         "all_total_users": 0,
