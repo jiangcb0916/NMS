@@ -93,7 +93,7 @@ function showToast(message, type = 'info') {
 const viewTitles = {
     dashboard: ['仪表盘', '系统运行概览'],
     firewallBandwidth: ['防火墙带宽', '华为防火墙上下行趋势'],
-    osdwan: ['OSDWAN 监控', 'WANFlow 用户与带宽趋势'],
+    osdwan: ['OSDWAN 监控', '用户与带宽趋势'],
     switches: ['交换机监控', 'Prometheus 交换机目标状态'],
     wireless: ['无线控制器', 'AP、SSID 与无线用户状态'],
     devices: ['设备列表', '本地设备清单和在线状态'],
@@ -193,6 +193,8 @@ let currentUser = null;
 let usersCache = [];
 let devicesCache = [];
 let wirelessActiveView = 'aps';
+const OSDWAN_METRICS_REFRESH_MS = 60 * 1000;
+let osdwanMetricsAutoRefreshing = false;
 const firewallBandwidthState = {
     range: '6h',
     samples: [],
@@ -386,6 +388,21 @@ async function loadOsdwanMetrics(options = {}) {
     }
 }
 
+function startOsdwanMetricsAutoRefresh() {
+    window.setInterval(() => {
+        const osdwanPanel = document.getElementById('osdwan-panel');
+        if (!osdwanPanel || osdwanPanel.hidden || document.visibilityState === 'hidden' || osdwanMetricsAutoRefreshing) {
+            return;
+        }
+        osdwanMetricsAutoRefreshing = true;
+        loadOsdwanMetrics({charts: false})
+            .catch((error) => console.warn('OSDWAN 自动刷新失败', error))
+            .finally(() => {
+                osdwanMetricsAutoRefreshing = false;
+            });
+    }, OSDWAN_METRICS_REFRESH_MS);
+}
+
 async function loadOsdwanUsers(options = {}) {
     osdwanState.userPage = options.userPage || osdwanState.userPage;
     osdwanState.userPerPage = options.userPerPage || osdwanState.userPerPage;
@@ -457,8 +474,8 @@ function renderOsdwanMetrics(data, options = {}) {
     osdwanState.proxyStatus = data.proxy_status || null;
 
     document.getElementById('osdwan-source').textContent = errorText
-        ? `${data.service || 'WANFlow OSDWAN'} · ${data.queried_at || '-'} · 部分接口异常`
-        : `${data.service || 'WANFlow OSDWAN'} · ${data.queried_at || '-'}`;
+        ? `${data.queried_at || '-'} · 部分接口异常`
+        : `${data.queried_at || '-'}`;
     document.getElementById('osdwan-user-count').textContent = renderUserCapacity(data.overall_user_count ?? data.user_count, data.user_capacity);
     document.getElementById('osdwan-person-count').textContent = data.overall_user_people_count ?? data.user_people_count ?? 0;
     document.getElementById('osdwan-proxy-status').textContent = renderProxyStatus(data.proxy_status);
@@ -2900,4 +2917,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     boot();
+    startOsdwanMetricsAutoRefresh();
 });
