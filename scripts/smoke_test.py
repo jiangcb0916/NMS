@@ -461,13 +461,13 @@ def main():
                 },
             ], "pagination": {"total": 2, "per_page": 200, "current_page": 1, "last_page": 1}})
         if url.endswith("/api/Saas/all-network-stats"):
-            assert params["period"] in {"1day", "1week", "1month"}
+            assert params["period"] == "1day"
             return FakeOsdwanResponse({"data": [
                 {"time": 1760000000, "total_download_speed": 120000, "total_upload_speed": 40000},
                 {"time": 1760000300, "total_download_speed": 180000, "total_upload_speed": 60000},
             ]})
         if url.endswith("/api/Saas/network-stats/2168"):
-            assert params["period"] in {"1hour", "6hours", "1day", "1week", "1month"}
+            assert params["period"] == "6hours"
             assert params["view_type"] == "total"
             return FakeOsdwanResponse({"data": {"list": [
                 {"timestamp": 1760000000, "down_speed": "11250000", "up_speed": "3750000"},
@@ -546,14 +546,8 @@ def main():
         osdwan_metrics_period_response = client.get("/api/osdwan/metrics?all_period=1week&node_period=1hour")
         assert osdwan_metrics_period_response.status_code == 200, osdwan_metrics_period_response.get_data(as_text=True)
         osdwan_metrics_period = osdwan_metrics_period_response.get_json()["data"]
-        assert osdwan_metrics_period["all_period"] == "1week"
-        assert osdwan_metrics_period["node"]["period"] == "1hour"
-
-        osdwan_invalid_period_response = client.get("/api/osdwan/metrics?all_period=bad&node_period=15minutes")
-        assert osdwan_invalid_period_response.status_code == 200, osdwan_invalid_period_response.get_data(as_text=True)
-        osdwan_invalid_period = osdwan_invalid_period_response.get_json()["data"]
-        assert osdwan_invalid_period["all_period"] == "1day"
-        assert osdwan_invalid_period["node"]["period"] == "6hours"
+        assert osdwan_metrics_period["all_period"] == "1day"
+        assert osdwan_metrics_period["node"]["period"] == "6hours"
 
         osdwan_users_response = client.get("/api/osdwan/users?user_q=bob&user_page=1&user_per_page=10")
         assert osdwan_users_response.status_code == 200, osdwan_users_response.get_data(as_text=True)

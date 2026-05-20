@@ -361,16 +361,8 @@ async function loadOsdwan(options = {}) {
 }
 
 async function loadOsdwanMetrics(options = {}) {
-    osdwanState.allPeriod = options.allPeriod || osdwanState.allPeriod;
-    osdwanState.nodePeriod = options.nodePeriod || osdwanState.nodePeriod;
-    const allPeriodControl = document.getElementById('osdwan-all-period');
-    const nodePeriodControl = document.getElementById('osdwan-node-period');
-    if (options.allPeriod === undefined && allPeriodControl) {
-        osdwanState.allPeriod = allPeriodControl.value;
-    }
-    if (options.nodePeriod === undefined && nodePeriodControl) {
-        osdwanState.nodePeriod = nodePeriodControl.value;
-    }
+    osdwanState.allPeriod = '1day';
+    osdwanState.nodePeriod = '6hours';
 
     showView('osdwan-panel', 'osdwan-nav', 'osdwan');
     try {
@@ -458,7 +450,6 @@ function renderOsdwanMetrics(data, options = {}) {
         osdwanState.nodeSamples = data.node?.stats?.samples || [];
         osdwanState.allPeriod = data.all_period || osdwanState.allPeriod;
         osdwanState.nodePeriod = data.node?.period || osdwanState.nodePeriod;
-        renderOsdwanPeriodControls();
     }
     const errors = data.errors || {};
     const errorText = Object.values(errors).filter(Boolean).join('；');
@@ -570,17 +561,6 @@ function osdwanChartSeries() {
         {key: 'download_mbps', label: '下行', color: '#8b7cf6', fill: 'rgba(139, 124, 246, 0.16)', width: 1.7},
         {key: 'upload_mbps', label: '上行', color: '#4fc3c7', fill: 'rgba(79, 195, 199, 0.18)', width: 1.7},
     ];
-}
-
-function renderOsdwanPeriodControls() {
-    const allPeriodControl = document.getElementById('osdwan-all-period');
-    const nodePeriodControl = document.getElementById('osdwan-node-period');
-    if (allPeriodControl) {
-        allPeriodControl.value = osdwanState.allPeriod;
-    }
-    if (nodePeriodControl) {
-        nodePeriodControl.value = osdwanState.nodePeriod;
-    }
 }
 
 function renderOsdwanPeriod(period) {
@@ -2423,20 +2403,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const reloadOsdwan = document.getElementById('reload-osdwan');
     if (reloadOsdwan) {
         reloadOsdwan.addEventListener('click', () => loadOsdwanMetrics({toast: true, charts: false}));
-    }
-
-    const osdwanAllPeriod = document.getElementById('osdwan-all-period');
-    if (osdwanAllPeriod) {
-        osdwanAllPeriod.addEventListener('change', (event) => {
-            loadOsdwanMetrics({allPeriod: event.target.value});
-        });
-    }
-
-    const osdwanNodePeriod = document.getElementById('osdwan-node-period');
-    if (osdwanNodePeriod) {
-        osdwanNodePeriod.addEventListener('change', (event) => {
-            loadOsdwanMetrics({nodePeriod: event.target.value});
-        });
     }
 
     const osdwanUserSearch = document.getElementById('osdwan-user-search');

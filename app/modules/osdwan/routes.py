@@ -11,8 +11,8 @@ from app.common.responses import success
 
 
 osdwan_bp = Blueprint("osdwan_api", __name__)
-OSDWAN_ALL_PERIODS = {"1day", "1week", "1month"}
-OSDWAN_NODE_PERIODS = {"1hour", "6hours", "1day", "1week", "1month"}
+OSDWAN_ALL_PERIOD = "1day"
+OSDWAN_NODE_PERIOD = "6hours"
 
 
 @osdwan_bp.route("/api/osdwan/metrics", methods=["GET"])
@@ -61,18 +61,8 @@ def osdwan_overview():
     if not client.configured:
         return success(default_overview(configured=False), message="OSDWAN Token 未配置", code=1)
 
-    all_period = valid_period(
-        request.args.get("all_period"),
-        current_app.config.get("OSDWAN_ALL_STATS_PERIOD", "1day"),
-        "1day",
-        OSDWAN_ALL_PERIODS,
-    )
-    node_period = valid_period(
-        request.args.get("node_period"),
-        current_app.config.get("OSDWAN_NODE_STATS_PERIOD", "6hours"),
-        "6hours",
-        OSDWAN_NODE_PERIODS,
-    )
+    all_period = OSDWAN_ALL_PERIOD
+    node_period = OSDWAN_NODE_PERIOD
     node_id = request.args.get("node_id") or current_app.config.get("OSDWAN_NODE_ID", "2168")
     node_name = current_app.config.get("OSDWAN_NODE_NAME", "办公开发")
     view_type = request.args.get("view_type") or current_app.config.get("OSDWAN_NODE_VIEW_TYPE", "total")
@@ -142,18 +132,8 @@ def osdwan_overview():
 
 
 def build_metrics_payload(client):
-    all_period = valid_period(
-        request.args.get("all_period"),
-        current_app.config.get("OSDWAN_ALL_STATS_PERIOD", "1day"),
-        "1day",
-        OSDWAN_ALL_PERIODS,
-    )
-    node_period = valid_period(
-        request.args.get("node_period"),
-        current_app.config.get("OSDWAN_NODE_STATS_PERIOD", "6hours"),
-        "6hours",
-        OSDWAN_NODE_PERIODS,
-    )
+    all_period = OSDWAN_ALL_PERIOD
+    node_period = OSDWAN_NODE_PERIOD
     node_id = request.args.get("node_id") or current_app.config.get("OSDWAN_NODE_ID", "2168")
     node_name = current_app.config.get("OSDWAN_NODE_NAME", "办公开发")
     view_type = request.args.get("view_type") or current_app.config.get("OSDWAN_NODE_VIEW_TYPE", "total")
@@ -326,13 +306,6 @@ def response_error_message(response):
         return response.text[:160] or "无响应内容"
     message = payload.get("message") if isinstance(payload, dict) else ""
     return str(message or payload)[:160]
-
-
-def valid_period(requested, configured, default, allowed):
-    for value in (requested, configured, default):
-        if value in allowed:
-            return value
-    return default
 
 
 def bounded_int(value, default, minimum, maximum):
@@ -844,10 +817,10 @@ def format_time_value(value):
 def format_mbps(value):
     number = numeric_value(value) or 0
     if number >= 1000:
-        return f"{number / 1000:.2f} Gbps"
+        return f"{number / 1000:.0f} Gbps"
     if 0 < number < 1:
         return f"{number * 1000:.0f} Kbps"
-    return f"{number:.2f} Mbps"
+    return f"{number:.0f} Mbps"
 
 
 def string_value(value):
@@ -909,10 +882,10 @@ def default_overview(configured):
         "node": {
             "id": current_app.config.get("OSDWAN_NODE_ID", "2168"),
             "name": current_app.config.get("OSDWAN_NODE_NAME", "办公开发"),
-            "period": current_app.config.get("OSDWAN_NODE_STATS_PERIOD", "6hours"),
+            "period": OSDWAN_NODE_PERIOD,
             "view_type": current_app.config.get("OSDWAN_NODE_VIEW_TYPE", "total"),
             "stats": normalize_bandwidth_stats({}),
         },
-        "all_period": current_app.config.get("OSDWAN_ALL_STATS_PERIOD", "1day"),
+        "all_period": OSDWAN_ALL_PERIOD,
         "queried_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
