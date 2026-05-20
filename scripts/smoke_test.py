@@ -501,6 +501,7 @@ def main():
     original_osdwan_post = osdwan_routes.requests.post
     app.config["OSDWAN_TOKEN"] = "smoke-token"
     app.config["OSDWAN_NODE_NAME"] = "办公开发"
+    app.config["OSDWAN_USER_CAPACITY"] = 30
     osdwan_routes.requests.get = fake_osdwan_get
     osdwan_routes.requests.post = fake_osdwan_post
     try:
@@ -509,14 +510,19 @@ def main():
         osdwan_data = osdwan_response.get_json()["data"]
         assert osdwan_data["configured"] is True
         assert osdwan_data["user_count"] == 2
+        assert osdwan_data["overall_user_count"] == 2
+        assert osdwan_data["user_capacity"] == 30
         assert osdwan_data["user_pagination"]["returned"] == 2
         assert osdwan_data["users"][0]["username"] == "alice/amy"
         assert osdwan_data["users"][0]["people"] == ["alice", "amy"]
         assert osdwan_data["users"][0]["departments"] == "出口1"
         assert osdwan_data["users"][0]["proxy_ips"] == "203.0.113.8"
+        assert osdwan_data["user_departments"] == [{"name": "出口1", "count": 1}]
         assert osdwan_data["users"][0]["role"] == "admin"
         assert osdwan_data["user_people_count"] == 3
+        assert osdwan_data["overall_user_people_count"] == 3
         assert osdwan_data["user_multi_account_count"] == 1
+        assert osdwan_data["overall_user_multi_account_count"] == 1
         assert osdwan_data["proxy_status"]["total"] == 2
         assert osdwan_data["proxy_status"]["online"] == 2
         assert osdwan_data["user_people"][0]["name"] == "alice"
@@ -525,19 +531,49 @@ def main():
         assert osdwan_data["node"]["name"] == "办公开发"
         assert osdwan_data["node"]["stats"]["latest"]["upload_mbps"] == 50
 
+        osdwan_metrics_response = client.get("/api/osdwan/metrics")
+        assert osdwan_metrics_response.status_code == 200, osdwan_metrics_response.get_data(as_text=True)
+        osdwan_metrics = osdwan_metrics_response.get_json()["data"]
+        assert osdwan_metrics["overall_user_count"] == 2
+        assert osdwan_metrics["user_capacity"] == 30
+        assert osdwan_metrics["overall_user_people_count"] == 3
+        assert osdwan_metrics["proxy_status"]["total"] == 2
+        assert osdwan_metrics["proxy_status"]["online"] == 2
+        assert osdwan_metrics["all_stats"]["sample_count"] == 2
+        assert osdwan_metrics["node"]["stats"]["sample_count"] == 2
+
+        osdwan_users_response = client.get("/api/osdwan/users?user_q=bob&user_page=1&user_per_page=10")
+        assert osdwan_users_response.status_code == 200, osdwan_users_response.get_data(as_text=True)
+        osdwan_users = osdwan_users_response.get_json()["data"]
+        assert osdwan_users["user_count"] == 1
+        assert osdwan_users["overall_user_count"] == 2
+        assert osdwan_users["user_query"] == "bob"
+        assert osdwan_users["users"][0]["username"] == "bob"
+        assert osdwan_users["user_people_count"] == 1
+        assert osdwan_users["overall_user_people_count"] == 3
+
         osdwan_search_response = client.get("/api/osdwan/overview?user_q=bob")
         assert osdwan_search_response.status_code == 200, osdwan_search_response.get_data(as_text=True)
         osdwan_search = osdwan_search_response.get_json()["data"]
         assert osdwan_search["user_count"] == 1
+        assert osdwan_search["overall_user_count"] == 2
         assert osdwan_search["user_query"] == "bob"
         assert osdwan_search["users"][0]["username"] == "bob"
         assert osdwan_search["user_people_count"] == 1
+        assert osdwan_search["overall_user_people_count"] == 3
 
         osdwan_proxy_search_response = client.get("/api/osdwan/overview?user_q=203.0.113.8")
         assert osdwan_proxy_search_response.status_code == 200, osdwan_proxy_search_response.get_data(as_text=True)
         osdwan_proxy_search = osdwan_proxy_search_response.get_json()["data"]
         assert osdwan_proxy_search["user_count"] == 1
         assert osdwan_proxy_search["users"][0]["proxy_ips"] == "203.0.113.8"
+
+        osdwan_department_response = client.get("/api/osdwan/overview", query_string={"user_department": "出口1"})
+        assert osdwan_department_response.status_code == 200, osdwan_department_response.get_data(as_text=True)
+        osdwan_department = osdwan_department_response.get_json()["data"]
+        assert osdwan_department["user_department"] == "出口1"
+        assert osdwan_department["user_count"] == 1
+        assert osdwan_department["users"][0]["departments"] == "出口1"
 
         class FakeOsdwanErrorResponse(FakeOsdwanResponse):
             status_code = 500

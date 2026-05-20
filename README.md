@@ -107,6 +107,7 @@ OSDWAN_CONSOLE_ORIGIN=https://console.wanflow.com
 OSDWAN_TOKEN=
 OSDWAN_NODE_ID=2168
 OSDWAN_NODE_NAME=办公开发
+OSDWAN_USER_CAPACITY=30
 ACCESS_CONTROL_API_URL=
 ACCESS_CONTROL_API_USERNAME=
 ACCESS_CONTROL_API_PASSWORD=
@@ -228,6 +229,7 @@ docker compose exec web python scripts/migrate_legacy_data.py
 | `OSDWAN_NODE_ID` | OSDWAN 节点 ID | `2168` |
 | `OSDWAN_NODE_NAME` | OSDWAN 节点展示名 | `办公开发` |
 | `OSDWAN_NODE_STATS_PERIOD` | OSDWAN 节点带宽图周期 | `6hours` |
+| `OSDWAN_USER_CAPACITY` | OSDWAN 用户总额度，顶部用户数展示为已用/总额 | `30` |
 | `ACCESS_CONTROL_API_URL` | 联软准入接口地址 | 空 |
 | `ACCESS_CONTROL_API_USERNAME` | 联软准入账号 | 空 |
 | `ACCESS_CONTROL_API_PASSWORD` | 联软准入密码 | 空 |

@@ -794,7 +794,7 @@ select {
 }
 
 .toolbar-row.osdwan-users-toolbar {
-    grid-template-columns: minmax(260px, 1fr) 120px;
+    grid-template-columns: minmax(260px, 1fr) 150px 120px;
 }
 
 .toolbar-row.switch-toolbar {

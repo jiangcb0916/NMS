@@ -13,6 +13,45 @@ from app.common.responses import success
 osdwan_bp = Blueprint("osdwan_api", __name__)
 
 
+@osdwan_bp.route("/api/osdwan/metrics", methods=["GET"])
+@login_required
+def osdwan_metrics():
+    client = WanFlowClient()
+    if not client.configured:
+        return success(default_overview(configured=False), message="OSDWAN Token 未配置", code=1)
+
+    payload, message, code = build_metrics_payload(client)
+    return success(payload, message=message, code=code)
+
+
+@osdwan_bp.route("/api/osdwan/users", methods=["GET"])
+@login_required
+def osdwan_users():
+    client = WanFlowClient()
+    if not client.configured:
+        return success(default_user_payload(1, 10), message="OSDWAN Token 未配置", code=1)
+
+    user_page = bounded_int(request.args.get("user_page"), 1, 1, 500)
+    user_per_page = bounded_int(request.args.get("user_per_page"), 10, 1, 200)
+    user_query = (request.args.get("user_q") or request.args.get("q") or "").strip()
+    user_department = (request.args.get("user_department") or "").strip()
+
+    users_result, users_error = safe_load_users(
+        client,
+        page=user_page,
+        per_page=user_per_page,
+        query=user_query,
+        department=user_department,
+    )
+    if users_result is None:
+        payload = default_user_payload(user_page, user_per_page)
+        payload["user_query"] = user_query
+        payload["user_department"] = user_department
+        return success(payload, message=users_error or "OSDWAN 用户列表请求失败", code=1)
+
+    return success(user_payload(users_result, user_query, user_department))
+
+
 @osdwan_bp.route("/api/osdwan/overview", methods=["GET"])
 @login_required
 def osdwan_overview():
@@ -28,12 +67,14 @@ def osdwan_overview():
     user_page = bounded_int(request.args.get("user_page"), 1, 1, 500)
     user_per_page = bounded_int(request.args.get("user_per_page"), 10, 1, 200)
     user_query = (request.args.get("user_q") or request.args.get("q") or "").strip()
+    user_department = (request.args.get("user_department") or "").strip()
 
     users_result, users_error = safe_load_users(
         client,
         page=user_page,
         per_page=user_per_page,
         query=user_query,
+        department=user_department,
     )
     all_stats_payload, all_stats_error = safe_get(
         client,
@@ -68,16 +109,11 @@ def osdwan_overview():
         payload["errors"] = errors
         return success(payload, message="OSDWAN 后台接口请求失败", code=1)
 
+    user_data = user_payload(users_result, user_query, user_department) if users_result is not None else default_user_payload(user_page, user_per_page)
     return success({
         "configured": True,
         "service": "WANFlow OSDWAN",
-        "users": users,
-        "user_count": user_pagination["total"],
-        "user_pagination": user_pagination,
-        "user_query": user_query,
-        "user_people": user_people,
-        "user_people_count": len(user_people),
-        "user_multi_account_count": users_result["multi_account_count"] if users_result is not None else 0,
+        **user_data,
         "proxy_status": proxy_status,
         "errors": errors,
         "all_stats": all_stats,
@@ -91,6 +127,104 @@ def osdwan_overview():
         "all_period": all_period,
         "queried_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     })
+
+
+def build_metrics_payload(client):
+    all_period = request.args.get("all_period") or current_app.config.get("OSDWAN_ALL_STATS_PERIOD", "1day")
+    node_period = request.args.get("node_period") or current_app.config.get("OSDWAN_NODE_STATS_PERIOD", "6hours")
+    node_id = request.args.get("node_id") or current_app.config.get("OSDWAN_NODE_ID", "2168")
+    node_name = current_app.config.get("OSDWAN_NODE_NAME", "办公开发")
+    view_type = request.args.get("view_type") or current_app.config.get("OSDWAN_NODE_VIEW_TYPE", "total")
+
+    users_result, users_error = safe_load_users(client, page=1, per_page=1, query="", department="")
+    all_stats_payload, all_stats_error = safe_get(
+        client,
+        "整体 SaaS 带宽",
+        "/api/Saas/all-network-stats",
+        params={"period": all_period},
+    )
+    node_stats_payload, node_stats_error = safe_get(
+        client,
+        f"{node_name}带宽",
+        f"/api/Saas/network-stats/{node_id}",
+        params={"period": node_period, "view_type": view_type},
+    )
+
+    errors = {
+        key: value
+        for key, value in {
+            "users": users_error,
+            "all_stats": all_stats_error,
+            "node_stats": node_stats_error,
+        }.items()
+        if value
+    }
+    if users_result is None and all_stats_payload is None and node_stats_payload is None:
+        payload = default_overview(configured=True)
+        payload["errors"] = errors
+        return payload, "OSDWAN 后台接口请求失败", 1
+
+    payload = {
+        "configured": True,
+        "service": "WANFlow OSDWAN",
+        "overall_user_count": users_result["overall_user_count"] if users_result is not None else 0,
+        "user_capacity": current_app.config.get("OSDWAN_USER_CAPACITY", 30),
+        "overall_user_people_count": users_result["overall_people_count"] if users_result is not None else 0,
+        "overall_user_multi_account_count": users_result["overall_multi_account_count"] if users_result is not None else 0,
+        "proxy_status": users_result["proxy_status"] if users_result is not None else empty_proxy_status(),
+        "errors": errors,
+        "all_stats": normalize_bandwidth_stats(all_stats_payload) if all_stats_payload is not None else normalize_bandwidth_stats({}),
+        "node": {
+            "id": node_id,
+            "name": node_name,
+            "period": node_period,
+            "view_type": view_type,
+            "stats": normalize_bandwidth_stats(node_stats_payload) if node_stats_payload is not None else normalize_bandwidth_stats({}),
+        },
+        "all_period": all_period,
+        "queried_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    return payload, "success", 0
+
+
+def user_payload(users_result, user_query, user_department):
+    user_pagination = users_result["pagination"]
+    user_people = users_result["people"]
+    return {
+        "users": users_result["users"],
+        "user_count": user_pagination["total"],
+        "overall_user_count": users_result["overall_user_count"],
+        "user_capacity": current_app.config.get("OSDWAN_USER_CAPACITY", 30),
+        "user_pagination": user_pagination,
+        "user_query": user_query,
+        "user_department": user_department,
+        "user_departments": users_result["departments"],
+        "user_people": user_people,
+        "user_people_count": len(user_people),
+        "overall_user_people_count": users_result["overall_people_count"],
+        "user_multi_account_count": users_result["multi_account_count"],
+        "overall_user_multi_account_count": users_result["overall_multi_account_count"],
+        "proxy_status": users_result["proxy_status"],
+    }
+
+
+def default_user_payload(page, per_page):
+    return {
+        "users": [],
+        "user_count": 0,
+        "overall_user_count": 0,
+        "user_capacity": current_app.config.get("OSDWAN_USER_CAPACITY", 30),
+        "user_pagination": empty_pagination(page, per_page),
+        "user_query": "",
+        "user_department": "",
+        "user_departments": [],
+        "user_people": [],
+        "user_people_count": 0,
+        "overall_user_people_count": 0,
+        "user_multi_account_count": 0,
+        "overall_user_multi_account_count": 0,
+        "proxy_status": empty_proxy_status(),
+    }
 
 
 class WanFlowClient:
@@ -148,9 +282,9 @@ def safe_get(client, label, path, params=None):
         return None, f"{label}接口请求失败: {exc.__class__.__name__}"
 
 
-def safe_load_users(client, page, per_page, query):
+def safe_load_users(client, page, per_page, query, department):
     try:
-        return load_user_collection(client, page, per_page, query), ""
+        return load_user_collection(client, page, per_page, query, department), ""
     except requests.HTTPError as exc:
         status_code = exc.response.status_code if exc.response is not None else "unknown"
         message = response_error_message(exc.response)
@@ -205,7 +339,7 @@ def normalize_users(payload, proxy_by_id=None):
     return users
 
 
-def load_user_collection(client, page, per_page, query):
+def load_user_collection(client, page, per_page, query, department):
     fetch_per_page = 200
     first_payload = client.get("/api/user", params={"page": 1, "per_page": fetch_per_page, "no_cache": 1})
     rows = extract_record_list(first_payload)
@@ -221,23 +355,32 @@ def load_user_collection(client, page, per_page, query):
 
     proxy_status, proxy_by_id = check_proxy_exits(client, rows)
     all_users = normalize_users({"data": rows}, proxy_by_id=proxy_by_id)
-    filtered_users = filter_users(all_users, query)
+    departments = build_department_options(all_users)
+    filtered_users = filter_users(all_users, query, department)
+    overall_people = summarize_user_people(all_users)
     page_users, local_pagination = paginate_items(filtered_users, page, per_page)
     return {
         "users": page_users,
         "pagination": local_pagination,
+        "overall_user_count": len(all_users),
+        "departments": departments,
         "people": summarize_user_people(filtered_users),
+        "overall_people_count": len(overall_people),
         "multi_account_count": sum(1 for user in filtered_users if len(user.get("people") or []) > 1),
+        "overall_multi_account_count": sum(1 for user in all_users if len(user.get("people") or []) > 1),
         "proxy_status": proxy_status,
     }
 
 
-def filter_users(users, query):
-    if not query:
-        return users
+def filter_users(users, query, department=""):
     needle = query.lower()
     filtered = []
     for user in users:
+        if department and department not in split_delimited_values(user.get("departments", "")):
+            continue
+        if not query:
+            filtered.append(user)
+            continue
         haystack = " ".join([
             user.get("id", ""),
             user.get("username", ""),
@@ -252,6 +395,17 @@ def filter_users(users, query):
         if needle in haystack:
             filtered.append(user)
     return filtered
+
+
+def build_department_options(users):
+    counts = {}
+    for user in users:
+        for department in split_delimited_values(user.get("departments", "")):
+            counts[department] = counts.get(department, 0) + 1
+    return [
+        {"name": name, "count": counts[name]}
+        for name in sorted(counts)
+    ]
 
 
 def paginate_items(items, page, per_page):
@@ -302,6 +456,14 @@ def summarize_user_people(users):
 def split_person_names(value):
     parts = [part.strip() for part in re.split(r"[/／]+", string_value(value)) if part.strip()]
     return parts or [string_value(value)] if string_value(value) else []
+
+
+def split_delimited_values(value):
+    return [
+        part.strip()
+        for part in re.split(r"[、,，]+", string_value(value))
+        if part.strip()
+    ]
 
 
 def format_named_items(items):
@@ -693,7 +855,11 @@ def default_overview(configured):
         "service": "WANFlow OSDWAN",
         "users": [],
         "user_count": 0,
+        "overall_user_count": 0,
+        "user_capacity": current_app.config.get("OSDWAN_USER_CAPACITY", 30),
         "user_query": "",
+        "user_department": "",
+        "user_departments": [],
         "user_pagination": {
             "total": 0,
             "page": 1,
@@ -703,7 +869,9 @@ def default_overview(configured):
         },
         "user_people": [],
         "user_people_count": 0,
+        "overall_user_people_count": 0,
         "user_multi_account_count": 0,
+        "overall_user_multi_account_count": 0,
         "proxy_status": empty_proxy_status(),
         "errors": {},
         "all_stats": normalize_bandwidth_stats({}),

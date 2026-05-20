@@ -104,6 +104,7 @@ class Config:
     OSDWAN_NODE_NAME = os.environ.get("OSDWAN_NODE_NAME", "办公开发")
     OSDWAN_NODE_STATS_PERIOD = os.environ.get("OSDWAN_NODE_STATS_PERIOD", "6hours")
     OSDWAN_NODE_VIEW_TYPE = os.environ.get("OSDWAN_NODE_VIEW_TYPE", "total")
+    OSDWAN_USER_CAPACITY = env_int("OSDWAN_USER_CAPACITY", 30)
 
     ACCESS_CONTROL_API_URL = os.environ.get("ACCESS_CONTROL_API_URL")
     ACCESS_CONTROL_API_USERNAME = os.environ.get("ACCESS_CONTROL_API_USERNAME")
