@@ -1,3 +1,7 @@
+import re
+import threading
+import time
+
 from flask import Blueprint, current_app, jsonify, request
 from flask_login import login_required
 
@@ -13,6 +17,8 @@ from app.modules.sangfor_ac.client import SangforACClient
 
 sangfor_ac_bp = Blueprint("sangfor_ac_api", __name__, url_prefix="/api/sangfor")
 legacy_status_bp = Blueprint("legacy_status_api", __name__)
+USER_RANK_CACHE = {}
+USER_RANK_CACHE_LOCK = threading.Lock()
 
 
 @sangfor_ac_bp.route("/status/version", methods=["GET"])
@@ -30,9 +36,10 @@ def user_rank():
     top = int_arg("top", current_app.config.get("SANGFOR_AC_USER_RANK_TOP", 10000), 1, 50000)
     line = (request.args.get("line") or "0").strip() or "0"
     keyword = (request.args.get("q") or "").strip().lower()
+    refresh = request.args.get("refresh") in {"1", "true", "yes"}
 
     client = SangforACClient()
-    result = client.get_user_rank(top=top, line=line)
+    result = get_cached_user_rank(client, top, line, refresh=refresh)
     if result.get("code") != 0:
         return success(empty_user_rank_payload(page, per_page, line, top), message=result.get("message", "获取用户流量排行失败"), code=1)
 
@@ -41,6 +48,7 @@ def user_rank():
     cached_names = valid_name_cache_map(mobiles)
     name_cache_refresh = schedule_client_name_cache_refresh(mobiles)
     rows = [normalize_user_rank_row(row, index + 1, cached_names) for index, row in enumerate(raw_rows)]
+    summary_rows = list(rows)
     if keyword:
         rows = [row for row in rows if user_rank_row_matches(row, keyword)]
 
@@ -53,7 +61,7 @@ def user_rank():
     page_rows = rows[start:start + per_page]
     return success({
         "items": page_rows,
-        "summary": user_rank_summary(rows),
+        "summary": user_rank_summary(summary_rows),
         "total": total,
         "all_total": len(raw_rows),
         "page": page,
@@ -219,11 +227,36 @@ def ac_source(client):
     return client.base_url if client.host else ""
 
 
+def get_cached_user_rank(client, top, line, refresh=False):
+    cache_key = (client.host, client.port, top, line)
+    now = time.time()
+    ttl = current_app.config.get("SANGFOR_AC_USER_RANK_CACHE_SECONDS", 20)
+    try:
+        ttl = max(0, int(ttl))
+    except (TypeError, ValueError):
+        ttl = 20
+
+    if not refresh and ttl:
+        with USER_RANK_CACHE_LOCK:
+            cached = USER_RANK_CACHE.get(cache_key)
+            if cached and now - cached["created_at"] <= ttl:
+                return cached["result"]
+
+    result = client.get_user_rank(top=top, line=line)
+    if result.get("code") == 0 and ttl:
+        with USER_RANK_CACHE_LOCK:
+            USER_RANK_CACHE[cache_key] = {
+                "created_at": now,
+                "result": result,
+            }
+    return result
+
+
 def extract_user_rank_mobiles(rows):
     mobiles = []
     seen = set()
     for row in rows:
-        mobile = extract_mobile((row or {}).get("name"))
+        mobile = extract_mobile(clean_user_rank_name((row or {}).get("name")))
         if mobile and mobile not in seen:
             seen.add(mobile)
             mobiles.append(mobile)
@@ -233,7 +266,7 @@ def extract_user_rank_mobiles(rows):
 def normalize_user_rank_row(row, rank, cached_names=None):
     cached_names = cached_names or {}
     apps = normalize_user_rank_apps(((row or {}).get("detail") or {}).get("data") or [])
-    user_name = string_value((row or {}).get("name"))
+    user_name = clean_user_rank_name((row or {}).get("name"))
     mobile = extract_mobile(user_name)
     up_bytes = number_value((row or {}).get("up"))
     down_bytes = number_value((row or {}).get("down"))
@@ -278,6 +311,7 @@ def normalize_user_rank_apps(rows):
 
 
 def user_rank_row_matches(row, keyword):
+    compact_keyword = compact_search_text(keyword)
     fields = [
         row.get("name"),
         row.get("real_name"),
@@ -286,7 +320,13 @@ def user_rank_row_matches(row, keyword):
         row.get("down_rate"),
     ]
     fields.extend(app.get("app") for app in row.get("apps", []))
-    return any(keyword in str(value).lower() for value in fields if value)
+    for value in fields:
+        if not value:
+            continue
+        text = str(value).lower()
+        if keyword in text or compact_keyword in compact_search_text(text):
+            return True
+    return False
 
 
 def user_rank_summary(rows):
@@ -315,6 +355,16 @@ def number_value(value):
 def string_value(value):
     text = str(value or "").strip()
     return text or "-"
+
+
+def clean_user_rank_name(value):
+    text = string_value(value)
+    cleaned = re.sub(r"\s*\([^()]*\)\s*$", "", text).strip()
+    return cleaned or text
+
+
+def compact_search_text(value):
+    return re.sub(r"[\s_:\-().]+", "", str(value or "").lower())
 
 
 def format_byte_rate(value):

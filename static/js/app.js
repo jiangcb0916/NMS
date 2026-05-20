@@ -207,6 +207,7 @@ let devicesCache = [];
 let wirelessActiveView = 'aps';
 const OSDWAN_METRICS_REFRESH_MS = 60 * 1000;
 let osdwanMetricsAutoRefreshing = false;
+let trafficAnalysisRequestId = 0;
 const firewallBandwidthState = {
     range: '6h',
     samples: [],
@@ -359,6 +360,7 @@ function renderFirewallRangeButtons() {
 }
 
 async function loadTrafficAnalysis(options = {}) {
+    const requestId = ++trafficAnalysisRequestId;
     trafficAnalysisState.page = options.page || trafficAnalysisState.page;
     trafficAnalysisState.perPage = options.perPage || trafficAnalysisState.perPage;
     trafficAnalysisState.query = options.query !== undefined ? options.query : trafficAnalysisState.query;
@@ -380,7 +382,13 @@ async function loadTrafficAnalysis(options = {}) {
         if (trafficAnalysisState.top) {
             params.set('top', trafficAnalysisState.top);
         }
+        if (options.refresh) {
+            params.set('refresh', '1');
+        }
         const result = await apiGetResult(`/api/sangfor/user-rank?${params.toString()}`);
+        if (requestId !== trafficAnalysisRequestId) {
+            return;
+        }
         const data = result.data || {};
         trafficAnalysisState.page = data.page || trafficAnalysisState.page;
         trafficAnalysisState.pages = data.pages || 0;
@@ -426,6 +434,9 @@ async function loadTrafficAnalysis(options = {}) {
             showToast('流量排行已刷新');
         }
     } catch (error) {
+        if (requestId !== trafficAnalysisRequestId) {
+            return;
+        }
         body.innerHTML = `<tr><td colspan="9">${escapeHtml(error.message)}</td></tr>`;
         summary.textContent = '加载失败';
         showToast(error.message, 'error');
@@ -2596,7 +2607,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const reloadTrafficAnalysis = document.getElementById('reload-traffic-analysis');
     if (reloadTrafficAnalysis) {
-        reloadTrafficAnalysis.addEventListener('click', () => loadTrafficAnalysis({page: trafficAnalysisState.page, toast: true}));
+        reloadTrafficAnalysis.addEventListener('click', () => loadTrafficAnalysis({page: trafficAnalysisState.page, toast: true, refresh: true}));
     }
 
     const reloadOsdwan = document.getElementById('reload-osdwan');

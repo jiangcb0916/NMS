@@ -161,7 +161,7 @@ def main():
                     },
                     {
                         "id": 1,
-                        "name": "user-b",
+                        "name": "ea-ad-0b-ba-e6-09(26-a3-f1-d9-4d-4f)",
                         "group": "/财务",
                         "ip": "192.0.2.42",
                         "up": 10,
@@ -184,7 +184,14 @@ def main():
         assert traffic_data["items"][0]["ip"] == "192.0.2.41"
         assert traffic_data["items"][0]["real_name"] == "张三"
         assert traffic_data["items"][0]["total_rate"] == "24 Kbps"
-        assert traffic_data["summary"]["session_count"] == 12
+        assert traffic_data["summary"]["user_count"] == 2
+        assert traffic_data["summary"]["session_count"] == 13
+
+        mac_search_response = client.get("/api/sangfor/user-rank?q=ea-ad-0b&page=1&per_page=10&top=10000")
+        assert mac_search_response.status_code == 200, mac_search_response.get_data(as_text=True)
+        mac_search_data = mac_search_response.get_json()["data"]
+        assert mac_search_data["total"] == 1
+        assert mac_search_data["items"][0]["name"] == "ea-ad-0b-ba-e6-09"
     finally:
         sangfor_ac_routes.SangforACClient = original_sangfor_ac_client
 
