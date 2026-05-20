@@ -210,6 +210,7 @@ const osdwanState = {
     userQuery: '',
     userPeopleCount: 0,
     userMultiAccountCount: 0,
+    proxyStatus: null,
 };
 
 function showView(viewId, navId, titleKey) {
@@ -398,6 +399,7 @@ function renderOsdwanPage(data) {
     osdwanState.userQuery = data.user_query ?? osdwanState.userQuery;
     osdwanState.userPeopleCount = data.user_people_count || 0;
     osdwanState.userMultiAccountCount = data.user_multi_account_count || 0;
+    osdwanState.proxyStatus = data.proxy_status || null;
     const searchControl = document.getElementById('osdwan-user-search');
     if (searchControl) {
         searchControl.value = osdwanState.userQuery;
@@ -412,6 +414,7 @@ function renderOsdwanPage(data) {
         : `${data.service || 'WANFlow OSDWAN'} · ${data.queried_at || '-'}`;
     document.getElementById('osdwan-user-count').textContent = data.user_count ?? 0;
     document.getElementById('osdwan-person-count').textContent = data.user_people_count ?? 0;
+    document.getElementById('osdwan-proxy-status').textContent = renderProxyStatus(data.proxy_status);
     document.getElementById('osdwan-all-latest').textContent = renderOsdwanLatest(data.all_stats?.latest);
     document.getElementById('osdwan-node-latest').textContent = renderOsdwanLatest(data.node?.stats?.latest);
     document.getElementById('osdwan-all-source').textContent = `最近 ${renderOsdwanPeriod(data.all_period)} · 样本 ${data.all_stats?.sample_count ?? 0} 个`;
@@ -433,6 +436,7 @@ function renderOsdwanError(message, data = {}) {
     document.getElementById('osdwan-source').textContent = message;
     document.getElementById('osdwan-user-count').textContent = data.user_count ?? '-';
     document.getElementById('osdwan-person-count').textContent = data.user_people_count ?? '-';
+    document.getElementById('osdwan-proxy-status').textContent = '-';
     document.getElementById('osdwan-all-latest').textContent = '-';
     document.getElementById('osdwan-node-latest').textContent = '-';
     document.getElementById('osdwan-all-source').textContent = message;
@@ -450,6 +454,7 @@ function renderOsdwanError(message, data = {}) {
     osdwanState.userTotal = 0;
     osdwanState.userPeopleCount = 0;
     osdwanState.userMultiAccountCount = 0;
+    osdwanState.proxyStatus = null;
     renderOsdwanUserPager();
 }
 
@@ -468,6 +473,13 @@ function renderOsdwanPeriod(period) {
         '24hours': '24 小时',
     };
     return labels[period] || period || '-';
+}
+
+function renderProxyStatus(status) {
+    if (!status || !status.total) {
+        return '-';
+    }
+    return `${status.online || 0}/${status.total} 正常`;
 }
 
 function renderOsdwanUsers(users, errorMessage = '', pagination = {}) {
@@ -508,7 +520,7 @@ function renderOsdwanUsers(users, errorMessage = '', pagination = {}) {
             <td>${escapeHtml(user.email || '-')}</td>
             <td>${escapeHtml(user.role || '-')}</td>
             <td>${escapeHtml(user.status || '-')}</td>
-            <td>${escapeHtml(user.proxies || '-')}</td>
+            <td>${escapeHtml(user.proxy_ips || '-')}</td>
         </tr>
     `).join('');
 }

@@ -51,6 +51,7 @@ def osdwan_overview():
     users = users_result["users"] if users_result is not None else []
     user_pagination = users_result["pagination"] if users_result is not None else empty_pagination(user_page, user_per_page)
     user_people = users_result["people"] if users_result is not None else []
+    proxy_status = users_result["proxy_status"] if users_result is not None else empty_proxy_status()
     all_stats = normalize_bandwidth_stats(all_stats_payload) if all_stats_payload is not None else normalize_bandwidth_stats({})
     node_stats = normalize_bandwidth_stats(node_stats_payload) if node_stats_payload is not None else normalize_bandwidth_stats({})
     errors = {
@@ -77,6 +78,7 @@ def osdwan_overview():
         "user_people": user_people,
         "user_people_count": len(user_people),
         "user_multi_account_count": users_result["multi_account_count"] if users_result is not None else 0,
+        "proxy_status": proxy_status,
         "errors": errors,
         "all_stats": all_stats,
         "node": {
@@ -107,6 +109,16 @@ class WanFlowClient:
         response = requests.get(
             urljoin(f"{self.base_url}/", path.lstrip("/")),
             params=params,
+            headers=self.headers(),
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def post(self, path, json=None):
+        response = requests.post(
+            urljoin(f"{self.base_url}/", path.lstrip("/")),
+            json=json,
             headers=self.headers(),
             timeout=self.timeout,
         )
@@ -168,8 +180,9 @@ def bounded_int(value, default, minimum, maximum):
     return max(minimum, min(maximum, number))
 
 
-def normalize_users(payload):
+def normalize_users(payload, proxy_by_id=None):
     rows = extract_record_list(payload)
+    proxy_by_id = proxy_by_id or {}
     users = []
     for index, row in enumerate(rows, start=1):
         if not isinstance(row, dict):
@@ -183,7 +196,7 @@ def normalize_users(payload):
             "person_count": len(people),
             "display_name": string_value(first_value(row, ["display_name", "nickname", "real_name", "realName", "full_name", "face_cert_name", "name"])),
             "departments": format_named_items(row.get("departments")),
-            "proxies": format_proxies(row.get("proxies")),
+            "proxy_ips": format_proxy_ips(row.get("proxies"), proxy_by_id),
             "email": string_value(first_value(row, ["email", "mail"])),
             "role": string_value(first_value(row, ["role", "roles", "role_name", "roleName", "type"])),
             "status": normalize_user_status(row),
@@ -206,7 +219,8 @@ def load_user_collection(client, page, per_page, query):
         )
         rows.extend(extract_record_list(payload))
 
-    all_users = normalize_users({"data": rows})
+    proxy_status, proxy_by_id = check_proxy_exits(client, rows)
+    all_users = normalize_users({"data": rows}, proxy_by_id=proxy_by_id)
     filtered_users = filter_users(all_users, query)
     page_users, local_pagination = paginate_items(filtered_users, page, per_page)
     return {
@@ -214,6 +228,7 @@ def load_user_collection(client, page, per_page, query):
         "pagination": local_pagination,
         "people": summarize_user_people(filtered_users),
         "multi_account_count": sum(1 for user in filtered_users if len(user.get("people") or []) > 1),
+        "proxy_status": proxy_status,
     }
 
 
@@ -228,7 +243,7 @@ def filter_users(users, query):
             user.get("username", ""),
             user.get("display_name", ""),
             user.get("departments", ""),
-            user.get("proxies", ""),
+            user.get("proxy_ips", ""),
             user.get("email", ""),
             user.get("role", ""),
             user.get("status", ""),
@@ -299,15 +314,78 @@ def format_named_items(items):
     return "、".join(names)
 
 
-def format_proxies(proxies):
+def check_proxy_exits(client, rows):
+    proxy_refs = collect_proxy_refs(rows)
+    exits = []
+    proxy_by_id = {}
+    for proxy_id, proxy in proxy_refs.items():
+        result = {
+            "id": proxy_id,
+            "name": proxy.get("name", ""),
+            "type": proxy.get("type", ""),
+            "ip": "",
+            "is_connected": False,
+            "status": "unknown",
+            "response_time_ms": None,
+            "error": "",
+        }
+        try:
+            payload = client.post(f"/api/proxy/{proxy_id}/check-connectivity")
+            data = payload.get("data") if isinstance(payload, dict) else {}
+            if not isinstance(data, dict):
+                data = {}
+            raw_result = data.get("raw_result") if isinstance(data.get("raw_result"), dict) else {}
+            result["name"] = string_value(data.get("proxy_name") or result["name"])
+            result["ip"] = string_value(data.get("ip") or raw_result.get("ip"))
+            result["is_connected"] = bool(data.get("is_connected"))
+            result["status"] = string_value(data.get("status") or raw_result.get("status") or ("success" if result["is_connected"] else "failed"))
+            result["response_time_ms"] = int_value(raw_result.get("response_time"))
+        except requests.RequestException as exc:
+            result["status"] = "failed"
+            result["error"] = exc.__class__.__name__
+            current_app.logger.warning("OSDWAN 出口 %s connectivity failed: %s", proxy_id, exc.__class__.__name__)
+        exits.append(result)
+        proxy_by_id[proxy_id] = result
+
+    total = len(exits)
+    online = sum(1 for item in exits if item["is_connected"])
+    return {
+        "total": total,
+        "online": online,
+        "offline": total - online,
+        "ok": total > 0 and online == total,
+        "exits": exits,
+    }, proxy_by_id
+
+
+def collect_proxy_refs(rows):
+    refs = {}
+    for row in rows:
+        proxies = row.get("proxies") if isinstance(row, dict) else []
+        if not isinstance(proxies, list):
+            continue
+        for proxy in proxies:
+            if not isinstance(proxy, dict):
+                continue
+            proxy_id = string_value(first_value(proxy, ["id", "proxy_id", "proxyId"]))
+            if not proxy_id:
+                continue
+            refs.setdefault(proxy_id, {
+                "name": string_value(first_value(proxy, ["name", "label", "value"])),
+                "type": string_value(first_value(proxy, ["type", "protocol"])),
+            })
+    return refs
+
+
+def format_proxy_ips(proxies, proxy_by_id):
     if not isinstance(proxies, list):
         return string_value(proxies)
     items = []
     for proxy in proxies:
         if isinstance(proxy, dict):
-            name = string_value(first_value(proxy, ["name", "label", "value"]))
-            proxy_type = string_value(first_value(proxy, ["type", "protocol"]))
-            append_unique(items, f"{name}({proxy_type})" if name and proxy_type else name or proxy_type)
+            proxy_id = string_value(first_value(proxy, ["id", "proxy_id", "proxyId"]))
+            status = proxy_by_id.get(proxy_id, {})
+            append_unique(items, status.get("ip") or "检测失败")
         else:
             append_unique(items, proxy)
     return "、".join(items)
@@ -465,6 +543,16 @@ def empty_pagination(page, per_page):
     }
 
 
+def empty_proxy_status():
+    return {
+        "total": 0,
+        "online": 0,
+        "offline": 0,
+        "ok": False,
+        "exits": [],
+    }
+
+
 def extract_timeseries_records(payload):
     candidates = []
     collect_lists(payload, candidates)
@@ -616,6 +704,7 @@ def default_overview(configured):
         "user_people": [],
         "user_people_count": 0,
         "user_multi_account_count": 0,
+        "proxy_status": empty_proxy_status(),
         "errors": {},
         "all_stats": normalize_bandwidth_stats({}),
         "node": {

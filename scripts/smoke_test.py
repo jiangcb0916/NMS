@@ -451,7 +451,14 @@ def main():
                     "departments": [{"id": 32, "name": "出口1"}],
                     "proxies": [{"id": 48291, "name": "美国", "type": "socks5"}],
                 },
-                {"id": 2, "name": "bob", "email": "bob@example.com", "roles": ["user"], "face_verified": False},
+                {
+                    "id": 2,
+                    "name": "bob",
+                    "email": "bob@example.com",
+                    "roles": ["user"],
+                    "face_verified": False,
+                    "proxies": [{"id": 49117, "name": "美国2", "type": "socks5"}],
+                },
             ], "pagination": {"total": 2, "per_page": 200, "current_page": 1, "last_page": 1}})
         if url.endswith("/api/Saas/all-network-stats"):
             assert params["period"] == "1day"
@@ -467,10 +474,35 @@ def main():
             ]}})
         raise AssertionError(url)
 
+    def fake_osdwan_post(url, json=None, headers=None, timeout=15):
+        assert headers["Authorization"] == "Bearer smoke-token"
+        assert headers["Origin"] == "https://console.wanflow.com"
+        if url.endswith("/api/proxy/48291/check-connectivity"):
+            return FakeOsdwanResponse({"data": {
+                "proxy_id": 48291,
+                "proxy_name": "美国",
+                "is_connected": True,
+                "ip": "203.0.113.8",
+                "status": "success",
+                "raw_result": {"response_time": 100},
+            }})
+        if url.endswith("/api/proxy/49117/check-connectivity"):
+            return FakeOsdwanResponse({"data": {
+                "proxy_id": 49117,
+                "proxy_name": "美国2",
+                "is_connected": True,
+                "ip": "203.0.113.9",
+                "status": "success",
+                "raw_result": {"response_time": 120},
+            }})
+        raise AssertionError(url)
+
     original_osdwan_get = osdwan_routes.requests.get
+    original_osdwan_post = osdwan_routes.requests.post
     app.config["OSDWAN_TOKEN"] = "smoke-token"
     app.config["OSDWAN_NODE_NAME"] = "办公开发"
     osdwan_routes.requests.get = fake_osdwan_get
+    osdwan_routes.requests.post = fake_osdwan_post
     try:
         osdwan_response = client.get("/api/osdwan/overview")
         assert osdwan_response.status_code == 200, osdwan_response.get_data(as_text=True)
@@ -481,10 +513,12 @@ def main():
         assert osdwan_data["users"][0]["username"] == "alice/amy"
         assert osdwan_data["users"][0]["people"] == ["alice", "amy"]
         assert osdwan_data["users"][0]["departments"] == "出口1"
-        assert osdwan_data["users"][0]["proxies"] == "美国(socks5)"
+        assert osdwan_data["users"][0]["proxy_ips"] == "203.0.113.8"
         assert osdwan_data["users"][0]["role"] == "admin"
         assert osdwan_data["user_people_count"] == 3
         assert osdwan_data["user_multi_account_count"] == 1
+        assert osdwan_data["proxy_status"]["total"] == 2
+        assert osdwan_data["proxy_status"]["online"] == 2
         assert osdwan_data["user_people"][0]["name"] == "alice"
         assert osdwan_data["all_stats"]["sample_count"] == 2
         assert osdwan_data["all_stats"]["latest"]["download_mbps"] == 180
@@ -499,11 +533,11 @@ def main():
         assert osdwan_search["users"][0]["username"] == "bob"
         assert osdwan_search["user_people_count"] == 1
 
-        osdwan_proxy_search_response = client.get("/api/osdwan/overview?user_q=socks5")
+        osdwan_proxy_search_response = client.get("/api/osdwan/overview?user_q=203.0.113.8")
         assert osdwan_proxy_search_response.status_code == 200, osdwan_proxy_search_response.get_data(as_text=True)
         osdwan_proxy_search = osdwan_proxy_search_response.get_json()["data"]
         assert osdwan_proxy_search["user_count"] == 1
-        assert osdwan_proxy_search["users"][0]["proxies"] == "美国(socks5)"
+        assert osdwan_proxy_search["users"][0]["proxy_ips"] == "203.0.113.8"
 
         class FakeOsdwanErrorResponse(FakeOsdwanResponse):
             status_code = 500
@@ -526,6 +560,7 @@ def main():
         assert osdwan_partial["data"]["all_stats"]["sample_count"] == 2
     finally:
         osdwan_routes.requests.get = original_osdwan_get
+        osdwan_routes.requests.post = original_osdwan_post
 
     wireless_routes.wireless_user_cache["data"] = [
         {

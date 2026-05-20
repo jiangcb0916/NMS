@@ -294,6 +294,13 @@
             </div>
         </article>
         <article class="metric">
+            <div class="metric-icon exit"><i class="bi bi-hdd-network"></i></div>
+            <div>
+                <div class="metric-label">出口状态</div>
+                <div class="metric-value" id="osdwan-proxy-status">-</div>
+            </div>
+        </article>
+        <article class="metric">
             <div class="metric-icon wireless"><i class="bi bi-arrow-down-up"></i></div>
             <div>
                 <div class="metric-label">整体最新带宽</div>
@@ -337,7 +344,7 @@
         </section>
     </section>
     <div class="toolbar-row osdwan-users-toolbar">
-        <input id="osdwan-user-search" placeholder="搜索用户、关联人员、部门、代理、邮箱、角色、状态">
+        <input id="osdwan-user-search" placeholder="搜索用户、关联人员、部门、出口 IP、邮箱、角色、状态">
         <select id="osdwan-user-page-size" aria-label="OSDWAN 用户每页数量">
             <option value="10" selected>10 / 页</option>
             <option value="20">20 / 页</option>
@@ -357,7 +364,7 @@
                     <th>邮箱</th>
                     <th>角色</th>
                     <th>状态</th>
-                    <th>代理</th>
+                    <th>出口 IP</th>
                 </tr>
             </thead>
             <tbody id="osdwan-users-table-body">

@@ -311,6 +311,11 @@ select {
     color: #92400e;
 }
 
+.metric-icon.exit {
+    background: #ecfeff;
+    color: #0e7490;
+}
+
 .metric-icon.devices {
     background: #e8eefc;
     color: var(--blue);
@@ -759,7 +764,7 @@ select {
 }
 
 .metric-grid.compact.osdwan-metrics {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .inline-form {
