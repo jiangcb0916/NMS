@@ -504,11 +504,11 @@ function renderOsdwanUsers(users, errorMessage = '', pagination = {}) {
         <tr>
             <td>${escapeHtml(user.username || user.id || '-')}</td>
             <td>${renderPersonChips(user.people || [])}</td>
-            <td>${escapeHtml(user.display_name || '-')}</td>
+            <td>${escapeHtml(user.departments || '-')}</td>
             <td>${escapeHtml(user.email || '-')}</td>
             <td>${escapeHtml(user.role || '-')}</td>
             <td>${escapeHtml(user.status || '-')}</td>
-            <td>${escapeHtml(user.last_login || '-')}</td>
+            <td>${escapeHtml(user.proxies || '-')}</td>
         </tr>
     `).join('');
 }

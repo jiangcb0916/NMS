@@ -442,7 +442,15 @@ def main():
         if url.endswith("/api/user"):
             assert params == {"page": 1, "per_page": 200, "no_cache": 1}
             return FakeOsdwanResponse({"data": [
-                {"id": 1, "name": "alice/amy", "email": "alice@example.com", "roles": ["admin"], "face_verified": True},
+                {
+                    "id": 1,
+                    "name": "alice/amy",
+                    "email": "alice@example.com",
+                    "roles": ["admin"],
+                    "face_verified": True,
+                    "departments": [{"id": 32, "name": "出口1"}],
+                    "proxies": [{"id": 48291, "name": "美国", "type": "socks5"}],
+                },
                 {"id": 2, "name": "bob", "email": "bob@example.com", "roles": ["user"], "face_verified": False},
             ], "pagination": {"total": 2, "per_page": 200, "current_page": 1, "last_page": 1}})
         if url.endswith("/api/Saas/all-network-stats"):
@@ -472,6 +480,8 @@ def main():
         assert osdwan_data["user_pagination"]["returned"] == 2
         assert osdwan_data["users"][0]["username"] == "alice/amy"
         assert osdwan_data["users"][0]["people"] == ["alice", "amy"]
+        assert osdwan_data["users"][0]["departments"] == "出口1"
+        assert osdwan_data["users"][0]["proxies"] == "美国(socks5)"
         assert osdwan_data["users"][0]["role"] == "admin"
         assert osdwan_data["user_people_count"] == 3
         assert osdwan_data["user_multi_account_count"] == 1
@@ -488,6 +498,12 @@ def main():
         assert osdwan_search["user_query"] == "bob"
         assert osdwan_search["users"][0]["username"] == "bob"
         assert osdwan_search["user_people_count"] == 1
+
+        osdwan_proxy_search_response = client.get("/api/osdwan/overview?user_q=socks5")
+        assert osdwan_proxy_search_response.status_code == 200, osdwan_proxy_search_response.get_data(as_text=True)
+        osdwan_proxy_search = osdwan_proxy_search_response.get_json()["data"]
+        assert osdwan_proxy_search["user_count"] == 1
+        assert osdwan_proxy_search["users"][0]["proxies"] == "美国(socks5)"
 
         class FakeOsdwanErrorResponse(FakeOsdwanResponse):
             status_code = 500

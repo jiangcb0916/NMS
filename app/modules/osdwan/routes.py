@@ -182,6 +182,8 @@ def normalize_users(payload):
             "people": people,
             "person_count": len(people),
             "display_name": string_value(first_value(row, ["display_name", "nickname", "real_name", "realName", "full_name", "face_cert_name", "name"])),
+            "departments": format_named_items(row.get("departments")),
+            "proxies": format_proxies(row.get("proxies")),
             "email": string_value(first_value(row, ["email", "mail"])),
             "role": string_value(first_value(row, ["role", "roles", "role_name", "roleName", "type"])),
             "status": normalize_user_status(row),
@@ -225,6 +227,8 @@ def filter_users(users, query):
             user.get("id", ""),
             user.get("username", ""),
             user.get("display_name", ""),
+            user.get("departments", ""),
+            user.get("proxies", ""),
             user.get("email", ""),
             user.get("role", ""),
             user.get("status", ""),
@@ -283,6 +287,30 @@ def summarize_user_people(users):
 def split_person_names(value):
     parts = [part.strip() for part in re.split(r"[/／]+", string_value(value)) if part.strip()]
     return parts or [string_value(value)] if string_value(value) else []
+
+
+def format_named_items(items):
+    if not isinstance(items, list):
+        return string_value(items)
+    names = []
+    for item in items:
+        value = first_value(item, ["name", "label", "value"]) if isinstance(item, dict) else item
+        append_unique(names, value)
+    return "、".join(names)
+
+
+def format_proxies(proxies):
+    if not isinstance(proxies, list):
+        return string_value(proxies)
+    items = []
+    for proxy in proxies:
+        if isinstance(proxy, dict):
+            name = string_value(first_value(proxy, ["name", "label", "value"]))
+            proxy_type = string_value(first_value(proxy, ["type", "protocol"]))
+            append_unique(items, f"{name}({proxy_type})" if name and proxy_type else name or proxy_type)
+        else:
+            append_unique(items, proxy)
+    return "、".join(items)
 
 
 def append_unique(items, value):
