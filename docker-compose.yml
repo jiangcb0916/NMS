@@ -3,7 +3,7 @@ services:
     build:
       context: .
     image: 172.16.80.126/nms/nms-web:latest
-    container_name: sangfor-nms-next
+    container_name: nms-web
     restart: unless-stopped
     env_file:
       - .env
