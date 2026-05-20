@@ -208,6 +208,8 @@ const osdwanState = {
     userPages: 0,
     userTotal: 0,
     userQuery: '',
+    userPeopleCount: 0,
+    userMultiAccountCount: 0,
 };
 
 function showView(viewId, navId, titleKey) {
@@ -354,12 +356,11 @@ async function loadOsdwan(options = {}) {
     const usersBody = document.getElementById('osdwan-users-table-body');
     const usersSummary = document.getElementById('osdwan-users-summary');
     if (usersBody) {
-        usersBody.innerHTML = '<tr><td colspan="6">加载中</td></tr>';
+        usersBody.innerHTML = '<tr><td colspan="7">加载中</td></tr>';
     }
     if (usersSummary) {
         usersSummary.textContent = '加载中';
     }
-    renderOsdwanPeople([], '加载中');
     renderOsdwanUserPager();
     try {
         const params = new URLSearchParams({
@@ -395,6 +396,8 @@ function renderOsdwanPage(data) {
     osdwanState.userPages = userPagination.pages || 0;
     osdwanState.userTotal = userPagination.total || 0;
     osdwanState.userQuery = data.user_query ?? osdwanState.userQuery;
+    osdwanState.userPeopleCount = data.user_people_count || 0;
+    osdwanState.userMultiAccountCount = data.user_multi_account_count || 0;
     const searchControl = document.getElementById('osdwan-user-search');
     if (searchControl) {
         searchControl.value = osdwanState.userQuery;
@@ -408,6 +411,7 @@ function renderOsdwanPage(data) {
         ? `${data.service || 'WANFlow OSDWAN'} · ${data.queried_at || '-'} · 部分接口异常`
         : `${data.service || 'WANFlow OSDWAN'} · ${data.queried_at || '-'}`;
     document.getElementById('osdwan-user-count').textContent = data.user_count ?? 0;
+    document.getElementById('osdwan-person-count').textContent = data.user_people_count ?? 0;
     document.getElementById('osdwan-all-latest').textContent = renderOsdwanLatest(data.all_stats?.latest);
     document.getElementById('osdwan-node-latest').textContent = renderOsdwanLatest(data.node?.stats?.latest);
     document.getElementById('osdwan-all-source').textContent = `最近 ${renderOsdwanPeriod(data.all_period)} · 样本 ${data.all_stats?.sample_count ?? 0} 个`;
@@ -422,13 +426,13 @@ function renderOsdwanPage(data) {
         {key: 'upload_mbps', label: '上行', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.12)'},
     ]);
     renderOsdwanUsers(data.users || [], errors.users || '', userPagination);
-    renderOsdwanPeople(data.user_people || []);
     renderOsdwanUserPager();
 }
 
 function renderOsdwanError(message, data = {}) {
     document.getElementById('osdwan-source').textContent = message;
     document.getElementById('osdwan-user-count').textContent = data.user_count ?? '-';
+    document.getElementById('osdwan-person-count').textContent = data.user_people_count ?? '-';
     document.getElementById('osdwan-all-latest').textContent = '-';
     document.getElementById('osdwan-node-latest').textContent = '-';
     document.getElementById('osdwan-all-source').textContent = message;
@@ -442,9 +446,10 @@ function renderOsdwanError(message, data = {}) {
         {key: 'upload_mbps', label: '上行', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.12)'},
     ]);
     renderOsdwanUsers(data.users || [], message);
-    renderOsdwanPeople([], message);
     osdwanState.userPages = 0;
     osdwanState.userTotal = 0;
+    osdwanState.userPeopleCount = 0;
+    osdwanState.userMultiAccountCount = 0;
     renderOsdwanUserPager();
 }
 
@@ -473,7 +478,7 @@ function renderOsdwanUsers(users, errorMessage = '', pagination = {}) {
             summary.textContent = errorMessage;
         }
         if (body) {
-            body.innerHTML = `<tr><td colspan="6" class="error-text">${escapeHtml(errorMessage)}</td></tr>`;
+            body.innerHTML = `<tr><td colspan="7" class="error-text">${escapeHtml(errorMessage)}</td></tr>`;
         }
         return;
     }
@@ -483,20 +488,22 @@ function renderOsdwanUsers(users, errorMessage = '', pagination = {}) {
         const page = pagination.page || osdwanState.userPage;
         const pages = pagination.pages || osdwanState.userPages || 1;
         const prefix = osdwanState.userQuery ? '筛选后共' : '共';
+        const splitText = `关联人员 ${osdwanState.userPeopleCount} 个，组合账号 ${osdwanState.userMultiAccountCount} 个`;
         summary.textContent = total
-            ? `${prefix} ${total} 个用户，当前第 ${page}/${pages} 页，显示 ${returned} 个`
-            : `${prefix} 0 个用户，当前显示 0 个`;
+            ? `${prefix} ${total} 个用户，当前第 ${page}/${pages} 页，显示 ${returned} 个，${splitText}`
+            : `${prefix} 0 个用户，当前显示 0 个，${splitText}`;
     }
     if (!body) {
         return;
     }
     if (!users.length) {
-        body.innerHTML = '<tr><td colspan="6">暂无用户数据</td></tr>';
+        body.innerHTML = '<tr><td colspan="7">暂无用户数据</td></tr>';
         return;
     }
     body.innerHTML = users.map((user) => `
         <tr>
             <td>${escapeHtml(user.username || user.id || '-')}</td>
+            <td>${renderPersonChips(user.people || [])}</td>
             <td>${escapeHtml(user.display_name || '-')}</td>
             <td>${escapeHtml(user.email || '-')}</td>
             <td>${escapeHtml(user.role || '-')}</td>
@@ -506,39 +513,15 @@ function renderOsdwanUsers(users, errorMessage = '', pagination = {}) {
     `).join('');
 }
 
-function renderOsdwanPeople(people, message = '') {
-    const body = document.getElementById('osdwan-people-table-body');
-    const summary = document.getElementById('osdwan-people-summary');
-    if (message) {
-        if (summary) {
-            summary.textContent = message;
-        }
-        if (body) {
-            body.innerHTML = `<tr><td colspan="6" class="error-text">${escapeHtml(message)}</td></tr>`;
-        }
-        return;
+function renderPersonChips(people) {
+    const names = Array.isArray(people) ? people.filter(Boolean) : [];
+    if (!names.length) {
+        return '-';
     }
-    if (summary) {
-        const prefix = osdwanState.userQuery ? '筛选后拆分出' : '拆分出';
-        summary.textContent = `${prefix} ${people.length} 个姓名`;
-    }
-    if (!body) {
-        return;
-    }
-    if (!people.length) {
-        body.innerHTML = '<tr><td colspan="6">暂无拆分统计</td></tr>';
-        return;
-    }
-    body.innerHTML = people.map((person) => `
-        <tr>
-            <td>${escapeHtml(person.name || '-')}</td>
-            <td>${escapeHtml(person.accounts || '-')}</td>
-            <td>${escapeHtml(person.account_count ?? '-')}</td>
-            <td>${escapeHtml(person.emails || '-')}</td>
-            <td>${escapeHtml(person.roles || '-')}</td>
-            <td>${escapeHtml(person.statuses || '-')}</td>
-        </tr>
-    `).join('');
+    const chipClass = names.length > 1 ? 'person-chip' : 'person-chip single';
+    return `<div class="person-chip-row">${names.map((name) => (
+        `<span class="${chipClass}">${escapeHtml(name)}</span>`
+    )).join('')}</div>`;
 }
 
 function renderOsdwanUserPager() {

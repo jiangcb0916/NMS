@@ -76,6 +76,7 @@ def osdwan_overview():
         "user_query": user_query,
         "user_people": user_people,
         "user_people_count": len(user_people),
+        "user_multi_account_count": users_result["multi_account_count"] if users_result is not None else 0,
         "errors": errors,
         "all_stats": all_stats,
         "node": {
@@ -173,9 +174,13 @@ def normalize_users(payload):
     for index, row in enumerate(rows, start=1):
         if not isinstance(row, dict):
             continue
+        username = string_value(first_value(row, ["username", "account", "userName", "name", "phone", "mobile", "email"]))
+        people = split_person_names(username)
         users.append({
             "id": string_value(first_value(row, ["id", "user_id", "uid"]) or index),
-            "username": string_value(first_value(row, ["username", "account", "userName", "name", "phone", "mobile", "email"])),
+            "username": username,
+            "people": people,
+            "person_count": len(people),
             "display_name": string_value(first_value(row, ["display_name", "nickname", "real_name", "realName", "full_name", "face_cert_name", "name"])),
             "email": string_value(first_value(row, ["email", "mail"])),
             "role": string_value(first_value(row, ["role", "roles", "role_name", "roleName", "type"])),
@@ -206,6 +211,7 @@ def load_user_collection(client, page, per_page, query):
         "users": page_users,
         "pagination": local_pagination,
         "people": summarize_user_people(filtered_users),
+        "multi_account_count": sum(1 for user in filtered_users if len(user.get("people") or []) > 1),
     }
 
 
@@ -581,6 +587,7 @@ def default_overview(configured):
         },
         "user_people": [],
         "user_people_count": 0,
+        "user_multi_account_count": 0,
         "errors": {},
         "all_stats": normalize_bandwidth_stats({}),
         "node": {

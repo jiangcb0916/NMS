@@ -471,8 +471,10 @@ def main():
         assert osdwan_data["user_count"] == 2
         assert osdwan_data["user_pagination"]["returned"] == 2
         assert osdwan_data["users"][0]["username"] == "alice/amy"
+        assert osdwan_data["users"][0]["people"] == ["alice", "amy"]
         assert osdwan_data["users"][0]["role"] == "admin"
         assert osdwan_data["user_people_count"] == 3
+        assert osdwan_data["user_multi_account_count"] == 1
         assert osdwan_data["user_people"][0]["name"] == "alice"
         assert osdwan_data["all_stats"]["sample_count"] == 2
         assert osdwan_data["all_stats"]["latest"]["download_mbps"] == 180

@@ -306,6 +306,11 @@ select {
     color: var(--accent);
 }
 
+.metric-icon.people {
+    background: #fef3c7;
+    color: #92400e;
+}
+
 .metric-icon.devices {
     background: #e8eefc;
     color: var(--blue);
@@ -753,6 +758,10 @@ select {
     margin-top: 14px;
 }
 
+.metric-grid.compact.osdwan-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .inline-form {
     display: grid;
     grid-template-columns: repeat(4, minmax(120px, 1fr)) auto;
@@ -862,17 +871,6 @@ select {
     font-size: 18px;
 }
 
-.osdwan-people-section {
-    margin-top: 18px;
-    padding-top: 16px;
-    border-top: 1px solid var(--panel-border);
-}
-
-.osdwan-people-header h3 {
-    margin: 0;
-    font-size: 18px;
-}
-
 .switch-stat-strip {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -954,6 +952,33 @@ tr.selected-row {
 .stacked-cell small {
     color: var(--muted);
     font-size: 12px;
+}
+
+.person-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 140px;
+}
+
+.person-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    border: 1px solid #bde6e2;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 0 8px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.person-chip.single {
+    border-color: var(--panel-border);
+    background: #f7fafb;
+    color: var(--muted);
 }
 
 .utilization-cell {
