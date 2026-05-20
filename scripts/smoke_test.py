@@ -20,6 +20,7 @@ from app.modules.access_control import name_cache as access_control_name_cache
 from app.modules.access_control import routes as access_control_routes
 from app.modules.dashboard import routes as dashboard_routes
 from app.modules.firewall import routes as firewall_routes
+from app.modules.osdwan import routes as osdwan_routes
 from app.modules.switches import routes as switch_routes
 from app.modules.wireless import routes as wireless_routes
 
@@ -424,6 +425,89 @@ def main():
     finally:
         wireless_routes.PrometheusClient = original_prometheus_client
         switch_routes.PrometheusClient = original_switch_prometheus_client
+
+    class FakeOsdwanResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    def fake_osdwan_get(url, params=None, headers=None, timeout=15):
+        assert headers["Authorization"] == "Bearer smoke-token"
+        assert headers["Origin"] == "https://console.wanflow.com"
+        if url.endswith("/api/user"):
+            assert params == {"page": 1, "per_page": 200, "no_cache": 1}
+            return FakeOsdwanResponse({"data": [
+                {"id": 1, "name": "alice/amy", "email": "alice@example.com", "roles": ["admin"], "face_verified": True},
+                {"id": 2, "name": "bob", "email": "bob@example.com", "roles": ["user"], "face_verified": False},
+            ], "pagination": {"total": 2, "per_page": 200, "current_page": 1, "last_page": 1}})
+        if url.endswith("/api/Saas/all-network-stats"):
+            assert params["period"] == "1day"
+            return FakeOsdwanResponse({"data": [
+                {"time": 1760000000, "download_mbps": 120, "upload_mbps": 40},
+                {"time": 1760000300, "download_mbps": 180, "upload_mbps": 60},
+            ]})
+        if url.endswith("/api/Saas/network-stats/2168"):
+            assert params == {"period": "6hours", "view_type": "total"}
+            return FakeOsdwanResponse({"data": {"list": [
+                {"timestamp": 1760000000, "rx_bps": 90000000, "tx_bps": 30000000},
+                {"timestamp": 1760000300, "rx_bps": 150000000, "tx_bps": 50000000},
+            ]}})
+        raise AssertionError(url)
+
+    original_osdwan_get = osdwan_routes.requests.get
+    app.config["OSDWAN_TOKEN"] = "smoke-token"
+    app.config["OSDWAN_NODE_NAME"] = "办公开发"
+    osdwan_routes.requests.get = fake_osdwan_get
+    try:
+        osdwan_response = client.get("/api/osdwan/overview")
+        assert osdwan_response.status_code == 200, osdwan_response.get_data(as_text=True)
+        osdwan_data = osdwan_response.get_json()["data"]
+        assert osdwan_data["configured"] is True
+        assert osdwan_data["user_count"] == 2
+        assert osdwan_data["user_pagination"]["returned"] == 2
+        assert osdwan_data["users"][0]["username"] == "alice/amy"
+        assert osdwan_data["users"][0]["role"] == "admin"
+        assert osdwan_data["user_people_count"] == 3
+        assert osdwan_data["user_people"][0]["name"] == "alice"
+        assert osdwan_data["all_stats"]["sample_count"] == 2
+        assert osdwan_data["all_stats"]["latest"]["download_mbps"] == 180
+        assert osdwan_data["node"]["name"] == "办公开发"
+        assert osdwan_data["node"]["stats"]["latest"]["upload_mbps"] == 50
+
+        osdwan_search_response = client.get("/api/osdwan/overview?user_q=bob")
+        assert osdwan_search_response.status_code == 200, osdwan_search_response.get_data(as_text=True)
+        osdwan_search = osdwan_search_response.get_json()["data"]
+        assert osdwan_search["user_count"] == 1
+        assert osdwan_search["user_query"] == "bob"
+        assert osdwan_search["users"][0]["username"] == "bob"
+        assert osdwan_search["user_people_count"] == 1
+
+        class FakeOsdwanErrorResponse(FakeOsdwanResponse):
+            status_code = 500
+
+            def raise_for_status(self):
+                raise osdwan_routes.requests.HTTPError(response=self)
+
+        def fake_osdwan_partial_get(url, params=None, headers=None, timeout=15):
+            if url.endswith("/api/user"):
+                return FakeOsdwanErrorResponse({"message": "Redis snapshot failed"})
+            return fake_osdwan_get(url, params=params, headers=headers, timeout=timeout)
+
+        osdwan_routes.requests.get = fake_osdwan_partial_get
+        osdwan_partial_response = client.get("/api/osdwan/overview")
+        assert osdwan_partial_response.status_code == 200, osdwan_partial_response.get_data(as_text=True)
+        osdwan_partial = osdwan_partial_response.get_json()
+        assert osdwan_partial["code"] == 0
+        assert osdwan_partial["data"]["user_count"] == 0
+        assert "HTTP 500" in osdwan_partial["data"]["errors"]["users"]
+        assert osdwan_partial["data"]["all_stats"]["sample_count"] == 2
+    finally:
+        osdwan_routes.requests.get = original_osdwan_get
 
     wireless_routes.wireless_user_cache["data"] = [
         {

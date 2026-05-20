@@ -331,6 +331,11 @@ select {
     color: #0e7490;
 }
 
+.metric-icon.osdwan {
+    background: #f0f9ff;
+    color: #0369a1;
+}
+
 .metric-icon.clients {
     background: #eef2ff;
     color: #4f46e5;
@@ -633,6 +638,14 @@ select {
     background: var(--blue);
 }
 
+.legend-dot.osdwan-download {
+    background: var(--blue);
+}
+
+.legend-dot.osdwan-upload {
+    background: var(--accent);
+}
+
 .info-list {
     margin: 16px 0 0;
 }
@@ -728,6 +741,7 @@ select {
 .devices-panel,
 .wireless-panel,
 .switches-panel,
+.osdwan-panel,
 .clients-panel,
 .cache-panel,
 .firewall-bandwidth-panel {
@@ -762,6 +776,10 @@ select {
 }
 
 .toolbar-row.wireless-ap-toolbar {
+    grid-template-columns: minmax(260px, 1fr) 120px;
+}
+
+.toolbar-row.osdwan-users-toolbar {
     grid-template-columns: minmax(260px, 1fr) 120px;
 }
 
@@ -840,6 +858,17 @@ select {
 }
 
 .switch-detail-header h3 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.osdwan-people-section {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--panel-border);
+}
+
+.osdwan-people-header h3 {
     margin: 0;
     font-size: 18px;
 }

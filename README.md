@@ -10,6 +10,7 @@
 - 客户端列表：分页、搜索、姓名解析
 - 缓存管理：姓名缓存、设备系统缓存状态
 - 无线控制器状态：AP、SSID、在线用户等固定 Prometheus label 查询数据
+- OSDWAN 监控：WANFlow 用户列表、整体 SaaS 服务带宽、办公开发节点带宽图
 - 交换机监控：Prometheus targets 中 `job=sw` 的采集状态、端口状态、端口速率和历史流量趋势
 - 外部接口状态检查：深信服 AC、无线 Prometheus 查询、用户名 Metrics、钉钉、联软准入
 - 旧数据迁移：用户、设备、姓名缓存、设备系统缓存
@@ -101,6 +102,11 @@ SWITCH_PROMETHEUS_JOB=sw
 SWITCH_TARGET_GROUP=pool-sw
 SWITCH_TRAFFIC_RATE_WINDOW=5m
 SWITCH_PORT_EXCLUDE_PATTERNS=^(InLoopBack|LoopBack|NULL|Console|MEth|Vlanif|Vlan-interface|Stack-Port|Aux|Tunnel)
+OSDWAN_API_BASE_URL=https://api.wanflow.com
+OSDWAN_CONSOLE_ORIGIN=https://console.wanflow.com
+OSDWAN_TOKEN=
+OSDWAN_NODE_ID=2168
+OSDWAN_NODE_NAME=办公开发
 ACCESS_CONTROL_API_URL=
 ACCESS_CONTROL_API_USERNAME=
 ACCESS_CONTROL_API_PASSWORD=
@@ -216,6 +222,12 @@ docker compose exec web python scripts/migrate_legacy_data.py
 | `HUAWEI_FIREWALL_TARGET` | 华为防火墙 SNMP 目标地址 | `172.16.100.3` |
 | `HUAWEI_PROMETHEUS_JOB` | 华为防火墙 Prometheus 查询使用的 `job` label | `USG` |
 | `HUAWEI_TOTAL_BANDWIDTH_MBPS` | 防火墙总带宽容量，Dashboard 计算占用率使用 | `450` |
+| `OSDWAN_API_BASE_URL` | WANFlow OSDWAN API 基础地址 | `https://api.wanflow.com` |
+| `OSDWAN_CONSOLE_ORIGIN` | WANFlow 控制台 Origin/Referer | `https://console.wanflow.com` |
+| `OSDWAN_TOKEN` | WANFlow 后台 API Bearer Token，仅后端读取 | 空 |
+| `OSDWAN_NODE_ID` | OSDWAN 节点 ID | `2168` |
+| `OSDWAN_NODE_NAME` | OSDWAN 节点展示名 | `办公开发` |
+| `OSDWAN_NODE_STATS_PERIOD` | OSDWAN 节点带宽图周期 | `6hours` |
 | `ACCESS_CONTROL_API_URL` | 联软准入接口地址 | 空 |
 | `ACCESS_CONTROL_API_USERNAME` | 联软准入账号 | 空 |
 | `ACCESS_CONTROL_API_PASSWORD` | 联软准入密码 | 空 |

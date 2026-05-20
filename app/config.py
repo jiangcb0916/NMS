@@ -95,6 +95,16 @@ class Config:
     HUAWEI_PROMETHEUS_JOB = os.environ.get("HUAWEI_PROMETHEUS_JOB", "USG")
     HUAWEI_TOTAL_BANDWIDTH_MBPS = env_int("HUAWEI_TOTAL_BANDWIDTH_MBPS", 450)
 
+    OSDWAN_API_BASE_URL = os.environ.get("OSDWAN_API_BASE_URL", "https://api.wanflow.com")
+    OSDWAN_CONSOLE_ORIGIN = os.environ.get("OSDWAN_CONSOLE_ORIGIN", "https://console.wanflow.com")
+    OSDWAN_TOKEN = os.environ.get("OSDWAN_TOKEN")
+    OSDWAN_TIMEOUT = env_int("OSDWAN_TIMEOUT", 15)
+    OSDWAN_ALL_STATS_PERIOD = os.environ.get("OSDWAN_ALL_STATS_PERIOD", "1day")
+    OSDWAN_NODE_ID = os.environ.get("OSDWAN_NODE_ID", "2168")
+    OSDWAN_NODE_NAME = os.environ.get("OSDWAN_NODE_NAME", "办公开发")
+    OSDWAN_NODE_STATS_PERIOD = os.environ.get("OSDWAN_NODE_STATS_PERIOD", "6hours")
+    OSDWAN_NODE_VIEW_TYPE = os.environ.get("OSDWAN_NODE_VIEW_TYPE", "total")
+
     ACCESS_CONTROL_API_URL = os.environ.get("ACCESS_CONTROL_API_URL")
     ACCESS_CONTROL_API_USERNAME = os.environ.get("ACCESS_CONTROL_API_USERNAME")
     ACCESS_CONTROL_API_PASSWORD = os.environ.get("ACCESS_CONTROL_API_PASSWORD")

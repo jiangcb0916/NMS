@@ -93,6 +93,7 @@ function showToast(message, type = 'info') {
 const viewTitles = {
     dashboard: ['仪表盘', '系统运行概览'],
     firewallBandwidth: ['防火墙带宽', '华为防火墙上下行趋势'],
+    osdwan: ['OSDWAN 监控', 'WANFlow 用户与带宽趋势'],
     switches: ['交换机监控', 'Prometheus 交换机目标状态'],
     wireless: ['无线控制器', 'AP、SSID 与无线用户状态'],
     devices: ['设备列表', '本地设备清单和在线状态'],
@@ -196,6 +197,17 @@ const firewallBandwidthState = {
     range: '6h',
     samples: [],
     latest: null,
+};
+
+const osdwanState = {
+    data: null,
+    allSamples: [],
+    nodeSamples: [],
+    userPage: 1,
+    userPerPage: 10,
+    userPages: 0,
+    userTotal: 0,
+    userQuery: '',
 };
 
 function showView(viewId, navId, titleKey) {
@@ -323,6 +335,222 @@ function renderFirewallRangeButtons() {
     document.querySelectorAll('[data-firewall-range]').forEach((button) => {
         button.classList.toggle('active', button.dataset.firewallRange === firewallBandwidthState.range);
     });
+}
+
+async function loadOsdwan(options = {}) {
+    osdwanState.userPage = options.userPage || osdwanState.userPage;
+    osdwanState.userPerPage = options.userPerPage || osdwanState.userPerPage;
+    osdwanState.userQuery = options.query !== undefined ? options.query : osdwanState.userQuery;
+    const searchControl = document.getElementById('osdwan-user-search');
+    const pageSizeControl = document.getElementById('osdwan-user-page-size');
+    if (options.query === undefined && searchControl) {
+        osdwanState.userQuery = searchControl.value.trim();
+    }
+    if (options.userPerPage === undefined && pageSizeControl) {
+        osdwanState.userPerPage = Number(pageSizeControl.value);
+    }
+
+    showView('osdwan-panel', 'osdwan-nav', 'osdwan');
+    const usersBody = document.getElementById('osdwan-users-table-body');
+    const usersSummary = document.getElementById('osdwan-users-summary');
+    if (usersBody) {
+        usersBody.innerHTML = '<tr><td colspan="6">加载中</td></tr>';
+    }
+    if (usersSummary) {
+        usersSummary.textContent = '加载中';
+    }
+    renderOsdwanPeople([], '加载中');
+    renderOsdwanUserPager();
+    try {
+        const params = new URLSearchParams({
+            user_page: osdwanState.userPage,
+            user_per_page: osdwanState.userPerPage,
+            user_q: osdwanState.userQuery,
+        });
+        const result = await apiGetResult(`/api/osdwan/overview?${params.toString()}`);
+        const data = result.data || {};
+        if (result.code !== 0) {
+            renderOsdwanError(result.message || 'OSDWAN 数据加载失败', data);
+            return;
+        }
+        renderOsdwanPage(data);
+        if (options.toast) {
+            showToast('OSDWAN 数据已刷新');
+        }
+    } catch (error) {
+        renderOsdwanError(error.message);
+    }
+}
+
+function renderOsdwanPage(data) {
+    osdwanState.data = data;
+    osdwanState.allSamples = data.all_stats?.samples || [];
+    osdwanState.nodeSamples = data.node?.stats?.samples || [];
+    const errors = data.errors || {};
+    const errorText = Object.values(errors).filter(Boolean).join('；');
+    const userPagination = data.user_pagination || {};
+
+    osdwanState.userPage = userPagination.page || osdwanState.userPage;
+    osdwanState.userPerPage = userPagination.per_page || osdwanState.userPerPage;
+    osdwanState.userPages = userPagination.pages || 0;
+    osdwanState.userTotal = userPagination.total || 0;
+    osdwanState.userQuery = data.user_query ?? osdwanState.userQuery;
+    const searchControl = document.getElementById('osdwan-user-search');
+    if (searchControl) {
+        searchControl.value = osdwanState.userQuery;
+    }
+    const pageSizeControl = document.getElementById('osdwan-user-page-size');
+    if (pageSizeControl) {
+        pageSizeControl.value = String(osdwanState.userPerPage);
+    }
+
+    document.getElementById('osdwan-source').textContent = errorText
+        ? `${data.service || 'WANFlow OSDWAN'} · ${data.queried_at || '-'} · 部分接口异常`
+        : `${data.service || 'WANFlow OSDWAN'} · ${data.queried_at || '-'}`;
+    document.getElementById('osdwan-user-count').textContent = data.user_count ?? 0;
+    document.getElementById('osdwan-all-latest').textContent = renderOsdwanLatest(data.all_stats?.latest);
+    document.getElementById('osdwan-node-latest').textContent = renderOsdwanLatest(data.node?.stats?.latest);
+    document.getElementById('osdwan-all-source').textContent = `最近 ${renderOsdwanPeriod(data.all_period)} · 样本 ${data.all_stats?.sample_count ?? 0} 个`;
+    document.getElementById('osdwan-node-source').textContent = `${data.node?.name || '办公开发'} · 最近 ${renderOsdwanPeriod(data.node?.period)} · 样本 ${data.node?.stats?.sample_count ?? 0} 个`;
+
+    drawBandwidthChart('osdwan-all-chart', osdwanState.allSamples, [
+        {key: 'download_mbps', label: '下行', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)'},
+        {key: 'upload_mbps', label: '上行', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.12)'},
+    ]);
+    drawBandwidthChart('osdwan-node-chart', osdwanState.nodeSamples, [
+        {key: 'download_mbps', label: '下行', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)'},
+        {key: 'upload_mbps', label: '上行', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.12)'},
+    ]);
+    renderOsdwanUsers(data.users || [], errors.users || '', userPagination);
+    renderOsdwanPeople(data.user_people || []);
+    renderOsdwanUserPager();
+}
+
+function renderOsdwanError(message, data = {}) {
+    document.getElementById('osdwan-source').textContent = message;
+    document.getElementById('osdwan-user-count').textContent = data.user_count ?? '-';
+    document.getElementById('osdwan-all-latest').textContent = '-';
+    document.getElementById('osdwan-node-latest').textContent = '-';
+    document.getElementById('osdwan-all-source').textContent = message;
+    document.getElementById('osdwan-node-source').textContent = message;
+    drawBandwidthChart('osdwan-all-chart', [], [
+        {key: 'download_mbps', label: '下行', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)'},
+        {key: 'upload_mbps', label: '上行', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.12)'},
+    ]);
+    drawBandwidthChart('osdwan-node-chart', [], [
+        {key: 'download_mbps', label: '下行', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)'},
+        {key: 'upload_mbps', label: '上行', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.12)'},
+    ]);
+    renderOsdwanUsers(data.users || [], message);
+    renderOsdwanPeople([], message);
+    osdwanState.userPages = 0;
+    osdwanState.userTotal = 0;
+    renderOsdwanUserPager();
+}
+
+function renderOsdwanLatest(sample) {
+    if (!sample) {
+        return '-';
+    }
+    return `↓ ${sample.download_rate || '0 bps'} / ↑ ${sample.upload_rate || '0 bps'}`;
+}
+
+function renderOsdwanPeriod(period) {
+    const labels = {
+        '1day': '1 天',
+        '6hours': '6 小时',
+        '1hour': '1 小时',
+        '24hours': '24 小时',
+    };
+    return labels[period] || period || '-';
+}
+
+function renderOsdwanUsers(users, errorMessage = '', pagination = {}) {
+    const body = document.getElementById('osdwan-users-table-body');
+    const summary = document.getElementById('osdwan-users-summary');
+    if (errorMessage) {
+        if (summary) {
+            summary.textContent = errorMessage;
+        }
+        if (body) {
+            body.innerHTML = `<tr><td colspan="6" class="error-text">${escapeHtml(errorMessage)}</td></tr>`;
+        }
+        return;
+    }
+    if (summary) {
+        const total = pagination.total ?? users.length;
+        const returned = pagination.returned ?? users.length;
+        const page = pagination.page || osdwanState.userPage;
+        const pages = pagination.pages || osdwanState.userPages || 1;
+        const prefix = osdwanState.userQuery ? '筛选后共' : '共';
+        summary.textContent = total
+            ? `${prefix} ${total} 个用户，当前第 ${page}/${pages} 页，显示 ${returned} 个`
+            : `${prefix} 0 个用户，当前显示 0 个`;
+    }
+    if (!body) {
+        return;
+    }
+    if (!users.length) {
+        body.innerHTML = '<tr><td colspan="6">暂无用户数据</td></tr>';
+        return;
+    }
+    body.innerHTML = users.map((user) => `
+        <tr>
+            <td>${escapeHtml(user.username || user.id || '-')}</td>
+            <td>${escapeHtml(user.display_name || '-')}</td>
+            <td>${escapeHtml(user.email || '-')}</td>
+            <td>${escapeHtml(user.role || '-')}</td>
+            <td>${escapeHtml(user.status || '-')}</td>
+            <td>${escapeHtml(user.last_login || '-')}</td>
+        </tr>
+    `).join('');
+}
+
+function renderOsdwanPeople(people, message = '') {
+    const body = document.getElementById('osdwan-people-table-body');
+    const summary = document.getElementById('osdwan-people-summary');
+    if (message) {
+        if (summary) {
+            summary.textContent = message;
+        }
+        if (body) {
+            body.innerHTML = `<tr><td colspan="6" class="error-text">${escapeHtml(message)}</td></tr>`;
+        }
+        return;
+    }
+    if (summary) {
+        const prefix = osdwanState.userQuery ? '筛选后拆分出' : '拆分出';
+        summary.textContent = `${prefix} ${people.length} 个姓名`;
+    }
+    if (!body) {
+        return;
+    }
+    if (!people.length) {
+        body.innerHTML = '<tr><td colspan="6">暂无拆分统计</td></tr>';
+        return;
+    }
+    body.innerHTML = people.map((person) => `
+        <tr>
+            <td>${escapeHtml(person.name || '-')}</td>
+            <td>${escapeHtml(person.accounts || '-')}</td>
+            <td>${escapeHtml(person.account_count ?? '-')}</td>
+            <td>${escapeHtml(person.emails || '-')}</td>
+            <td>${escapeHtml(person.roles || '-')}</td>
+            <td>${escapeHtml(person.statuses || '-')}</td>
+        </tr>
+    `).join('');
+}
+
+function renderOsdwanUserPager() {
+    const pageText = document.getElementById('osdwan-users-page');
+    const prev = document.getElementById('osdwan-users-prev');
+    const next = document.getElementById('osdwan-users-next');
+    if (!pageText || !prev || !next) {
+        return;
+    }
+    pageText.textContent = osdwanState.userPages ? `${osdwanState.userPage} / ${osdwanState.userPages}` : '-';
+    prev.disabled = osdwanState.userPage <= 1;
+    next.disabled = osdwanState.userPages === 0 || osdwanState.userPage >= osdwanState.userPages;
 }
 
 function drawBandwidthChart(canvasId, samples, series) {
@@ -1908,12 +2136,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (refreshSummary) {
         refreshSummary.addEventListener('click', () => {
             const firewallPanel = document.getElementById('firewall-bandwidth-panel');
+            const osdwanPanel = document.getElementById('osdwan-panel');
             const switchesPanel = document.getElementById('switches-panel');
             const task = firewallPanel && !firewallPanel.hidden
                 ? loadFirewallBandwidth({toast: false})
-                : switchesPanel && !switchesPanel.hidden
-                    ? loadSwitches()
-                : loadSummary();
+                : osdwanPanel && !osdwanPanel.hidden
+                    ? loadOsdwan()
+                    : switchesPanel && !switchesPanel.hidden
+                        ? loadSwitches()
+                        : loadSummary();
             task
                 .then(() => showToast('已刷新'))
                 .catch((error) => showToast(error.message, 'error'));
@@ -1935,6 +2166,14 @@ document.addEventListener('DOMContentLoaded', () => {
         firewallBandwidthNav.addEventListener('click', (event) => {
             event.preventDefault();
             loadFirewallBandwidth();
+        });
+    }
+
+    const osdwanNav = document.getElementById('osdwan-nav');
+    if (osdwanNav) {
+        osdwanNav.addEventListener('click', (event) => {
+            event.preventDefault();
+            loadOsdwan();
         });
     }
 
@@ -1991,6 +2230,43 @@ document.addEventListener('DOMContentLoaded', () => {
         reloadFirewallBandwidth.addEventListener('click', () => loadFirewallBandwidth({toast: true}));
     }
 
+    const reloadOsdwan = document.getElementById('reload-osdwan');
+    if (reloadOsdwan) {
+        reloadOsdwan.addEventListener('click', () => loadOsdwan({toast: true}));
+    }
+
+    const osdwanUserSearch = document.getElementById('osdwan-user-search');
+    if (osdwanUserSearch) {
+        osdwanUserSearch.addEventListener('input', debounce((event) => {
+            loadOsdwan({userPage: 1, query: event.target.value.trim()});
+        }));
+    }
+
+    const osdwanUserPageSize = document.getElementById('osdwan-user-page-size');
+    if (osdwanUserPageSize) {
+        osdwanUserPageSize.addEventListener('change', (event) => {
+            loadOsdwan({userPage: 1, userPerPage: Number(event.target.value)});
+        });
+    }
+
+    const osdwanUsersPrev = document.getElementById('osdwan-users-prev');
+    if (osdwanUsersPrev) {
+        osdwanUsersPrev.addEventListener('click', () => {
+            if (osdwanState.userPage > 1) {
+                loadOsdwan({userPage: osdwanState.userPage - 1});
+            }
+        });
+    }
+
+    const osdwanUsersNext = document.getElementById('osdwan-users-next');
+    if (osdwanUsersNext) {
+        osdwanUsersNext.addEventListener('click', () => {
+            if (osdwanState.userPage < osdwanState.userPages) {
+                loadOsdwan({userPage: osdwanState.userPage + 1});
+            }
+        });
+    }
+
     const reloadSwitches = document.getElementById('reload-switches');
     if (reloadSwitches) {
         reloadSwitches.addEventListener('click', () => loadSwitches({page: switchState.page}));
@@ -2018,6 +2294,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 sample_count: firewallBandwidthState.samples.length,
                 range: firewallBandwidthState.range,
             });
+        }
+        const osdwanPanel = document.getElementById('osdwan-panel');
+        if (osdwanPanel && !osdwanPanel.hidden && osdwanState.data) {
+            renderOsdwanPage(osdwanState.data);
         }
         const switchDetail = document.getElementById('switch-detail-section');
         if (switchDetail && !switchDetail.hidden) {

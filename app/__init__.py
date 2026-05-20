@@ -51,6 +51,7 @@ def register_blueprints(app):
     from app.modules.devices.routes import device_bp
     from app.modules.firewall.routes import firewall_bp
     from app.modules.integrations.status_routes import integration_status_bp
+    from app.modules.osdwan.routes import osdwan_bp
     from app.modules.sangfor_ac.routes import legacy_status_bp, sangfor_ac_bp
     from app.modules.switches.routes import switch_bp
     from app.modules.users.routes import user_bp
@@ -65,6 +66,7 @@ def register_blueprints(app):
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(device_bp)
     app.register_blueprint(firewall_bp)
+    app.register_blueprint(osdwan_bp)
     app.register_blueprint(integration_status_bp)
     app.register_blueprint(sangfor_ac_bp)
     app.register_blueprint(legacy_status_bp)
