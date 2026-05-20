@@ -93,6 +93,7 @@ function showToast(message, type = 'info') {
 const viewTitles = {
     dashboard: ['仪表盘', '系统运行概览'],
     firewallBandwidth: ['防火墙带宽', '华为防火墙上下行趋势'],
+    trafficAnalysis: ['流量分析', '深信服 AC 用户流速排行'],
     osdwan: ['OSDWAN 监控', '用户与带宽趋势'],
     switches: ['交换机监控', 'Prometheus 交换机目标状态'],
     wireless: ['无线控制器', 'AP、SSID 与无线用户状态'],
@@ -113,6 +114,17 @@ const clientState = {
         online: 0,
         offline: 0
     }
+};
+
+const trafficAnalysisState = {
+    page: 1,
+    perPage: 10,
+    query: '',
+    line: '0',
+    pages: 0,
+    total: 0,
+    allTotal: 0,
+    top: null,
 };
 
 const switchState = {
@@ -344,6 +356,82 @@ function renderFirewallRangeButtons() {
     document.querySelectorAll('[data-firewall-range]').forEach((button) => {
         button.classList.toggle('active', button.dataset.firewallRange === firewallBandwidthState.range);
     });
+}
+
+async function loadTrafficAnalysis(options = {}) {
+    trafficAnalysisState.page = options.page || trafficAnalysisState.page;
+    trafficAnalysisState.perPage = options.perPage || trafficAnalysisState.perPage;
+    trafficAnalysisState.query = options.query !== undefined ? options.query : trafficAnalysisState.query;
+    trafficAnalysisState.line = options.line !== undefined ? options.line : trafficAnalysisState.line;
+
+    showView('traffic-analysis-panel', 'traffic-analysis-nav', 'trafficAnalysis');
+    const body = document.getElementById('traffic-analysis-table-body');
+    const summary = document.getElementById('traffic-analysis-summary');
+    body.innerHTML = '<tr><td colspan="9">加载中</td></tr>';
+    summary.textContent = '加载中';
+
+    try {
+        const params = new URLSearchParams({
+            page: trafficAnalysisState.page,
+            per_page: trafficAnalysisState.perPage,
+            q: trafficAnalysisState.query,
+            line: trafficAnalysisState.line,
+        });
+        if (trafficAnalysisState.top) {
+            params.set('top', trafficAnalysisState.top);
+        }
+        const result = await apiGetResult(`/api/sangfor/user-rank?${params.toString()}`);
+        const data = result.data || {};
+        trafficAnalysisState.page = data.page || trafficAnalysisState.page;
+        trafficAnalysisState.pages = data.pages || 0;
+        trafficAnalysisState.total = data.total || 0;
+        trafficAnalysisState.allTotal = data.all_total || 0;
+        trafficAnalysisState.line = data.line || trafficAnalysisState.line;
+        trafficAnalysisState.top = data.top || trafficAnalysisState.top;
+        renderTrafficAnalysisMetrics(data.summary || {});
+        renderTrafficAnalysisPager();
+
+        const source = document.getElementById('traffic-analysis-source');
+        if (source) {
+            source.textContent = data.source
+                ? `深信服 AC ${data.source} · Top ${trafficAnalysisState.top}`
+                : `深信服 AC 用户流速排行 · Top ${trafficAnalysisState.top}`;
+        }
+
+        if (result.code !== 0) {
+            body.innerHTML = `<tr><td colspan="9">${escapeHtml(result.message || '请求失败')}</td></tr>`;
+            summary.textContent = '无法获取流量排行';
+            return;
+        }
+
+        const items = data.items || [];
+        summary.textContent = `${renderTrafficAnalysisSummaryPrefix()}共 ${data.total || 0} 条，当前显示 ${data.returned || items.length} 条，接口返回 ${data.all_total || 0} 条，${renderClientNameCacheSummary(data.name_cache_refresh)}`;
+        if (!items.length) {
+            body.innerHTML = '<tr><td colspan="9">暂无数据</td></tr>';
+            return;
+        }
+        body.innerHTML = items.map((item) => `
+            <tr>
+                <td class="rank-cell">#${escapeHtml(item.rank || '-')}</td>
+                <td class="user-cell">${escapeHtml(item.name || '-')}</td>
+                <td>${renderTrafficAnalysisRealName(item)}</td>
+                <td>${escapeHtml(item.ip || '-')}</td>
+                <td class="rate-cell">${escapeHtml(item.up_rate || '0 bps')}</td>
+                <td class="rate-cell">${escapeHtml(item.down_rate || '0 bps')}</td>
+                <td>${escapeHtml(item.session ?? 0)}</td>
+                <td>${renderTrafficAnalysisStatus(item)}</td>
+                <td class="traffic-app-cell">${renderTrafficAnalysisApps(item.apps || [])}</td>
+            </tr>
+        `).join('');
+
+        if (options.toast) {
+            showToast('流量排行已刷新');
+        }
+    } catch (error) {
+        body.innerHTML = `<tr><td colspan="9">${escapeHtml(error.message)}</td></tr>`;
+        summary.textContent = '加载失败';
+        showToast(error.message, 'error');
+    }
 }
 
 async function loadOsdwan(options = {}) {
@@ -1885,6 +1973,77 @@ function renderClientNameCacheSummary(cache) {
     return '姓名使用缓存';
 }
 
+function renderTrafficAnalysisMetrics(summary) {
+    document.getElementById('traffic-user-count').textContent = summary.user_count ?? 0;
+    document.getElementById('traffic-status-count').textContent = `${summary.normal_count ?? 0}/${summary.frozen_count ?? 0}`;
+    document.getElementById('traffic-total-rate').textContent = `↓ ${summary.down_rate || '0 bps'} / ↑ ${summary.up_rate || '0 bps'}`;
+    document.getElementById('traffic-session-count').textContent = summary.session_count ?? 0;
+}
+
+function renderTrafficAnalysisPager() {
+    const pageText = document.getElementById('traffic-analysis-page');
+    const prev = document.getElementById('traffic-analysis-prev');
+    const next = document.getElementById('traffic-analysis-next');
+    if (!pageText || !prev || !next) {
+        return;
+    }
+    pageText.textContent = trafficAnalysisState.pages ? `${trafficAnalysisState.page} / ${trafficAnalysisState.pages}` : '-';
+    prev.disabled = trafficAnalysisState.page <= 1;
+    next.disabled = trafficAnalysisState.pages === 0 || trafficAnalysisState.page >= trafficAnalysisState.pages;
+}
+
+function renderTrafficAnalysisSummaryPrefix() {
+    return trafficAnalysisState.line && trafficAnalysisState.line !== '0'
+        ? `线路 ${trafficAnalysisState.line}，`
+        : '';
+}
+
+function renderTrafficAnalysisStatus(item) {
+    return item.status
+        ? '<span class="status-badge ok">正常</span>'
+        : '<span class="status-badge warn">冻结</span>';
+}
+
+function renderTrafficAnalysisRealName(item) {
+    if (item.real_name) {
+        return `<span class="person-chip single">${escapeHtml(item.real_name)}</span>`;
+    }
+    if (item.name_is_mobile) {
+        return '<span class="status-badge">解析中</span>';
+    }
+    return '-';
+}
+
+function renderTrafficAnalysisApps(apps) {
+    const visibleApps = (apps || []).filter((app) => app && app.app).slice(0, 3);
+    if (!visibleApps.length) {
+        return '-';
+    }
+    return `
+        <div class="traffic-app-stack">
+            ${visibleApps.map((app) => `
+                <div class="traffic-app-item">
+                    <div class="traffic-app-meta">
+                        <strong title="${escapeHtml(app.app || '-')}">${escapeHtml(app.app || '-')}</strong>
+                        <span>${escapeHtml(renderTrafficAppValue(app))}</span>
+                    </div>
+                    <div class="traffic-app-bar">
+                        <i style="width: ${clampPercent(app.percent)}%"></i>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderTrafficAppValue(app) {
+    const percent = Number(app.percent);
+    if (Number.isFinite(percent) && percent > 0) {
+        return `${percent.toFixed(percent >= 10 ? 0 : 1)}%`;
+    }
+    return app.total_rate || '';
+}
+
 function showWirelessSubview(view) {
     wirelessActiveView = view;
     const apView = document.getElementById('wireless-ap-view');
@@ -2323,15 +2482,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (refreshSummary) {
         refreshSummary.addEventListener('click', () => {
             const firewallPanel = document.getElementById('firewall-bandwidth-panel');
+            const trafficAnalysisPanel = document.getElementById('traffic-analysis-panel');
             const osdwanPanel = document.getElementById('osdwan-panel');
             const switchesPanel = document.getElementById('switches-panel');
             const task = firewallPanel && !firewallPanel.hidden
                 ? loadFirewallBandwidth({toast: false})
-                : osdwanPanel && !osdwanPanel.hidden
-                    ? loadOsdwanMetrics({charts: false})
-                    : switchesPanel && !switchesPanel.hidden
-                        ? loadSwitches()
-                        : loadSummary();
+                : trafficAnalysisPanel && !trafficAnalysisPanel.hidden
+                    ? loadTrafficAnalysis({page: trafficAnalysisState.page})
+                    : osdwanPanel && !osdwanPanel.hidden
+                        ? loadOsdwanMetrics({charts: false})
+                        : switchesPanel && !switchesPanel.hidden
+                            ? loadSwitches()
+                            : loadSummary();
             task
                 .then(() => showToast('已刷新'))
                 .catch((error) => showToast(error.message, 'error'));
@@ -2353,6 +2515,14 @@ document.addEventListener('DOMContentLoaded', () => {
         firewallBandwidthNav.addEventListener('click', (event) => {
             event.preventDefault();
             loadFirewallBandwidth();
+        });
+    }
+
+    const trafficAnalysisNav = document.getElementById('traffic-analysis-nav');
+    if (trafficAnalysisNav) {
+        trafficAnalysisNav.addEventListener('click', (event) => {
+            event.preventDefault();
+            loadTrafficAnalysis({page: 1});
         });
     }
 
@@ -2417,9 +2587,53 @@ document.addEventListener('DOMContentLoaded', () => {
         reloadFirewallBandwidth.addEventListener('click', () => loadFirewallBandwidth({toast: true}));
     }
 
+    const reloadTrafficAnalysis = document.getElementById('reload-traffic-analysis');
+    if (reloadTrafficAnalysis) {
+        reloadTrafficAnalysis.addEventListener('click', () => loadTrafficAnalysis({page: trafficAnalysisState.page, toast: true}));
+    }
+
     const reloadOsdwan = document.getElementById('reload-osdwan');
     if (reloadOsdwan) {
         reloadOsdwan.addEventListener('click', () => loadOsdwanMetrics({toast: true, charts: false}));
+    }
+
+    const trafficAnalysisSearch = document.getElementById('traffic-analysis-search');
+    if (trafficAnalysisSearch) {
+        trafficAnalysisSearch.addEventListener('input', debounce((event) => {
+            loadTrafficAnalysis({page: 1, query: event.target.value.trim()});
+        }));
+    }
+
+    const trafficLineFilter = document.getElementById('traffic-line-filter');
+    if (trafficLineFilter) {
+        trafficLineFilter.addEventListener('change', (event) => {
+            loadTrafficAnalysis({page: 1, line: event.target.value});
+        });
+    }
+
+    const trafficAnalysisPageSize = document.getElementById('traffic-analysis-page-size');
+    if (trafficAnalysisPageSize) {
+        trafficAnalysisPageSize.addEventListener('change', (event) => {
+            loadTrafficAnalysis({page: 1, perPage: Number(event.target.value)});
+        });
+    }
+
+    const trafficAnalysisPrev = document.getElementById('traffic-analysis-prev');
+    if (trafficAnalysisPrev) {
+        trafficAnalysisPrev.addEventListener('click', () => {
+            if (trafficAnalysisState.page > 1) {
+                loadTrafficAnalysis({page: trafficAnalysisState.page - 1});
+            }
+        });
+    }
+
+    const trafficAnalysisNext = document.getElementById('traffic-analysis-next');
+    if (trafficAnalysisNext) {
+        trafficAnalysisNext.addEventListener('click', () => {
+            if (trafficAnalysisState.page < trafficAnalysisState.pages) {
+                loadTrafficAnalysis({page: trafficAnalysisState.page + 1});
+            }
+        });
     }
 
     const osdwanUserSearch = document.getElementById('osdwan-user-search');

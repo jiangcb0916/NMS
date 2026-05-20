@@ -90,6 +90,7 @@ ADMIN_PASSWORD=replace-with-admin-password
 SANGFOR_AC_HOST=
 SANGFOR_AC_PORT=9999
 SANGFOR_AC_SHARED_SECRET=
+SANGFOR_AC_USER_RANK_TOP=10000
 DINGTALK_APPKEY=
 DINGTALK_APPSECRET=
 PROMETHEUS_QUERY_URL=http://172.16.80.125:9090/api/v1/query
@@ -204,6 +205,7 @@ docker compose exec web python scripts/migrate_legacy_data.py
 | `SANGFOR_AC_HOST` | 深信服 AC 地址 | 空 |
 | `SANGFOR_AC_PORT` | 深信服 AC 端口 | `9999` |
 | `SANGFOR_AC_SHARED_SECRET` | 深信服 AC 共享密钥 | 空 |
+| `SANGFOR_AC_USER_RANK_TOP` | 流量分析默认拉取 TopN，设大一些用于近似全量排行 | `10000` |
 | `DINGTALK_APPKEY` | 钉钉应用 AppKey | 空 |
 | `DINGTALK_APPSECRET` | 钉钉应用 AppSecret | 空 |
 | `PROMETHEUS_QUERY_URL` | Prometheus 查询接口，无线 AP/SSID/在线用户主数据使用此接口 | `http://172.16.80.125:9090/api/v1/query` |

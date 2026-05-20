@@ -351,6 +351,26 @@ select {
     color: #4f46e5;
 }
 
+.metric-icon.traffic {
+    background: #f0f9ff;
+    color: #0369a1;
+}
+
+.metric-icon.online {
+    background: #ecfdf5;
+    color: #047857;
+}
+
+.metric-icon.bandwidth {
+    background: #eef2ff;
+    color: #4f46e5;
+}
+
+.metric-icon.session {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
 .metric-label {
     color: var(--muted);
     font-size: 13px;
@@ -853,6 +873,7 @@ select {
 .wireless-panel,
 .switches-panel,
 .osdwan-panel,
+.traffic-analysis-panel,
 .clients-panel,
 .cache-panel,
 .firewall-bandwidth-panel {
@@ -866,6 +887,10 @@ select {
 
 .metric-grid.compact.osdwan-metrics {
     grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.metric-grid.compact.traffic-analysis-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .inline-form {
@@ -896,6 +921,10 @@ select {
 
 .toolbar-row.osdwan-users-toolbar {
     grid-template-columns: minmax(260px, 1fr) 150px 120px;
+}
+
+.toolbar-row.traffic-analysis-toolbar {
+    grid-template-columns: minmax(260px, 1fr) 140px 120px;
 }
 
 .toolbar-row.switch-toolbar {
@@ -1167,6 +1196,84 @@ td {
 th {
     color: var(--muted);
     font-weight: 600;
+}
+
+.rank-cell {
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.rate-cell {
+    font-variant-numeric: tabular-nums;
+}
+
+.muted-line {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.user-cell {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.traffic-analysis-metrics #traffic-total-rate {
+    font-size: 20px;
+    line-height: 1.25;
+}
+
+.traffic-app-cell {
+    min-width: 280px;
+    white-space: normal;
+}
+
+.traffic-app-stack {
+    display: grid;
+    gap: 8px;
+    max-width: 380px;
+}
+
+.traffic-app-item {
+    display: grid;
+    gap: 4px;
+}
+
+.traffic-app-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.traffic-app-meta strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+}
+
+.traffic-app-meta span {
+    color: var(--muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.traffic-app-bar {
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #eef3f6;
+}
+
+.traffic-app-bar i {
+    display: block;
+    height: 100%;
+    min-width: 3px;
+    border-radius: inherit;
+    background: #6ed2cf;
 }
 
 .table-sort-button {

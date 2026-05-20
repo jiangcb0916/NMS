@@ -265,6 +265,103 @@
     </section>
 </section>
 
+<section class="panel traffic-analysis-panel app-view" id="traffic-analysis-panel" hidden>
+    <div class="panel-header">
+        <div>
+            <h2>流量分析</h2>
+            <p class="panel-subtitle" id="traffic-analysis-source">深信服 AC 用户流速排行</p>
+        </div>
+        <div class="button-row">
+            <button class="small-button" id="reload-traffic-analysis" type="button">
+                <i class="bi bi-arrow-clockwise"></i>
+                <span>刷新</span>
+            </button>
+        </div>
+    </div>
+
+    <section class="metric-grid compact traffic-analysis-metrics">
+        <article class="metric">
+            <div class="metric-icon traffic"><i class="bi bi-people"></i></div>
+            <div>
+                <div class="metric-label">排行用户</div>
+                <div class="metric-value" id="traffic-user-count">-</div>
+            </div>
+        </article>
+        <article class="metric">
+            <div class="metric-icon online"><i class="bi bi-check2-circle"></i></div>
+            <div>
+                <div class="metric-label">正常 / 冻结</div>
+                <div class="metric-value" id="traffic-status-count">-</div>
+            </div>
+        </article>
+        <article class="metric">
+            <div class="metric-icon bandwidth"><i class="bi bi-arrow-down-up"></i></div>
+            <div>
+                <div class="metric-label">上下行</div>
+                <div class="metric-value" id="traffic-total-rate">-</div>
+            </div>
+        </article>
+        <article class="metric">
+            <div class="metric-icon session"><i class="bi bi-diagram-2"></i></div>
+            <div>
+                <div class="metric-label">会话数</div>
+                <div class="metric-value" id="traffic-session-count">-</div>
+            </div>
+        </article>
+    </section>
+
+    <div class="toolbar-row traffic-analysis-toolbar">
+        <input id="traffic-analysis-search" placeholder="搜索用户、姓名、IP、应用">
+        <select id="traffic-line-filter" aria-label="线路">
+            <option value="0" selected>全部线路</option>
+            <option value="1">线路 1</option>
+            <option value="2">线路 2</option>
+            <option value="3">线路 3</option>
+            <option value="4">线路 4</option>
+        </select>
+        <select id="traffic-analysis-page-size" aria-label="每页数量">
+            <option value="10" selected>10 / 页</option>
+            <option value="20">20 / 页</option>
+            <option value="50">50 / 页</option>
+            <option value="100">100 / 页</option>
+        </select>
+    </div>
+    <div class="list-summary" id="traffic-analysis-summary">-</div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>排名</th>
+                    <th>用户</th>
+                    <th>姓名</th>
+                    <th>IP</th>
+                    <th>上行</th>
+                    <th>下行</th>
+                    <th>会话</th>
+                    <th>状态</th>
+                    <th>应用明细</th>
+                </tr>
+            </thead>
+            <tbody id="traffic-analysis-table-body">
+                <tr>
+                    <td colspan="9">暂无数据</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="pagination-row">
+        <button class="small-button" id="traffic-analysis-prev" type="button">
+            <i class="bi bi-chevron-left"></i>
+            <span>上一页</span>
+        </button>
+        <span id="traffic-analysis-page">-</span>
+        <button class="small-button" id="traffic-analysis-next" type="button">
+            <span>下一页</span>
+            <i class="bi bi-chevron-right"></i>
+        </button>
+    </div>
+</section>
+
 <section class="panel osdwan-panel app-view" id="osdwan-panel" hidden>
     <div class="panel-header">
         <div>

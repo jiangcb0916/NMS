@@ -21,6 +21,7 @@ from app.modules.access_control import routes as access_control_routes
 from app.modules.dashboard import routes as dashboard_routes
 from app.modules.firewall import routes as firewall_routes
 from app.modules.osdwan import routes as osdwan_routes
+from app.modules.sangfor_ac import routes as sangfor_ac_routes
 from app.modules.switches import routes as switch_routes
 from app.modules.wireless import routes as wireless_routes
 
@@ -130,6 +131,62 @@ def main():
         access_control_routes.AccessControlClient = original_access_control_client
         access_control_routes.DingTalkClient = original_dingtalk_client
         access_control_name_cache.DingTalkClient = original_name_cache_dingtalk_client
+
+    class FakeSangforACClient:
+        host = "172.16.100.4"
+        port = 9999
+
+        @property
+        def base_url(self):
+            return f"http://{self.host}:{self.port}"
+
+        def get_user_rank(self, top=10000, line="0"):
+            assert top == 10000
+            assert line == "0"
+            return {
+                "code": 0,
+                "message": "Successfully",
+                "data": [
+                    {
+                        "id": 0,
+                        "name": "13800000001",
+                        "group": "/研发",
+                        "ip": "192.0.2.41",
+                        "up": 1000,
+                        "down": 2000,
+                        "total": 3000,
+                        "session": 12,
+                        "status": True,
+                        "detail": {"data": [{"app": "访问网站", "percent": 100, "up": 1000, "down": 2000, "total": 3000}]},
+                    },
+                    {
+                        "id": 1,
+                        "name": "user-b",
+                        "group": "/财务",
+                        "ip": "192.0.2.42",
+                        "up": 10,
+                        "down": 20,
+                        "total": 30,
+                        "session": 1,
+                        "status": False,
+                        "detail": {"data": []},
+                    },
+                ],
+            }
+
+    original_sangfor_ac_client = sangfor_ac_routes.SangforACClient
+    sangfor_ac_routes.SangforACClient = FakeSangforACClient
+    try:
+        traffic_response = client.get("/api/sangfor/user-rank?q=张三&page=1&per_page=10&top=10000")
+        assert traffic_response.status_code == 200, traffic_response.get_data(as_text=True)
+        traffic_data = traffic_response.get_json()["data"]
+        assert traffic_data["total"] == 1
+        assert traffic_data["items"][0]["ip"] == "192.0.2.41"
+        assert traffic_data["items"][0]["real_name"] == "张三"
+        assert traffic_data["items"][0]["total_rate"] == "24 Kbps"
+        assert traffic_data["summary"]["session_count"] == 12
+    finally:
+        sangfor_ac_routes.SangforACClient = original_sangfor_ac_client
 
     class FakePrometheusClient:
         query_configured = True
