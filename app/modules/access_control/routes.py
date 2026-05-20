@@ -41,6 +41,8 @@ def client_list():
         department_rows.append(row)
 
     cached_names = valid_name_cache_map(extract_client_mobiles(department_rows)) if search else {}
+    if search:
+        cached_names = resolve_search_name_cache(department_rows, cached_names)
     filtered_rows = [
         row for row in department_rows
         if not search or row_matches(row, search, cached_real_name(row, cached_names))
@@ -171,6 +173,40 @@ def int_arg(name, default, minimum, maximum):
 def cached_real_name(row, cached_names):
     mobile = extract_mobile(row.get("strusername"))
     return cached_names.get(mobile)
+
+
+def resolve_search_name_cache(rows, cached_names):
+    resolved_names = dict(cached_names)
+    dingtalk = DingTalkClient()
+    if not dingtalk.configured:
+        return resolved_names
+
+    limit = search_name_resolve_limit()
+    if limit <= 0:
+        return resolved_names
+
+    resolved_count = 0
+    for mobile in extract_client_mobiles(rows):
+        if mobile in resolved_names:
+            continue
+        if resolved_count >= limit:
+            break
+        try:
+            real_name = dingtalk.get_name_by_mobile(mobile)
+        except Exception as exc:
+            current_app.logger.warning("搜索客户端姓名解析失败: %s %s", mobile, exc.__class__.__name__)
+            continue
+        resolved_count += 1
+        if real_name:
+            resolved_names[mobile] = real_name
+    return resolved_names
+
+
+def search_name_resolve_limit():
+    try:
+        return int(current_app.config.get("CLIENT_NAME_SEARCH_RESOLVE_LIMIT", 500))
+    except (TypeError, ValueError):
+        return 500
 
 
 def row_matches(row, keyword, real_name=None):

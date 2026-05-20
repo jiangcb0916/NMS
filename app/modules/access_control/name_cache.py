@@ -111,9 +111,10 @@ def refresh_client_name_cache_worker(app):
                     else:
                         mark_failed_mobile(mobile)
                 except Exception as exc:
-                    current_app.logger.warning("刷新客户端姓名缓存失败: %s %s", mobile, exc)
+                    error_name = exc.__class__.__name__
+                    current_app.logger.warning("刷新客户端姓名缓存失败: %s %s", mobile, error_name)
                     mark_failed_mobile(mobile)
-                    remember_refresh_error(str(exc))
+                    remember_refresh_error(error_name)
 
             remember_refresh_batch(len(mobiles), success_count)
 

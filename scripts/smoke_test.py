@@ -16,6 +16,7 @@ from app.extensions import db
 from app.models.base import now_local
 from app.models.cache import UserNameCache
 from app.models.user import User
+from app.modules.access_control import name_cache as access_control_name_cache
 from app.modules.access_control import routes as access_control_routes
 from app.modules.dashboard import routes as dashboard_routes
 from app.modules.firewall import routes as firewall_routes
@@ -85,7 +86,19 @@ def main():
             }
 
     original_access_control_client = access_control_routes.AccessControlClient
+    original_dingtalk_client = access_control_routes.DingTalkClient
+    original_name_cache_dingtalk_client = access_control_name_cache.DingTalkClient
     access_control_routes.AccessControlClient = FakeAccessControlClient
+    class FakeDingTalkClient:
+        configured = True
+
+        def get_name_by_mobile(self, mobile):
+            return {
+                "13800000002": "冯雪珂",
+            }.get(mobile)
+
+    access_control_routes.DingTalkClient = FakeDingTalkClient
+    access_control_name_cache.DingTalkClient = FakeDingTalkClient
     try:
         client_list_response = client.get("/api/access-control/client-list?q=windows&status=online&page=1&per_page=10")
         assert client_list_response.status_code == 200, client_list_response.get_data(as_text=True)
@@ -104,8 +117,17 @@ def main():
         assert name_search_data["total"] == 1
         assert name_search_data["client_list"][0]["username"] == "13800000001"
         assert name_search_data["client_list"][0]["real_name"] == "张三"
+
+        uncached_name_search_response = client.get("/api/access-control/client-list?q=冯雪珂&page=1&per_page=10")
+        assert uncached_name_search_response.status_code == 200, uncached_name_search_response.get_data(as_text=True)
+        uncached_name_search_data = uncached_name_search_response.get_json()["data"]
+        assert uncached_name_search_data["total"] == 1
+        assert uncached_name_search_data["client_list"][0]["username"] == "13800000002"
+        assert uncached_name_search_data["client_list"][0]["real_name"] == "冯雪珂"
     finally:
         access_control_routes.AccessControlClient = original_access_control_client
+        access_control_routes.DingTalkClient = original_dingtalk_client
+        access_control_name_cache.DingTalkClient = original_name_cache_dingtalk_client
 
     class FakePrometheusClient:
         query_configured = True
