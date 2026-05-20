@@ -37,27 +37,27 @@
             </div>
         </article>
         <article class="metric">
-            <div class="metric-icon switches"><i class="bi bi-diagram-3"></i></div>
+            <div class="metric-icon users"><i class="bi bi-people"></i></div>
             <div>
-                <div class="metric-label">交换机</div>
-                <div class="metric-value" id="metric-switches">-</div>
+                <div class="metric-label">OSDWAN 用户</div>
+                <div class="metric-value" id="metric-osdwan-users">-</div>
             </div>
         </article>
         <article class="metric">
-            <div class="metric-icon clients"><i class="bi bi-pc-display"></i></div>
+            <div class="metric-icon exit"><i class="bi bi-hdd-network"></i></div>
             <div>
-                <div class="metric-label">准入客户端</div>
-                <div class="metric-value" id="metric-access-clients">-</div>
+                <div class="metric-label">OSDWAN 出口</div>
+                <div class="metric-value" id="metric-osdwan-exits">-</div>
             </div>
         </article>
     </section>
 
     <section class="dashboard-grid">
+        <section class="dashboard-main-stack">
         <section class="panel firewall-dashboard-panel">
             <div class="panel-header">
                 <div>
                     <h2>华为防火墙带宽</h2>
-                    <p class="panel-subtitle" id="firewall-source">-</p>
                 </div>
                 <span class="status-pill" id="firewall-status">检查中</span>
             </div>
@@ -101,20 +101,73 @@
                     <strong id="firewall-unicom-download">-</strong>
                 </div>
             </div>
-            <dl class="inline-stats">
+        </section>
+
+        <section class="panel dashboard-osdwan-panel">
+            <div class="panel-header">
                 <div>
-                    <dt>CPU</dt>
-                    <dd id="firewall-cpu">-</dd>
+                    <h2>OSDWAN 带宽</h2>
                 </div>
+                <span class="status-pill" id="dashboard-osdwan-status">检查中</span>
+            </div>
+            <div class="dashboard-flow-list">
+                <div class="dashboard-flow-item">
+                    <div class="dashboard-flow-title">带宽统计</div>
+                    <div class="dashboard-flow-values">
+                        <span id="dashboard-osdwan-bandwidth-down">↓ -</span>
+                        <span id="dashboard-osdwan-bandwidth-up">↑ -</span>
+                    </div>
+                </div>
+                <div class="dashboard-flow-item">
+                    <div class="dashboard-flow-title">SaaS 流量</div>
+                    <div class="dashboard-flow-values">
+                        <span id="dashboard-osdwan-saas-down">↓ -</span>
+                        <span id="dashboard-osdwan-saas-up">↑ -</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+        </section>
+
+        <section class="panel dashboard-side-panel">
+            <div class="panel-header">
                 <div>
-                    <dt>内存</dt>
-                    <dd id="firewall-memory">-</dd>
+                    <h2>健康检查</h2>
+                    <p class="panel-subtitle">核心接口状态</p>
                 </div>
-                <div>
-                    <dt>总带宽</dt>
-                    <dd id="firewall-total-bandwidth">-</dd>
+            </div>
+            <div class="dashboard-health">
+                <div class="health-section-label">状态</div>
+                <div class="health-row">
+                    <span>防火墙</span>
+                    <strong id="health-firewall">-</strong>
                 </div>
-            </dl>
+                <div class="health-row">
+                    <span>交换机</span>
+                    <strong id="health-switches">-</strong>
+                </div>
+                <div class="health-row">
+                    <span>无线控制器</span>
+                    <strong id="health-wireless">-</strong>
+                </div>
+                <div class="health-row">
+                    <span>OSDWAN</span>
+                    <strong id="health-osdwan">-</strong>
+                </div>
+                <div class="health-section-label">防火墙资源</div>
+                <div class="health-row">
+                    <span>CPU</span>
+                    <strong id="health-firewall-cpu">-</strong>
+                </div>
+                <div class="health-row">
+                    <span>内存</span>
+                    <strong id="health-firewall-memory">-</strong>
+                </div>
+                <div class="health-row">
+                    <span>总带宽</span>
+                    <strong id="health-firewall-bandwidth">-</strong>
+                </div>
+            </div>
         </section>
 
     </section>
@@ -146,24 +199,13 @@
         <section class="panel top-panel">
             <div class="panel-header">
                 <div>
-                    <h2>AP 上下行 Top</h2>
-                    <p class="panel-subtitle">按 AP 实时速率排序</p>
+                    <h2>应用排行</h2>
+                    <p class="panel-subtitle" id="dashboard-app-rank-subtitle">来自流量分析应用明细</p>
                 </div>
             </div>
-            <div class="top-columns">
-                <div>
-                    <div class="top-column-title">上行</div>
-                    <ol class="traffic-list" id="ap-upload-top">
-                        <li class="empty-state">加载中</li>
-                    </ol>
-                </div>
-                <div>
-                    <div class="top-column-title">下行</div>
-                    <ol class="traffic-list" id="ap-download-top">
-                        <li class="empty-state">加载中</li>
-                    </ol>
-                </div>
-            </div>
+            <ol class="traffic-list app-rank-list" id="dashboard-app-rank">
+                <li class="empty-state">加载中</li>
+            </ol>
         </section>
     </section>
 

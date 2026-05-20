@@ -135,6 +135,7 @@ def main():
     class FakeSangforACClient:
         host = "172.16.100.4"
         port = 9999
+        configured = True
 
         @property
         def base_url(self):
@@ -792,15 +793,23 @@ def main():
         assert params["target"] == "172.16.100.3"
         return FakeFirewallResponse()
 
+    def fake_dashboard_get(url, params=None, headers=None, timeout=15):
+        if url.startswith("https://api.wanflow.com"):
+            return fake_osdwan_get(url, params=params, headers=headers, timeout=timeout)
+        return fake_firewall_get(url, params=params, timeout=timeout)
+
     original_prometheus_client = wireless_routes.PrometheusClient
     original_switch_prometheus_client = switch_routes.PrometheusClient
     original_firewall_get = firewall_routes.requests.get
     original_bandwidth_history = firewall_routes.bandwidth_history
     original_bandwidth_samples = list(firewall_routes.bandwidth_samples)
     original_dashboard_access_control_client = dashboard_routes.AccessControlClient
+    original_dashboard_osdwan_get = osdwan_routes.requests.get
+    original_dashboard_osdwan_post = osdwan_routes.requests.post
+    original_dashboard_sangfor_ac_client = sangfor_ac_routes.SangforACClient
     wireless_routes.PrometheusClient = FakePrometheusClient
     switch_routes.PrometheusClient = FakeSwitchPrometheusClient
-    firewall_routes.requests.get = fake_firewall_get
+    firewall_routes.requests.get = fake_dashboard_get
     firewall_routes.bandwidth_samples = []
     firewall_routes.bandwidth_history = {
         "time": time.time() - 10,
@@ -810,6 +819,9 @@ def main():
         "unicom_out": 1000000000,
     }
     dashboard_routes.AccessControlClient = FakeAccessControlClient
+    osdwan_routes.requests.get = fake_dashboard_get
+    osdwan_routes.requests.post = fake_osdwan_post
+    sangfor_ac_routes.SangforACClient = FakeSangforACClient
     try:
         overview_response = client.get("/api/dashboard/overview")
         assert overview_response.status_code == 200, overview_response.get_data(as_text=True)
@@ -823,6 +835,9 @@ def main():
         assert overview_data["switches"]["total"] == 2
         assert overview_data["switches"]["online"] == 1
         assert overview_data["wireless"]["wireless_users"] == 3
+        assert overview_data["osdwan"]["user_count"] == 2
+        assert overview_data["osdwan"]["proxy_status"]["online"] == 2
+        assert overview_data["traffic_apps"]["items"][0]["app"] == "访问网站"
         assert overview_data["tops"]["wireless_users"]["upload"][0]["value"] == "2 Mbps"
         assert overview_data["tops"]["aps"]["download"][0]["label"] == "AP-A"
 
@@ -841,6 +856,9 @@ def main():
         firewall_routes.bandwidth_history = original_bandwidth_history
         firewall_routes.bandwidth_samples = original_bandwidth_samples
         dashboard_routes.AccessControlClient = original_dashboard_access_control_client
+        osdwan_routes.requests.get = original_dashboard_osdwan_get
+        osdwan_routes.requests.post = original_dashboard_osdwan_post
+        sangfor_ac_routes.SangforACClient = original_dashboard_sangfor_ac_client
 
     create_device_response = client.post("/api/access-control/device-list", json={
         "username": "smoke-device",

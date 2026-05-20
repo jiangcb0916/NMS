@@ -208,6 +208,8 @@ let wirelessActiveView = 'aps';
 const OSDWAN_METRICS_REFRESH_MS = 60 * 1000;
 let osdwanMetricsAutoRefreshing = false;
 let trafficAnalysisRequestId = 0;
+let dashboardFirewallWarmupTimer = null;
+let dashboardFirewallWarmupRetries = 0;
 const firewallBandwidthState = {
     range: '6h',
     samples: [],
@@ -255,23 +257,25 @@ async function loadProfile() {
     }
 }
 
-async function loadSummary() {
+async function loadSummary(options = {}) {
     const data = await apiGet('/api/dashboard/overview');
     const summary = data.summary || {};
     const wireless = data.wireless || {};
-    const accessClients = data.access_clients || {};
+    const osdwan = data.osdwan || {};
     document.getElementById('metric-devices').textContent = `${summary.devices?.online ?? 0}/${summary.devices?.total ?? 0}`;
     document.getElementById('metric-wireless-users').textContent = wireless.wireless_users ?? 0;
     document.getElementById('metric-wireless-ap').textContent = wireless.ap_online ?? 0;
-    document.getElementById('metric-switches').textContent = data.switches?.configured
-        ? `${data.switches.online ?? 0}/${data.switches.total ?? 0}`
-        : '-';
-    document.getElementById('metric-access-clients').textContent = accessClients.total ?? 0;
+    document.getElementById('metric-osdwan-users').textContent = renderUserCapacity(osdwan.user_count, osdwan.user_capacity);
+    document.getElementById('metric-osdwan-exits').textContent = renderProxyStatus(osdwan.proxy_status);
     renderFirewallDashboard(data.firewall || {});
+    renderDashboardOsdwan(osdwan);
+    renderDashboardHealth(data);
+    renderDashboardAppRank(data.traffic_apps || {});
     renderTrafficTopList('wireless-user-upload-top', data.tops?.wireless_users?.upload || []);
     renderTrafficTopList('wireless-user-download-top', data.tops?.wireless_users?.download || []);
-    renderTrafficTopList('ap-upload-top', data.tops?.aps?.upload || []);
-    renderTrafficTopList('ap-download-top', data.tops?.aps?.download || []);
+    if (!options.skipFirewallWarmup) {
+        scheduleDashboardFirewallWarmup(data.firewall || {});
+    }
 }
 
 function renderFirewallDashboard(firewall) {
@@ -287,9 +291,6 @@ function renderFirewallDashboard(firewall) {
     status.textContent = configured ? (ok ? '正常' : '异常') : '未配置';
     status.classList.toggle('ok', configured && ok);
     status.classList.toggle('bad', configured && !ok);
-    document.getElementById('firewall-source').textContent = firewall.snmp_target
-        ? `SNMP 目标 ${firewall.snmp_target}`
-        : 'SNMP 目标未配置';
     document.getElementById('firewall-total-upload').textContent = formatMbps(totalUpload);
     document.getElementById('firewall-total-download').textContent = formatMbps(totalDownload);
     document.getElementById('firewall-upload-utilization').textContent = `${formatNumber(uploadUtilization, 1)}%`;
@@ -300,9 +301,109 @@ function renderFirewallDashboard(firewall) {
     document.getElementById('firewall-telecom-download').textContent = formatMbps(firewall.telecom_download);
     document.getElementById('firewall-unicom-upload').textContent = formatMbps(firewall.unicom_upload);
     document.getElementById('firewall-unicom-download').textContent = formatMbps(firewall.unicom_download);
-    document.getElementById('firewall-cpu').textContent = `${formatNumber(firewall.cpu_usage, 1)}%`;
-    document.getElementById('firewall-memory').textContent = `${formatNumber(firewall.memory_usage, 1)}%`;
-    document.getElementById('firewall-total-bandwidth').textContent = formatMbps(firewall.total_bandwidth);
+}
+
+function renderDashboardOsdwan(osdwan) {
+    const status = document.getElementById('dashboard-osdwan-status');
+    const bandwidth = osdwan.bandwidth_latest || {};
+    const saas = osdwan.saas_latest || {};
+
+    status.textContent = osdwan.configured ? (osdwan.ok ? '正常' : '异常') : '未配置';
+    status.classList.toggle('ok', Boolean(osdwan.configured && osdwan.ok));
+    status.classList.toggle('bad', Boolean(osdwan.configured && !osdwan.ok));
+    document.getElementById('dashboard-osdwan-bandwidth-down').textContent = `↓ ${bandwidth.download_rate || '-'}`;
+    document.getElementById('dashboard-osdwan-bandwidth-up').textContent = `↑ ${bandwidth.upload_rate || '-'}`;
+    document.getElementById('dashboard-osdwan-saas-down').textContent = `↓ ${saas.download_rate || '-'}`;
+    document.getElementById('dashboard-osdwan-saas-up').textContent = `↑ ${saas.upload_rate || '-'}`;
+}
+
+function renderDashboardHealth(data) {
+    const firewall = data.firewall || {};
+    renderHealthItem('health-firewall', firewall.configured, firewall.ok, firewall.configured ? '正常' : '未配置');
+    renderHealthItem('health-switches', data.switches?.configured, data.switches?.ok, data.switches?.configured ? `${data.switches?.online ?? 0}/${data.switches?.total ?? 0} UP` : '未配置');
+    renderHealthItem('health-wireless', data.wireless?.configured, data.wireless?.ok, data.wireless?.configured ? '正常' : '未配置');
+    renderHealthItem('health-osdwan', data.osdwan?.configured, data.osdwan?.ok, data.osdwan?.configured ? renderProxyStatus(data.osdwan?.proxy_status) : '未配置');
+    renderHealthItem('health-firewall-cpu', firewall.configured, firewall.ok, firewall.configured ? `${formatNumber(firewall.cpu_usage, 1)}%` : '未配置');
+    renderHealthItem('health-firewall-memory', firewall.configured, firewall.ok, firewall.configured ? `${formatNumber(firewall.memory_usage, 1)}%` : '未配置');
+    renderHealthItem('health-firewall-bandwidth', firewall.configured, firewall.ok, firewall.configured ? formatMbps(firewall.total_bandwidth) : '未配置');
+}
+
+function scheduleDashboardFirewallWarmup(firewall) {
+    const totalUpload = Number(firewall.total_upload || 0);
+    const totalDownload = Number(firewall.total_download || 0);
+    if (!firewall.configured || !firewall.ok || totalUpload > 0 || totalDownload > 0) {
+        dashboardFirewallWarmupRetries = 0;
+        if (dashboardFirewallWarmupTimer) {
+            window.clearTimeout(dashboardFirewallWarmupTimer);
+            dashboardFirewallWarmupTimer = null;
+        }
+        return;
+    }
+    if (dashboardFirewallWarmupTimer || dashboardFirewallWarmupRetries >= 2) {
+        return;
+    }
+    dashboardFirewallWarmupRetries += 1;
+    dashboardFirewallWarmupTimer = window.setTimeout(() => {
+        dashboardFirewallWarmupTimer = null;
+        const dashboardPanel = document.getElementById('dashboard-panel');
+        if (!dashboardPanel || dashboardPanel.hidden || document.visibilityState === 'hidden') {
+            return;
+        }
+        loadSummary()
+            .catch((error) => console.warn('仪表盘防火墙数据补刷失败', error));
+    }, 1800);
+}
+
+function renderHealthItem(elementId, configured, ok, text) {
+    const element = document.getElementById(elementId);
+    if (!element) {
+        return;
+    }
+    element.textContent = text || '-';
+    element.classList.toggle('ok', Boolean(configured && ok));
+    element.classList.toggle('bad', Boolean(configured && !ok));
+}
+
+function renderDashboardAppRank(payload) {
+    const list = document.getElementById('dashboard-app-rank');
+    const subtitle = document.getElementById('dashboard-app-rank-subtitle');
+    if (!list) {
+        return;
+    }
+    if (!payload.configured) {
+        if (subtitle) {
+            subtitle.textContent = '深信服 AC 未配置';
+        }
+        list.innerHTML = '<li class="empty-state">暂无数据</li>';
+        return;
+    }
+    if (!payload.ok) {
+        if (subtitle) {
+            subtitle.textContent = payload.error || '应用排行读取失败';
+        }
+        list.innerHTML = '<li class="empty-state">暂无数据</li>';
+        return;
+    }
+
+    const items = payload.items || [];
+    if (subtitle) {
+        subtitle.textContent = `共 ${payload.total_apps || 0} 个应用 · ${payload.user_count || 0} 个用户`;
+    }
+    if (!items.length) {
+        list.innerHTML = '<li class="empty-state">暂无数据</li>';
+        return;
+    }
+    list.innerHTML = items.map((item, index) => `
+        <li class="traffic-row app-rank-row">
+            <span class="traffic-rank">${index + 1}</span>
+            <span class="traffic-main">
+                <strong title="${escapeHtml(item.app || '-')}">${escapeHtml(item.app || '-')}</strong>
+                <small>下行 ${escapeHtml(item.down_rate || '0 bps')} / 上行 ${escapeHtml(item.up_rate || '0 bps')}</small>
+                <span class="app-rank-bar"><i style="width: ${clampPercent(item.percent)}%"></i></span>
+            </span>
+            <span class="traffic-value">${escapeHtml(item.total_rate || '0 bps')}</span>
+        </li>
+    `).join('');
 }
 
 async function loadFirewallBandwidth(options = {}) {
