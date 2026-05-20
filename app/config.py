@@ -75,10 +75,18 @@ class Config:
 
     PROMETHEUS_QUERY_URL = os.environ.get("PROMETHEUS_QUERY_URL", "http://172.16.80.125:9090/api/v1/query")
     PROMETHEUS_METRICS_URL = os.environ.get("PROMETHEUS_METRICS_URL", "http://172.16.80.125:9191/metrics")
+    PROMETHEUS_TARGETS_URL = os.environ.get("PROMETHEUS_TARGETS_URL", "http://172.16.80.125:9090/api/v1/targets")
     WIRELESS_INSTANCE = os.environ.get("WIRELESS_INSTANCE", "172.16.100.7")
     WIRELESS_JOB = os.environ.get("WIRELESS_JOB", "ND")
     WIRELESS_AUTH = os.environ.get("WIRELESS_AUTH", "nac")
     WIRELESS_MODULE = os.environ.get("WIRELESS_MODULE", "mgmt,private")
+    SWITCH_PROMETHEUS_JOB = os.environ.get("SWITCH_PROMETHEUS_JOB", "sw")
+    SWITCH_TARGET_GROUP = os.environ.get("SWITCH_TARGET_GROUP", "pool-sw")
+    SWITCH_TRAFFIC_RATE_WINDOW = os.environ.get("SWITCH_TRAFFIC_RATE_WINDOW", "5m")
+    SWITCH_PORT_EXCLUDE_PATTERNS = os.environ.get(
+        "SWITCH_PORT_EXCLUDE_PATTERNS",
+        r"^(InLoopBack|LoopBack|NULL|Console|MEth|Vlanif|Vlan-interface|Stack-Port|Aux|Tunnel)",
+    )
 
     HUAWEI_SNMP_URL = os.environ.get("HUAWEI_SNMP_URL", "http://172.16.80.125:9116/snmp")
     HUAWEI_SNMP_AUTH = os.environ.get("HUAWEI_SNMP_AUTH", "secure_v3")

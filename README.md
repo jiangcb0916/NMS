@@ -10,6 +10,7 @@
 - 客户端列表：分页、搜索、姓名解析
 - 缓存管理：姓名缓存、设备系统缓存状态
 - 无线控制器状态：AP、SSID、在线用户等固定 Prometheus label 查询数据
+- 交换机监控：Prometheus targets 中 `job=sw` 的采集状态、端口状态、端口速率和历史流量趋势
 - 外部接口状态检查：深信服 AC、无线 Prometheus 查询、用户名 Metrics、钉钉、联软准入
 - 旧数据迁移：用户、设备、姓名缓存、设备系统缓存
 
@@ -92,9 +93,14 @@ DINGTALK_APPKEY=
 DINGTALK_APPSECRET=
 PROMETHEUS_QUERY_URL=http://172.16.80.125:9090/api/v1/query
 PROMETHEUS_METRICS_URL=http://172.16.80.125:9191/metrics
+PROMETHEUS_TARGETS_URL=http://172.16.80.125:9090/api/v1/targets
 WIRELESS_INSTANCE=172.16.100.7
 WIRELESS_AUTH=nac
 WIRELESS_MODULE=mgmt,private
+SWITCH_PROMETHEUS_JOB=sw
+SWITCH_TARGET_GROUP=pool-sw
+SWITCH_TRAFFIC_RATE_WINDOW=5m
+SWITCH_PORT_EXCLUDE_PATTERNS=^(InLoopBack|LoopBack|NULL|Console|MEth|Vlanif|Vlan-interface|Stack-Port|Aux|Tunnel)
 ACCESS_CONTROL_API_URL=
 ACCESS_CONTROL_API_USERNAME=
 ACCESS_CONTROL_API_PASSWORD=
@@ -195,10 +201,15 @@ docker compose exec web python scripts/migrate_legacy_data.py
 | `DINGTALK_APPSECRET` | 钉钉应用 AppSecret | 空 |
 | `PROMETHEUS_QUERY_URL` | Prometheus 查询接口，无线 AP/SSID/在线用户主数据使用此接口 | `http://172.16.80.125:9090/api/v1/query` |
 | `PROMETHEUS_METRICS_URL` | Prometheus metrics 文本接口，仅用于 `/api/statistics/user-names` 解析用户名 | `http://172.16.80.125:9191/metrics` |
+| `PROMETHEUS_TARGETS_URL` | Prometheus targets API，交换机监控读取采集目标状态 | `http://172.16.80.125:9090/api/v1/targets` |
 | `WIRELESS_INSTANCE` | 无线固定查询 `instance` label | `172.16.100.7` |
 | `WIRELESS_JOB` | 无线固定查询 `job` label | `ND` |
 | `WIRELESS_AUTH` | 无线固定查询 `auth` label | `nac` |
 | `WIRELESS_MODULE` | 无线固定查询 `module` label | `mgmt,private` |
+| `SWITCH_PROMETHEUS_JOB` | 交换机 targets 过滤使用的 `job` label | `sw` |
+| `SWITCH_TARGET_GROUP` | 交换机 targets 页面分组标识，仅用于页面展示 | `pool-sw` |
+| `SWITCH_TRAFFIC_RATE_WINDOW` | 交换机端口/流量 Prometheus rate 计算窗口 | `5m` |
+| `SWITCH_PORT_EXCLUDE_PATTERNS` | 默认业务端口视图隐藏的端口名正则，多个规则用英文逗号分隔 | `^(InLoopBack\|LoopBack\|NULL\|Console\|MEth\|Vlanif\|Vlan-interface\|Stack-Port\|Aux\|Tunnel)` |
 | `HUAWEI_SNMP_URL` | 华为防火墙 SNMP exporter 接口，Dashboard 带宽卡片使用 | `http://172.16.80.125:9116/snmp` |
 | `HUAWEI_SNMP_AUTH` | 华为防火墙 SNMP exporter auth 参数 | `secure_v3` |
 | `HUAWEI_SNMP_MODULE` | 华为防火墙 SNMP exporter module 参数 | `hw_health` |

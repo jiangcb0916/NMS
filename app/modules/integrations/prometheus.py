@@ -9,6 +9,7 @@ class PrometheusClient:
         config = current_app.config
         self.query_url = config.get("PROMETHEUS_QUERY_URL")
         self.metrics_url = config.get("PROMETHEUS_METRICS_URL")
+        self.targets_url = config.get("PROMETHEUS_TARGETS_URL")
         self.timeout = 10
 
     @property
@@ -18,6 +19,10 @@ class PrometheusClient:
     @property
     def metrics_configured(self):
         return bool(self.metrics_url)
+
+    @property
+    def targets_configured(self):
+        return bool(self.targets_url)
 
     def query(self, expression):
         if not self.query_configured:
@@ -29,12 +34,42 @@ class PrometheusClient:
             return []
         return payload.get("data", {}).get("result", [])
 
+    def query_range(self, expression, start, end, step):
+        if not self.query_configured:
+            return []
+        response = requests.get(self.query_range_url(), params={
+            "query": expression,
+            "start": start,
+            "end": end,
+            "step": step,
+        }, timeout=self.timeout)
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("status") != "success":
+            return []
+        return payload.get("data", {}).get("result", [])
+
+    def query_range_url(self):
+        if self.query_url and self.query_url.endswith("/query"):
+            return self.query_url[:-len("/query")] + "/query_range"
+        return self.query_url
+
     def metrics_text(self):
         if not self.metrics_configured:
             return ""
         response = requests.get(self.metrics_url, timeout=self.timeout)
         response.raise_for_status()
         return response.text
+
+    def targets(self, state="active"):
+        if not self.targets_configured:
+            return []
+        response = requests.get(self.targets_url, params={"state": state}, timeout=self.timeout)
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("status") != "success":
+            return []
+        return payload.get("data", {}).get("activeTargets", [])
 
 
 def metric_value(result, default=0):

@@ -275,7 +275,7 @@ select {
 }
 
 .metric-grid.dashboard-metrics {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .metric,
@@ -324,6 +324,11 @@ select {
 .metric-icon.ap {
     background: #fff7ed;
     color: #c2410c;
+}
+
+.metric-icon.switches {
+    background: #ecfeff;
+    color: #0e7490;
 }
 
 .metric-icon.clients {
@@ -722,6 +727,7 @@ select {
 
 .devices-panel,
 .wireless-panel,
+.switches-panel,
 .clients-panel,
 .cache-panel,
 .firewall-bandwidth-panel {
@@ -757,6 +763,14 @@ select {
 
 .toolbar-row.wireless-ap-toolbar {
     grid-template-columns: minmax(260px, 1fr) 120px;
+}
+
+.toolbar-row.switch-toolbar {
+    grid-template-columns: minmax(260px, 1fr) 150px 120px;
+}
+
+.toolbar-row.switch-port-toolbar {
+    grid-template-columns: minmax(260px, 1fr) 130px 150px 120px;
 }
 
 .toolbar-row input,
@@ -809,6 +823,134 @@ select {
 
 .filter-chip.active strong {
     color: var(--accent);
+}
+
+.switch-detail-section {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--panel-border);
+}
+
+.switch-detail-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.switch-detail-header h3 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.switch-stat-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 14px 0 0;
+}
+
+.switch-stat-strip div {
+    min-width: 0;
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #fbfcfd;
+}
+
+.switch-stat-strip dt {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.switch-stat-strip dd {
+    margin: 4px 0 0;
+    overflow: hidden;
+    color: var(--text);
+    font-size: 20px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.switch-chart-section {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid #edf1f3;
+}
+
+.switch-traffic-chart {
+    margin-top: 10px;
+}
+
+.legend-dot.switch-in {
+    background: var(--blue);
+}
+
+.legend-dot.switch-out {
+    background: var(--accent);
+}
+
+.icon-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.icon-action:hover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+tr.selected-row {
+    background: #f1fbfa;
+}
+
+.stacked-cell {
+    display: grid;
+    gap: 2px;
+    min-width: 92px;
+}
+
+.stacked-cell small {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.utilization-cell {
+    position: relative;
+    min-width: 88px;
+    height: 24px;
+    overflow: hidden;
+    border: 1px solid var(--panel-border);
+    border-radius: 999px;
+    background: #f7fafb;
+}
+
+.utilization-cell span {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: rgba(15, 118, 110, 0.18);
+}
+
+.utilization-cell strong {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    height: 100%;
+    place-items: center;
+    color: var(--text);
+    font-size: 12px;
 }
 
 .pagination-row {
@@ -1187,6 +1329,7 @@ th {
         .chart-grid,
         .bandwidth-main,
         .bandwidth-grid,
+        .switch-stat-strip,
         .inline-stats,
     .inline-form,
     .toolbar-row,

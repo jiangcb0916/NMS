@@ -37,6 +37,13 @@
             </div>
         </article>
         <article class="metric">
+            <div class="metric-icon switches"><i class="bi bi-diagram-3"></i></div>
+            <div>
+                <div class="metric-label">交换机</div>
+                <div class="metric-value" id="metric-switches">-</div>
+            </div>
+        </article>
+        <article class="metric">
             <div class="metric-icon clients"><i class="bi bi-pc-display"></i></div>
             <div>
                 <div class="metric-label">准入客户端</div>
@@ -255,6 +262,228 @@
             </div>
             <canvas id="firewall-telecom-upload-chart" class="bandwidth-chart"></canvas>
         </section>
+    </section>
+</section>
+
+<section class="panel switches-panel app-view" id="switches-panel" hidden>
+    <div class="panel-header">
+        <div>
+            <h2>交换机监控</h2>
+            <p class="panel-subtitle" id="switches-source">Prometheus targets</p>
+        </div>
+        <div class="button-row">
+            <button class="small-button" id="reload-switches" type="button">
+                <i class="bi bi-arrow-clockwise"></i>
+                <span>刷新</span>
+            </button>
+        </div>
+    </div>
+    <section class="metric-grid compact">
+        <article class="metric">
+            <div class="metric-icon switches"><i class="bi bi-diagram-3"></i></div>
+            <div>
+                <div class="metric-label">交换机总数</div>
+                <div class="metric-value" id="switch-total">-</div>
+            </div>
+        </article>
+        <article class="metric">
+            <div class="metric-icon wireless"><i class="bi bi-check-circle"></i></div>
+            <div>
+                <div class="metric-label">在线</div>
+                <div class="metric-value" id="switch-online">-</div>
+            </div>
+        </article>
+        <article class="metric">
+            <div class="metric-icon devices"><i class="bi bi-clock-history"></i></div>
+            <div>
+                <div class="metric-label">平均采集耗时</div>
+                <div class="metric-value" id="switch-avg-duration">-</div>
+            </div>
+        </article>
+    </section>
+    <div class="toolbar-row switch-toolbar">
+        <input id="switch-search" placeholder="搜索 IP、厂商、模块、状态、错误">
+        <select id="switch-vendor-filter" aria-label="厂商筛选">
+            <option value="">全部厂商</option>
+        </select>
+        <select id="switch-page-size" aria-label="每页数量">
+            <option value="10" selected>10 / 页</option>
+            <option value="20">20 / 页</option>
+            <option value="50">50 / 页</option>
+            <option value="100">100 / 页</option>
+        </select>
+    </div>
+    <div class="list-summary" id="switches-summary">-</div>
+    <div class="quick-filter-row" id="switch-status-filter" aria-label="交换机状态筛选">
+        <button class="filter-chip active" type="button" data-switch-status="">
+            <span>全部</span>
+            <strong id="switch-status-all">0</strong>
+        </button>
+        <button class="filter-chip" type="button" data-switch-status="online">
+            <span>在线</span>
+            <strong id="switch-status-online">0</strong>
+        </button>
+        <button class="filter-chip" type="button" data-switch-status="offline">
+            <span>离线</span>
+            <strong id="switch-status-offline">0</strong>
+        </button>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>IP</th>
+                    <th>厂商</th>
+                    <th>模块</th>
+                    <th>状态</th>
+                    <th>最近采集</th>
+                    <th>采集耗时</th>
+                    <th>间隔</th>
+                    <th>错误</th>
+                    <th>端口</th>
+                </tr>
+            </thead>
+            <tbody id="switches-table-body">
+                <tr>
+                    <td colspan="9">暂无数据</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="pagination-row">
+        <button class="small-button" id="switches-prev" type="button">
+            <i class="bi bi-chevron-left"></i>
+            <span>上一页</span>
+        </button>
+        <span id="switches-page">-</span>
+        <button class="small-button" id="switches-next" type="button">
+            <span>下一页</span>
+            <i class="bi bi-chevron-right"></i>
+        </button>
+    </div>
+    <section class="switch-detail-section" id="switch-detail-section" hidden>
+        <div class="switch-detail-header">
+            <div>
+                <h3 id="switch-detail-title">端口与流量</h3>
+                <p class="panel-subtitle" id="switch-detail-subtitle">-</p>
+            </div>
+            <div class="button-row">
+                <button class="small-button" type="button" data-switch-traffic-range="5m">
+                    <span>5 分钟</span>
+                </button>
+                <button class="small-button" type="button" data-switch-traffic-range="15m">
+                    <span>15 分钟</span>
+                </button>
+                <button class="small-button" type="button" data-switch-traffic-range="30m">
+                    <span>30 分钟</span>
+                </button>
+                <button class="small-button active" type="button" data-switch-traffic-range="1h">
+                    <span>1 小时</span>
+                </button>
+                <button class="small-button" type="button" data-switch-traffic-range="3h">
+                    <span>3 小时</span>
+                </button>
+                <button class="small-button" type="button" data-switch-traffic-range="6h">
+                    <span>6 小时</span>
+                </button>
+                <button class="small-button" type="button" data-switch-traffic-range="12h">
+                    <span>12 小时</span>
+                </button>
+                <button class="small-button" type="button" data-switch-traffic-range="24h">
+                    <span>24 小时</span>
+                </button>
+                <button class="small-button" id="reload-switch-detail" type="button">
+                    <i class="bi bi-arrow-clockwise"></i>
+                    <span>刷新</span>
+                </button>
+                <button class="small-button" id="close-switch-detail" type="button">
+                    <i class="bi bi-chevron-up"></i>
+                    <span>收起</span>
+                </button>
+            </div>
+        </div>
+        <dl class="switch-stat-strip">
+            <div>
+                <dt>端口在线</dt>
+                <dd id="switch-port-online">-</dd>
+            </div>
+            <div>
+                <dt>总入方向</dt>
+                <dd id="switch-total-in">-</dd>
+            </div>
+            <div>
+                <dt>总出方向</dt>
+                <dd id="switch-total-out">-</dd>
+            </div>
+            <div>
+                <dt>最高端口</dt>
+                <dd id="switch-busiest-port">-</dd>
+            </div>
+        </dl>
+        <div class="switch-chart-section">
+            <div class="panel-header">
+                <div>
+                    <h2>总流量趋势</h2>
+                    <p class="panel-subtitle" id="switch-traffic-source">单位 Mbps</p>
+                </div>
+                <div class="chart-legend">
+                    <span><i class="legend-dot switch-in"></i>入方向</span>
+                    <span><i class="legend-dot switch-out"></i>出方向</span>
+                </div>
+            </div>
+            <canvas id="switch-traffic-chart" class="bandwidth-chart switch-traffic-chart"></canvas>
+        </div>
+        <div class="toolbar-row switch-port-toolbar">
+            <input id="switch-port-search" placeholder="搜索端口、描述、速率、状态">
+            <select id="switch-port-scope" aria-label="端口范围">
+                <option value="business" selected>业务端口</option>
+                <option value="all">全部端口</option>
+            </select>
+            <select id="switch-port-status" aria-label="端口状态筛选">
+                <option value="">全部端口</option>
+                <option value="online">在线端口</option>
+                <option value="offline">离线端口</option>
+            </select>
+            <select id="switch-port-page-size" aria-label="端口每页数量">
+                <option value="10" selected>10 / 页</option>
+                <option value="20">20 / 页</option>
+                <option value="50">50 / 页</option>
+                <option value="100">100 / 页</option>
+            </select>
+        </div>
+        <div class="list-summary" id="switch-ports-summary">-</div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>端口</th>
+                        <th>描述</th>
+                        <th>状态</th>
+                        <th>速率</th>
+                        <th>入方向</th>
+                        <th>出方向</th>
+                        <th>利用率</th>
+                        <th>错误</th>
+                    </tr>
+                </thead>
+                <tbody id="switch-ports-table-body">
+                    <tr>
+                        <td colspan="8">选择交换机后显示端口</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="pagination-row">
+            <button class="small-button" id="switch-ports-prev" type="button">
+                <i class="bi bi-chevron-left"></i>
+                <span>上一页</span>
+            </button>
+            <span id="switch-ports-page">-</span>
+            <button class="small-button" id="switch-ports-next" type="button">
+                <span>下一页</span>
+                <i class="bi bi-chevron-right"></i>
+            </button>
+        </div>
     </section>
 </section>
 

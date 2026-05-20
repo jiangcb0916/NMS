@@ -9,6 +9,7 @@ from app.models.user import User
 from app.modules.firewall.routes import default_payload as default_firewall_payload
 from app.modules.firewall.routes import fetch_huawei_firewall_status
 from app.modules.integrations.access_control import AccessControlClient
+from app.modules.switches import routes as switch_routes
 from app.modules.wireless import routes as wireless_routes
 
 
@@ -39,6 +40,7 @@ def overview():
     return success({
         "summary": summary_data,
         "access_clients": dashboard_access_clients_payload(),
+        "switches": dashboard_switches_payload(),
         "wireless": wireless_data,
         "firewall": dashboard_firewall_payload(),
         "tops": {
@@ -105,6 +107,29 @@ def dashboard_firewall_payload():
         payload["ok"] = False
         payload["error"] = str(exc)
         return payload
+
+
+def dashboard_switches_payload():
+    if not switch_routes.PrometheusClient().targets_configured:
+        return {"total": 0, "online": 0, "offline": 0, "configured": False, "ok": False, "error": "Prometheus targets 接口未配置"}
+
+    try:
+        client = switch_routes.PrometheusClient()
+        client.timeout = 5
+        switches = switch_routes.build_switch_targets(client)
+        online = sum(1 for item in switches if item.get("is_online"))
+        return {
+            "total": len(switches),
+            "online": online,
+            "offline": len(switches) - online,
+            "avg_scrape_duration": switch_routes.avg_scrape_duration(switches),
+            "configured": True,
+            "ok": True,
+            "error": "",
+        }
+    except Exception as exc:
+        current_app.logger.warning("Dashboard 交换机指标读取失败: %s", exc.__class__.__name__)
+        return {"total": 0, "online": 0, "offline": 0, "configured": True, "ok": False, "error": str(exc)}
 
 
 def dashboard_wireless_payload():

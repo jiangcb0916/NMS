@@ -93,6 +93,7 @@ function showToast(message, type = 'info') {
 const viewTitles = {
     dashboard: ['仪表盘', '系统运行概览'],
     firewallBandwidth: ['防火墙带宽', '华为防火墙上下行趋势'],
+    switches: ['交换机监控', 'Prometheus 交换机目标状态'],
     wireless: ['无线控制器', 'AP、SSID 与无线用户状态'],
     devices: ['设备列表', '本地设备清单和在线状态'],
     clients: ['客户端列表', '联软准入终端数据'],
@@ -111,6 +112,34 @@ const clientState = {
         online: 0,
         offline: 0
     }
+};
+
+const switchState = {
+    page: 1,
+    perPage: 10,
+    query: '',
+    vendor: '',
+    status: '',
+    selectedInstance: '',
+    portQuery: '',
+    portStatus: '',
+    portScope: 'business',
+    portPage: 1,
+    portPerPage: 10,
+    portPages: 0,
+    portTotal: 0,
+    trafficRange: '1h',
+    ports: [],
+    trafficSamples: [],
+    pages: 0,
+    total: 0,
+    allTotal: 0,
+    statusCounts: {
+        all: 0,
+        online: 0,
+        offline: 0
+    },
+    vendorCounts: {}
 };
 
 const deviceState = {
@@ -200,6 +229,9 @@ async function loadSummary() {
     document.getElementById('metric-devices').textContent = `${summary.devices?.online ?? 0}/${summary.devices?.total ?? 0}`;
     document.getElementById('metric-wireless-users').textContent = wireless.wireless_users ?? 0;
     document.getElementById('metric-wireless-ap').textContent = wireless.ap_online ?? 0;
+    document.getElementById('metric-switches').textContent = data.switches?.configured
+        ? `${data.switches.online ?? 0}/${data.switches.total ?? 0}`
+        : '-';
     document.getElementById('metric-access-clients').textContent = accessClients.total ?? 0;
     renderFirewallDashboard(data.firewall || {});
     renderTrafficTopList('wireless-user-upload-top', data.tops?.wireless_users?.upload || []);
@@ -670,6 +702,361 @@ async function loadWirelessMetrics() {
     document.getElementById('wireless-ap-online').textContent = data.ap_online ?? 0;
     document.getElementById('wireless-cpu').textContent = `${data.cpu_usage ?? 0}%`;
     return status;
+}
+
+async function loadSwitches(options = {}) {
+    switchState.page = options.page || switchState.page;
+    switchState.perPage = options.perPage || switchState.perPage;
+    switchState.query = options.query !== undefined ? options.query : switchState.query;
+    switchState.vendor = options.vendor !== undefined ? options.vendor : switchState.vendor;
+    switchState.status = options.status !== undefined ? options.status : switchState.status;
+
+    const searchControl = document.getElementById('switch-search');
+    const vendorControl = document.getElementById('switch-vendor-filter');
+    const pageSizeControl = document.getElementById('switch-page-size');
+    if (options.query === undefined && searchControl) {
+        switchState.query = searchControl.value.trim();
+    }
+    if (options.vendor === undefined && vendorControl) {
+        switchState.vendor = vendorControl.value;
+    }
+    if (options.perPage === undefined && pageSizeControl) {
+        switchState.perPage = Number(pageSizeControl.value);
+    }
+
+    showView('switches-panel', 'switches-nav', 'switches');
+    const body = document.getElementById('switches-table-body');
+    const summary = document.getElementById('switches-summary');
+    body.innerHTML = '<tr><td colspan="9">加载中</td></tr>';
+    summary.textContent = '加载中';
+
+    try {
+        const params = new URLSearchParams({
+            page: switchState.page,
+            per_page: switchState.perPage,
+            q: switchState.query,
+            vendor: switchState.vendor,
+            status: switchState.status
+        });
+        const result = await apiGetResult(`/api/statistics/switches?${params.toString()}`);
+        const data = result.data || {};
+        switchState.page = data.page || switchState.page;
+        switchState.pages = data.pages || 0;
+        switchState.total = data.total || 0;
+        switchState.allTotal = data.all_total || data.total || 0;
+        switchState.vendor = data.vendor || '';
+        switchState.status = data.status || '';
+        switchState.statusCounts = data.status_counts || {all: 0, online: 0, offline: 0};
+        switchState.vendorCounts = data.vendor_counts || {};
+        renderSwitchMetrics(data);
+        renderSwitchVendorOptions();
+        renderSwitchStatusFilters();
+        renderSwitchPager();
+
+        if (result.code !== 0) {
+            body.innerHTML = `<tr><td colspan="9">${escapeHtml(result.message || '请求失败')}</td></tr>`;
+            summary.textContent = '无法获取交换机数据';
+            return;
+        }
+
+        const switches = data.switch_list || [];
+        summary.textContent = `${renderSwitchSummaryPrefix()}共 ${data.total || 0} 台，当前显示 ${data.returned || switches.length} 台`;
+        if (!switches.length) {
+            body.innerHTML = '<tr><td colspan="9">暂无数据</td></tr>';
+            return;
+        }
+
+        body.innerHTML = switches.map((item) => `
+            <tr class="${item.instance === switchState.selectedInstance ? 'selected-row' : ''}">
+                <td>${escapeHtml(item.instance || '-')}</td>
+                <td>${escapeHtml(renderSwitchVendorName(item.vendor))}</td>
+                <td>${escapeHtml(item.module || '-')}</td>
+                <td>${renderSwitchStatus(item)}</td>
+                <td>${escapeHtml(item.last_scrape_at || '-')}</td>
+                <td>${escapeHtml(item.scrape_duration_text || '-')}</td>
+                <td>${escapeHtml(item.scrape_interval || '-')}</td>
+                <td title="${escapeHtml(item.last_error || '')}">${escapeHtml(item.last_error || '-')}</td>
+                <td>
+                    <button class="icon-action" type="button" data-switch-action="ports" data-switch-instance="${escapeHtml(item.instance || '')}" title="端口与流量">
+                        <i class="bi bi-activity"></i>
+                        <span>端口</span>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+        const detail = document.getElementById('switch-detail-section');
+        if (detail && !detail.hidden && switchState.selectedInstance) {
+            loadSwitchDetailData({toast: false}).catch((error) => showToast(error.message, 'error'));
+        }
+    } catch (error) {
+        body.innerHTML = `<tr><td colspan="9">${escapeHtml(error.message)}</td></tr>`;
+        summary.textContent = '加载失败';
+    }
+}
+
+async function openSwitchDetail(instance) {
+    if (!instance) {
+        showToast('交换机地址为空', 'error');
+        return;
+    }
+    if (switchState.selectedInstance !== instance) {
+        switchState.portPage = 1;
+    }
+    switchState.selectedInstance = instance;
+    const detail = document.getElementById('switch-detail-section');
+    if (detail) {
+        detail.hidden = false;
+        detail.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+    }
+    document.querySelectorAll('#switches-table-body tr').forEach((row) => {
+        const button = row.querySelector('[data-switch-instance]');
+        row.classList.toggle('selected-row', button?.dataset.switchInstance === instance);
+    });
+    await loadSwitchDetailData();
+}
+
+async function loadSwitchDetailData(options = {}) {
+    if (!switchState.selectedInstance) {
+        return;
+    }
+    switchState.trafficRange = options.range || switchState.trafficRange;
+    switchState.portQuery = options.portQuery !== undefined ? options.portQuery : switchState.portQuery;
+    switchState.portStatus = options.portStatus !== undefined ? options.portStatus : switchState.portStatus;
+    switchState.portScope = options.portScope !== undefined ? options.portScope : switchState.portScope;
+    switchState.portPage = options.page || switchState.portPage;
+    switchState.portPerPage = options.perPage || switchState.portPerPage;
+
+    const portSearch = document.getElementById('switch-port-search');
+    const portStatus = document.getElementById('switch-port-status');
+    const portScope = document.getElementById('switch-port-scope');
+    const portPageSize = document.getElementById('switch-port-page-size');
+    if (options.portQuery === undefined && portSearch) {
+        switchState.portQuery = portSearch.value.trim();
+    }
+    if (options.portStatus === undefined && portStatus) {
+        switchState.portStatus = portStatus.value;
+    }
+    if (options.portScope === undefined && portScope) {
+        switchState.portScope = portScope.value;
+    }
+    if (options.perPage === undefined && portPageSize) {
+        switchState.portPerPage = Number(portPageSize.value);
+    }
+
+    const body = document.getElementById('switch-ports-table-body');
+    const summary = document.getElementById('switch-ports-summary');
+    const title = document.getElementById('switch-detail-title');
+    const subtitle = document.getElementById('switch-detail-subtitle');
+    if (title) {
+        title.textContent = `端口与流量 ${switchState.selectedInstance}`;
+    }
+    if (subtitle) {
+        subtitle.textContent = 'Prometheus 正在查询';
+    }
+    if (body) {
+        body.innerHTML = '<tr><td colspan="8">加载中</td></tr>';
+    }
+    if (summary) {
+        summary.textContent = '加载中';
+    }
+    renderSwitchTrafficRangeButtons();
+
+    const encodedInstance = encodeURIComponent(switchState.selectedInstance);
+    const portParams = new URLSearchParams({
+        q: switchState.portQuery,
+        status: switchState.portStatus,
+        scope: switchState.portScope,
+        page: switchState.portPage,
+        per_page: switchState.portPerPage,
+        sort_by: 'traffic',
+        sort_order: 'desc'
+    });
+    const trafficParams = new URLSearchParams({
+        range: switchState.trafficRange,
+        scope: switchState.portScope
+    });
+
+    const [portsResult, trafficResult] = await Promise.allSettled([
+        apiGetResult(`/api/statistics/switches/${encodedInstance}/ports?${portParams.toString()}`),
+        apiGetResult(`/api/statistics/switches/${encodedInstance}/traffic-history?${trafficParams.toString()}`)
+    ]);
+
+    if (portsResult.status === 'fulfilled' && portsResult.value.code === 0) {
+        renderSwitchPortData(portsResult.value.data || {});
+    } else {
+        const message = portsResult.status === 'fulfilled'
+            ? (portsResult.value.message || '端口数据加载失败')
+            : portsResult.reason.message;
+        renderSwitchPortError(message);
+    }
+
+    if (trafficResult.status === 'fulfilled' && trafficResult.value.code === 0) {
+        renderSwitchTrafficData(trafficResult.value.data || {});
+    } else {
+        const message = trafficResult.status === 'fulfilled'
+            ? (trafficResult.value.message || '流量趋势加载失败')
+            : trafficResult.reason.message;
+        renderSwitchTrafficError(message);
+    }
+
+    if (options.toast) {
+        showToast('交换机端口与流量已刷新');
+    }
+}
+
+function renderSwitchPortData(data) {
+    const ports = data.ports || [];
+    const stats = data.summary || {};
+    switchState.ports = ports;
+    switchState.portScope = data.scope || switchState.portScope;
+    switchState.portPage = data.page || switchState.portPage;
+    switchState.portPages = data.pages || 0;
+    switchState.portTotal = data.total || 0;
+    switchState.portPerPage = data.per_page || switchState.portPerPage;
+
+    const subtitle = document.getElementById('switch-detail-subtitle');
+    if (subtitle) {
+        subtitle.textContent = `Prometheus · job=${data.job || 'sw'} · 窗口 ${data.rate_window || '5m'} · ${data.queried_at || '-'}`;
+    }
+    const pageSize = document.getElementById('switch-port-page-size');
+    if (pageSize) {
+        pageSize.value = String(switchState.portPerPage);
+    }
+    const online = document.getElementById('switch-port-online');
+    const totalIn = document.getElementById('switch-total-in');
+    const totalOut = document.getElementById('switch-total-out');
+    const busiest = document.getElementById('switch-busiest-port');
+    if (online) {
+        online.textContent = `${stats.online_count ?? 0}/${stats.port_count ?? data.total ?? 0}`;
+    }
+    if (totalIn) {
+        totalIn.textContent = stats.total_in_rate || '-';
+    }
+    if (totalOut) {
+        totalOut.textContent = stats.total_out_rate || '-';
+    }
+    if (busiest) {
+        const port = stats.busiest_port || {};
+        busiest.textContent = port.if_name ? `${port.if_name} ${port.total_rate || ''}` : '-';
+    }
+
+    const summary = document.getElementById('switch-ports-summary');
+    if (summary) {
+        const hiddenText = data.hidden_total && data.scope !== 'all'
+            ? `，已隐藏 ${data.hidden_total} 个虚拟/管理端口`
+            : '';
+        summary.textContent = `共 ${data.total || 0} 个端口，当前显示 ${data.returned || ports.length} 个，入方向 ${stats.total_in_rate || '0 bps'}，出方向 ${stats.total_out_rate || '0 bps'}${hiddenText}`;
+    }
+    renderSwitchPortPager();
+    const body = document.getElementById('switch-ports-table-body');
+    if (!body) {
+        return;
+    }
+    if (!ports.length) {
+        body.innerHTML = '<tr><td colspan="8">暂无端口数据</td></tr>';
+        return;
+    }
+    body.innerHTML = ports.map((port) => {
+        const errorTotal = Number(port.in_errors || 0) + Number(port.out_errors || 0);
+        const utilization = Number(port.utilization || 0);
+        return `
+            <tr>
+                <td>
+                    <div class="stacked-cell">
+                        <strong>${escapeHtml(port.if_name || '-')}</strong>
+                        <small>#${escapeHtml(port.if_index || '-')}</small>
+                    </div>
+                </td>
+                <td title="${escapeHtml(port.if_alias || '')}">${escapeHtml(port.if_alias || '-')}</td>
+                <td>${renderSwitchPortStatus(port)}</td>
+                <td>${escapeHtml(port.speed_text || '-')}</td>
+                <td>${escapeHtml(port.in_rate || '0 bps')}</td>
+                <td>${escapeHtml(port.out_rate || '0 bps')}</td>
+                <td>
+                    <div class="utilization-cell">
+                        <span style="width: ${clampPercent(utilization)}%"></span>
+                        <strong>${escapeHtml(port.utilization_text || '-')}</strong>
+                    </div>
+                </td>
+                <td title="入错误 ${escapeHtml(port.in_errors || 0)}，出错误 ${escapeHtml(port.out_errors || 0)}">${escapeHtml(errorTotal)}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderSwitchPortError(message) {
+    const body = document.getElementById('switch-ports-table-body');
+    const summary = document.getElementById('switch-ports-summary');
+    if (body) {
+        body.innerHTML = `<tr><td colspan="8">${escapeHtml(message)}</td></tr>`;
+    }
+    if (summary) {
+        summary.textContent = '端口加载失败';
+    }
+    switchState.portPages = 0;
+    switchState.portTotal = 0;
+    renderSwitchPortPager();
+    ['switch-port-online', 'switch-total-in', 'switch-total-out', 'switch-busiest-port'].forEach((id) => {
+        const node = document.getElementById(id);
+        if (node) {
+            node.textContent = '-';
+        }
+    });
+}
+
+function renderSwitchPortPager() {
+    const pageText = document.getElementById('switch-ports-page');
+    const prev = document.getElementById('switch-ports-prev');
+    const next = document.getElementById('switch-ports-next');
+    if (!pageText || !prev || !next) {
+        return;
+    }
+    pageText.textContent = switchState.portPages ? `${switchState.portPage} / ${switchState.portPages}` : '-';
+    prev.disabled = switchState.portPage <= 1;
+    next.disabled = switchState.portPages === 0 || switchState.portPage >= switchState.portPages;
+}
+
+function renderSwitchTrafficData(data) {
+    const samples = data.samples || [];
+    switchState.trafficSamples = samples;
+    const source = document.getElementById('switch-traffic-source');
+    if (source) {
+        const scopeText = data.scope === 'all' ? '全部端口' : '业务端口';
+        source.textContent = `${renderFirewallRangeLabel(data.range || switchState.trafficRange)} · ${scopeText} · 样本 ${data.sample_count ?? samples.length} 个 · 窗口 ${data.rate_window || '5m'}`;
+    }
+    switchState.trafficRange = data.range || switchState.trafficRange;
+    renderSwitchTrafficRangeButtons();
+    drawBandwidthChart('switch-traffic-chart', samples, [
+        {key: 'total_in_mbps', label: '入方向', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)'},
+        {key: 'total_out_mbps', label: '出方向', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.12)'},
+    ]);
+}
+
+function renderSwitchTrafficError(message) {
+    switchState.trafficSamples = [];
+    const source = document.getElementById('switch-traffic-source');
+    if (source) {
+        source.textContent = message;
+    }
+    drawBandwidthChart('switch-traffic-chart', [], [
+        {key: 'total_in_mbps', label: '入方向', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)'},
+        {key: 'total_out_mbps', label: '出方向', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.12)'},
+    ]);
+}
+
+function renderSwitchTrafficRangeButtons() {
+    document.querySelectorAll('[data-switch-traffic-range]').forEach((button) => {
+        button.classList.toggle('active', button.dataset.switchTrafficRange === switchState.trafficRange);
+    });
+}
+
+function closeSwitchDetail() {
+    switchState.selectedInstance = '';
+    const detail = document.getElementById('switch-detail-section');
+    if (detail) {
+        detail.hidden = true;
+    }
+    document.querySelectorAll('#switches-table-body tr').forEach((row) => row.classList.remove('selected-row'));
 }
 
 async function loadWirelessUsers(options = {}) {
@@ -1162,6 +1549,109 @@ function renderWirelessApStatus(ap) {
         : '<span class="status-badge bad">离线</span>';
 }
 
+function renderSwitchMetrics(data) {
+    document.getElementById('switch-total').textContent = data.all_total ?? data.total ?? 0;
+    document.getElementById('switch-online').textContent = data.online_count ?? 0;
+    document.getElementById('switch-avg-duration').textContent = formatDurationSeconds(data.avg_scrape_duration);
+    const source = document.getElementById('switches-source');
+    if (source) {
+        source.textContent = data.target_group
+            ? `Prometheus targets · ${data.target_group} · job=${data.job || 'sw'}`
+            : `Prometheus targets · job=${data.job || 'sw'}`;
+    }
+}
+
+function renderSwitchVendorOptions() {
+    const select = document.getElementById('switch-vendor-filter');
+    if (!select) {
+        return;
+    }
+    const vendors = Object.keys(switchState.vendorCounts || {}).sort();
+    if (switchState.vendor && !vendors.includes(switchState.vendor)) {
+        vendors.unshift(switchState.vendor);
+    }
+    select.innerHTML = [
+        '<option value="">全部厂商</option>',
+        ...vendors.map((vendor) => {
+            const count = switchState.vendorCounts[vendor] ?? 0;
+            return `<option value="${escapeHtml(vendor)}">${escapeHtml(renderSwitchVendorName(vendor))} (${count})</option>`;
+        })
+    ].join('');
+    select.value = switchState.vendor;
+}
+
+function renderSwitchStatusFilters() {
+    const counts = switchState.statusCounts || {};
+    document.querySelectorAll('[data-switch-status]').forEach((button) => {
+        button.classList.toggle('active', button.dataset.switchStatus === switchState.status);
+    });
+    ['all', 'online', 'offline'].forEach((key) => {
+        const target = document.getElementById(`switch-status-${key}`);
+        if (target) {
+            target.textContent = counts[key] ?? 0;
+        }
+    });
+}
+
+function renderSwitchPager() {
+    const pageText = document.getElementById('switches-page');
+    const prev = document.getElementById('switches-prev');
+    const next = document.getElementById('switches-next');
+    if (!pageText || !prev || !next) {
+        return;
+    }
+    pageText.textContent = switchState.pages ? `${switchState.page} / ${switchState.pages}` : '-';
+    prev.disabled = switchState.page <= 1;
+    next.disabled = switchState.pages === 0 || switchState.page >= switchState.pages;
+}
+
+function renderSwitchSummaryPrefix() {
+    const parts = [];
+    if (switchState.vendor) {
+        parts.push(`${renderSwitchVendorName(switchState.vendor)}厂商`);
+    }
+    if (switchState.status === 'online') {
+        parts.push('在线');
+    } else if (switchState.status === 'offline') {
+        parts.push('离线');
+    }
+    return parts.length ? `${parts.join('、')}，` : '';
+}
+
+function renderSwitchStatus(item) {
+    return item.is_online
+        ? '<span class="status-badge ok">UP</span>'
+        : '<span class="status-badge bad">DOWN</span>';
+}
+
+function renderSwitchPortStatus(port) {
+    return port.is_online
+        ? '<span class="status-badge ok">UP</span>'
+        : `<span class="status-badge bad">${escapeHtml((port.oper_status_text || 'DOWN').toUpperCase())}</span>`;
+}
+
+function renderSwitchVendorName(value) {
+    const vendor = String(value || 'unknown').toLowerCase();
+    const labels = {
+        huawei: '华为',
+        h3c: 'H3C',
+        sangfor: '深信服',
+        unknown: '未知'
+    };
+    return labels[vendor] || value;
+}
+
+function formatDurationSeconds(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number <= 0) {
+        return '-';
+    }
+    if (number >= 1) {
+        return `${number.toFixed(2)}s`;
+    }
+    return `${Math.round(number * 1000)}ms`;
+}
+
 function renderWirelessUserPager() {
     const pageText = document.getElementById('wireless-users-page');
     const prev = document.getElementById('wireless-users-prev');
@@ -1418,8 +1908,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (refreshSummary) {
         refreshSummary.addEventListener('click', () => {
             const firewallPanel = document.getElementById('firewall-bandwidth-panel');
+            const switchesPanel = document.getElementById('switches-panel');
             const task = firewallPanel && !firewallPanel.hidden
                 ? loadFirewallBandwidth({toast: false})
+                : switchesPanel && !switchesPanel.hidden
+                    ? loadSwitches()
                 : loadSummary();
             task
                 .then(() => showToast('已刷新'))
@@ -1442,6 +1935,14 @@ document.addEventListener('DOMContentLoaded', () => {
         firewallBandwidthNav.addEventListener('click', (event) => {
             event.preventDefault();
             loadFirewallBandwidth();
+        });
+    }
+
+    const switchesNav = document.getElementById('switches-nav');
+    if (switchesNav) {
+        switchesNav.addEventListener('click', (event) => {
+            event.preventDefault();
+            loadSwitches({page: 1});
         });
     }
 
@@ -1490,9 +1991,21 @@ document.addEventListener('DOMContentLoaded', () => {
         reloadFirewallBandwidth.addEventListener('click', () => loadFirewallBandwidth({toast: true}));
     }
 
+    const reloadSwitches = document.getElementById('reload-switches');
+    if (reloadSwitches) {
+        reloadSwitches.addEventListener('click', () => loadSwitches({page: switchState.page}));
+    }
+
     document.querySelectorAll('[data-firewall-range]').forEach((button) => {
         button.addEventListener('click', () => {
             loadFirewallBandwidth({range: button.dataset.firewallRange});
+        });
+    });
+
+    document.querySelectorAll('[data-switch-traffic-range]').forEach((button) => {
+        button.addEventListener('click', () => {
+            loadSwitchDetailData({range: button.dataset.switchTrafficRange})
+                .catch((error) => showToast(error.message, 'error'));
         });
     });
 
@@ -1504,6 +2017,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 samples: firewallBandwidthState.samples || [],
                 sample_count: firewallBandwidthState.samples.length,
                 range: firewallBandwidthState.range,
+            });
+        }
+        const switchDetail = document.getElementById('switch-detail-section');
+        if (switchDetail && !switchDetail.hidden) {
+            renderSwitchTrafficData({
+                samples: switchState.trafficSamples || [],
+                sample_count: switchState.trafficSamples.length,
+                range: switchState.trafficRange,
             });
         }
     }, 150));
@@ -1625,6 +2146,130 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadWirelessUsers();
             } else {
                 loadWireless();
+            }
+        });
+    }
+
+    const switchSearch = document.getElementById('switch-search');
+    if (switchSearch) {
+        switchSearch.addEventListener('input', debounce((event) => {
+            loadSwitches({page: 1, query: event.target.value.trim()});
+        }));
+    }
+
+    const switchVendorFilter = document.getElementById('switch-vendor-filter');
+    if (switchVendorFilter) {
+        switchVendorFilter.addEventListener('change', (event) => {
+            loadSwitches({page: 1, vendor: event.target.value});
+        });
+    }
+
+    const switchPageSize = document.getElementById('switch-page-size');
+    if (switchPageSize) {
+        switchPageSize.addEventListener('change', (event) => {
+            loadSwitches({page: 1, perPage: Number(event.target.value)});
+        });
+    }
+
+    document.querySelectorAll('[data-switch-status]').forEach((button) => {
+        button.addEventListener('click', () => {
+            loadSwitches({page: 1, status: button.dataset.switchStatus || ''});
+        });
+    });
+
+    const switchesPrev = document.getElementById('switches-prev');
+    if (switchesPrev) {
+        switchesPrev.addEventListener('click', () => {
+            if (switchState.page > 1) {
+                loadSwitches({page: switchState.page - 1});
+            }
+        });
+    }
+
+    const switchesNext = document.getElementById('switches-next');
+    if (switchesNext) {
+        switchesNext.addEventListener('click', () => {
+            if (switchState.page < switchState.pages) {
+                loadSwitches({page: switchState.page + 1});
+            }
+        });
+    }
+
+    const switchesTableBody = document.getElementById('switches-table-body');
+    if (switchesTableBody) {
+        switchesTableBody.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-switch-action]');
+            if (!button || button.disabled) {
+                return;
+            }
+            if (button.dataset.switchAction === 'ports') {
+                openSwitchDetail(button.dataset.switchInstance)
+                    .catch((error) => showToast(error.message, 'error'));
+            }
+        });
+    }
+
+    const reloadSwitchDetail = document.getElementById('reload-switch-detail');
+    if (reloadSwitchDetail) {
+        reloadSwitchDetail.addEventListener('click', () => {
+            loadSwitchDetailData({toast: true})
+                .catch((error) => showToast(error.message, 'error'));
+        });
+    }
+
+    const closeSwitchDetailButton = document.getElementById('close-switch-detail');
+    if (closeSwitchDetailButton) {
+        closeSwitchDetailButton.addEventListener('click', closeSwitchDetail);
+    }
+
+    const switchPortSearch = document.getElementById('switch-port-search');
+    if (switchPortSearch) {
+        switchPortSearch.addEventListener('input', debounce((event) => {
+            loadSwitchDetailData({page: 1, portQuery: event.target.value.trim()})
+                .catch((error) => showToast(error.message, 'error'));
+        }));
+    }
+
+    const switchPortScope = document.getElementById('switch-port-scope');
+    if (switchPortScope) {
+        switchPortScope.addEventListener('change', (event) => {
+            loadSwitchDetailData({page: 1, portScope: event.target.value})
+                .catch((error) => showToast(error.message, 'error'));
+        });
+    }
+
+    const switchPortStatus = document.getElementById('switch-port-status');
+    if (switchPortStatus) {
+        switchPortStatus.addEventListener('change', (event) => {
+            loadSwitchDetailData({page: 1, portStatus: event.target.value})
+                .catch((error) => showToast(error.message, 'error'));
+        });
+    }
+
+    const switchPortPageSize = document.getElementById('switch-port-page-size');
+    if (switchPortPageSize) {
+        switchPortPageSize.addEventListener('change', (event) => {
+            loadSwitchDetailData({page: 1, perPage: Number(event.target.value)})
+                .catch((error) => showToast(error.message, 'error'));
+        });
+    }
+
+    const switchPortsPrev = document.getElementById('switch-ports-prev');
+    if (switchPortsPrev) {
+        switchPortsPrev.addEventListener('click', () => {
+            if (switchState.portPage > 1) {
+                loadSwitchDetailData({page: switchState.portPage - 1})
+                    .catch((error) => showToast(error.message, 'error'));
+            }
+        });
+    }
+
+    const switchPortsNext = document.getElementById('switch-ports-next');
+    if (switchPortsNext) {
+        switchPortsNext.addEventListener('click', () => {
+            if (switchState.portPage < switchState.portPages) {
+                loadSwitchDetailData({page: switchState.portPage + 1})
+                    .catch((error) => showToast(error.message, 'error'));
             }
         });
     }

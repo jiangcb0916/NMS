@@ -20,6 +20,7 @@ from app.modules.access_control import name_cache as access_control_name_cache
 from app.modules.access_control import routes as access_control_routes
 from app.modules.dashboard import routes as dashboard_routes
 from app.modules.firewall import routes as firewall_routes
+from app.modules.switches import routes as switch_routes
 from app.modules.wireless import routes as wireless_routes
 
 
@@ -168,8 +169,186 @@ def main():
         def metrics_text(self):
             return ""
 
+    class FakeSwitchPrometheusClient:
+        query_configured = True
+        targets_configured = True
+
+        def __init__(self):
+            self.timeout = 10
+
+        def targets(self, state="active"):
+            return [
+                {
+                    "discoveredLabels": {
+                        "__address__": "172.16.100.5",
+                        "auth": "huawei",
+                        "job": "sw",
+                        "module": "huawei_acc,huawei_common",
+                    },
+                    "labels": {
+                        "auth": "huawei",
+                        "instance": "172.16.100.5",
+                        "job": "sw",
+                        "module": "huawei_acc,huawei_common",
+                    },
+                    "scrapePool": "sw",
+                    "lastError": "",
+                    "lastScrape": "2026-05-20T10:15:45.592263956+08:00",
+                    "lastScrapeDuration": 13.83,
+                    "health": "up",
+                    "scrapeInterval": "2m",
+                    "scrapeTimeout": "2m",
+                },
+                {
+                    "discoveredLabels": {
+                        "__address__": "172.16.100.12",
+                        "auth": "h3c",
+                        "job": "sw",
+                        "module": "h3c_common",
+                    },
+                    "labels": {
+                        "auth": "h3c",
+                        "instance": "172.16.100.12",
+                        "job": "sw",
+                        "module": "h3c_common",
+                    },
+                    "scrapePool": "sw",
+                    "lastError": "timeout",
+                    "lastScrape": "2026-05-20T10:14:44.09845384+08:00",
+                    "lastScrapeDuration": 120,
+                    "health": "down",
+                    "scrapeInterval": "2m",
+                    "scrapeTimeout": "2m",
+                },
+                {
+                    "discoveredLabels": {"__address__": "192.0.2.20", "job": "server"},
+                    "labels": {"instance": "192.0.2.20", "job": "server"},
+                    "health": "up",
+                },
+            ]
+
+        def query(self, expression):
+            assert 'job="sw"' in expression
+            if 'instance="172.16.100.5"' not in expression:
+                return []
+            ports = [
+                {
+                    "labels": {
+                        "instance": "172.16.100.5",
+                        "job": "sw",
+                        "ifIndex": "1",
+                        "ifName": "GigabitEthernet1/0/1",
+                        "ifAlias": "uplink-core",
+                        "ifHighSpeed": "1000",
+                        "ifOperStatus": "1",
+                    },
+                    "in_bps": "8000000",
+                    "out_bps": "4000000",
+                    "in_errors": "1",
+                    "out_errors": "0",
+                },
+                {
+                    "labels": {
+                        "instance": "172.16.100.5",
+                        "job": "sw",
+                        "ifIndex": "2",
+                        "ifName": "GigabitEthernet1/0/2",
+                        "ifAlias": "office-downlink",
+                        "ifHighSpeed": "1000",
+                        "ifOperStatus": "2",
+                    },
+                    "in_bps": "0",
+                    "out_bps": "0",
+                    "in_errors": "0",
+                    "out_errors": "2",
+                },
+                {
+                    "labels": {
+                        "instance": "172.16.100.5",
+                        "job": "sw",
+                        "ifIndex": "3",
+                        "ifName": "Vlanif41",
+                        "ifAlias": "Manage",
+                        "ifHighSpeed": "1000",
+                        "ifOperStatus": "1",
+                    },
+                    "in_bps": "100000",
+                    "out_bps": "200000",
+                    "in_errors": "0",
+                    "out_errors": "0",
+                },
+                {
+                    "labels": {
+                        "instance": "172.16.100.5",
+                        "job": "sw",
+                        "ifIndex": "4",
+                        "ifName": "NULL0",
+                        "ifAlias": "",
+                        "ifHighSpeed": "0",
+                        "ifOperStatus": "1",
+                    },
+                    "in_bps": "0",
+                    "out_bps": "0",
+                    "in_errors": "0",
+                    "out_errors": "0",
+                },
+            ]
+            ports.extend([
+                {
+                    "labels": {
+                        "instance": "172.16.100.5",
+                        "job": "sw",
+                        "ifIndex": str(index),
+                        "ifName": f"GigabitEthernet1/0/{index}",
+                        "ifAlias": f"access-{index}",
+                        "ifHighSpeed": "1000",
+                        "ifOperStatus": "1",
+                    },
+                    "in_bps": str(index * 1000),
+                    "out_bps": str(index * 2000),
+                    "in_errors": "0",
+                    "out_errors": "0",
+                }
+                for index in range(5, 17)
+            ])
+            metric_map = {
+                "ifHCInOctets": "in_bps",
+                "ifHCOutOctets": "out_bps",
+                "ifInErrors": "in_errors",
+                "ifOutErrors": "out_errors",
+            }
+            for metric_name, value_key in metric_map.items():
+                if metric_name in expression:
+                    return [
+                        {"metric": port["labels"], "value": [0, port[value_key]]}
+                        for port in ports
+                    ]
+            return []
+
+        def query_range(self, expression, start, end, step):
+            assert 'job="sw"' in expression
+            assert 'instance="172.16.100.5"' in expression
+            assert "rate(" in expression
+            if "ifHCInOctets" in expression:
+                values = ["12000000", "14000000", "16000000"]
+            elif "ifHCOutOctets" in expression:
+                values = ["4000000", "3000000", "5000000"]
+            else:
+                values = ["0", "0", "0"]
+            base = int(end) - 120
+            return [{
+                "metric": {},
+                "values": [
+                    [base, values[0]],
+                    [base + 60, values[1]],
+                    [base + 120, values[2]],
+                ],
+            }]
+
     original_prometheus_client = wireless_routes.PrometheusClient
+    original_switch_prometheus_client = switch_routes.PrometheusClient
     wireless_routes.PrometheusClient = FakePrometheusClient
+    switch_routes.PrometheusClient = FakeSwitchPrometheusClient
     try:
         ap_response = client.get("/api/statistics/ap-info?page=1&per_page=10&status=online&q=AP-A")
         assert ap_response.status_code == 200, ap_response.get_data(as_text=True)
@@ -188,8 +367,63 @@ def main():
         assert sorted_ap_data["sort_by"] == "ap_send_rate"
         assert sorted_ap_data["sort_order"] == "desc"
         assert sorted_ap_data["ap_list"][0]["ap_name"] == "AP-A"
+
+        switch_response = client.get("/api/statistics/switches?page=1&per_page=10&status=online&vendor=huawei")
+        assert switch_response.status_code == 200, switch_response.get_data(as_text=True)
+        switch_data = switch_response.get_json()["data"]
+        assert switch_data["total"] == 1
+        assert switch_data["all_total"] == 2
+        assert switch_data["status_counts"] == {"all": 1, "online": 1, "offline": 0}
+        assert switch_data["vendor_counts"] == {"h3c": 1, "huawei": 1}
+        assert switch_data["switch_list"][0]["instance"] == "172.16.100.5"
+        assert switch_data["switch_list"][0]["last_scrape_at"] == "2026-05-20 10:15:45"
+
+        switch_ports_response = client.get("/api/statistics/switches/172.16.100.5/ports?page=1&q=uplink&status=online")
+        assert switch_ports_response.status_code == 200, switch_ports_response.get_data(as_text=True)
+        switch_ports_data = switch_ports_response.get_json()["data"]
+        assert switch_ports_data["total"] == 1
+        assert switch_ports_data["scoped_total"] == 14
+        assert switch_ports_data["all_total"] == 16
+        assert switch_ports_data["hidden_total"] == 2
+        assert switch_ports_data["page"] == 1
+        assert switch_ports_data["per_page"] == 10
+        assert switch_ports_data["pages"] == 1
+        assert switch_ports_data["returned"] == 1
+        assert switch_ports_data["scope"] == "business"
+        assert switch_ports_data["summary"]["online_count"] == 1
+        assert switch_ports_data["summary"]["total_in_rate"] == "8.00 Mbps"
+        assert switch_ports_data["ports"][0]["if_name"] == "GigabitEthernet1/0/1"
+        assert switch_ports_data["ports"][0]["is_online"] is True
+        assert switch_ports_data["ports"][0]["utilization_text"] == "0.80%"
+
+        switch_second_page_response = client.get("/api/statistics/switches/172.16.100.5/ports?scope=business&page=2&per_page=10")
+        assert switch_second_page_response.status_code == 200, switch_second_page_response.get_data(as_text=True)
+        switch_second_page_data = switch_second_page_response.get_json()["data"]
+        assert switch_second_page_data["total"] == 14
+        assert switch_second_page_data["pages"] == 2
+        assert switch_second_page_data["page"] == 2
+        assert switch_second_page_data["returned"] == 4
+
+        switch_all_ports_response = client.get("/api/statistics/switches/172.16.100.5/ports?scope=all&q=Vlanif")
+        assert switch_all_ports_response.status_code == 200, switch_all_ports_response.get_data(as_text=True)
+        switch_all_ports_data = switch_all_ports_response.get_json()["data"]
+        assert switch_all_ports_data["total"] == 1
+        assert switch_all_ports_data["scoped_total"] == 16
+        assert switch_all_ports_data["hidden_total"] == 0
+        assert "Vlanif41" in {port["if_name"] for port in switch_all_ports_data["ports"]}
+
+        switch_history_response = client.get("/api/statistics/switches/172.16.100.5/traffic-history?range=5m")
+        assert switch_history_response.status_code == 200, switch_history_response.get_data(as_text=True)
+        switch_history_data = switch_history_response.get_json()["data"]
+        assert switch_history_data["range"] == "5m"
+        assert switch_history_data["range_seconds"] == 300
+        assert switch_history_data["scope"] == "business"
+        assert switch_history_data["sample_count"] == 3
+        assert switch_history_data["samples"][-1]["total_in_mbps"] == 16
+        assert switch_history_data["samples"][-1]["total_out_rate"] == "5.00 Mbps"
     finally:
         wireless_routes.PrometheusClient = original_prometheus_client
+        switch_routes.PrometheusClient = original_switch_prometheus_client
 
     wireless_routes.wireless_user_cache["data"] = [
         {
@@ -315,11 +549,13 @@ def main():
         return FakeFirewallResponse()
 
     original_prometheus_client = wireless_routes.PrometheusClient
+    original_switch_prometheus_client = switch_routes.PrometheusClient
     original_firewall_get = firewall_routes.requests.get
     original_bandwidth_history = firewall_routes.bandwidth_history
     original_bandwidth_samples = list(firewall_routes.bandwidth_samples)
     original_dashboard_access_control_client = dashboard_routes.AccessControlClient
     wireless_routes.PrometheusClient = FakePrometheusClient
+    switch_routes.PrometheusClient = FakeSwitchPrometheusClient
     firewall_routes.requests.get = fake_firewall_get
     firewall_routes.bandwidth_samples = []
     firewall_routes.bandwidth_history = {
@@ -340,6 +576,8 @@ def main():
         assert overview_data["firewall"]["total_upload"] > 0
         assert overview_data["firewall"]["total_download"] > overview_data["firewall"]["total_upload"]
         assert overview_data["firewall"]["download_utilization"] > overview_data["firewall"]["upload_utilization"]
+        assert overview_data["switches"]["total"] == 2
+        assert overview_data["switches"]["online"] == 1
         assert overview_data["wireless"]["wireless_users"] == 3
         assert overview_data["tops"]["wireless_users"]["upload"][0]["value"] == "2 Mbps"
         assert overview_data["tops"]["aps"]["download"][0]["label"] == "AP-A"
@@ -354,6 +592,7 @@ def main():
         assert history_data["samples"][-1]["total_download"] >= history_data["samples"][-1]["total_upload"]
     finally:
         wireless_routes.PrometheusClient = original_prometheus_client
+        switch_routes.PrometheusClient = original_switch_prometheus_client
         firewall_routes.requests.get = original_firewall_get
         firewall_routes.bandwidth_history = original_bandwidth_history
         firewall_routes.bandwidth_samples = original_bandwidth_samples
