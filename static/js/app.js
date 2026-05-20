@@ -203,6 +203,8 @@ const osdwanState = {
     data: null,
     allSamples: [],
     nodeSamples: [],
+    allPeriod: '1day',
+    nodePeriod: '6hours',
     userPage: 1,
     userPerPage: 10,
     userPages: 0,
@@ -359,20 +361,35 @@ async function loadOsdwan(options = {}) {
 }
 
 async function loadOsdwanMetrics(options = {}) {
+    osdwanState.allPeriod = options.allPeriod || osdwanState.allPeriod;
+    osdwanState.nodePeriod = options.nodePeriod || osdwanState.nodePeriod;
+    const allPeriodControl = document.getElementById('osdwan-all-period');
+    const nodePeriodControl = document.getElementById('osdwan-node-period');
+    if (options.allPeriod === undefined && allPeriodControl) {
+        osdwanState.allPeriod = allPeriodControl.value;
+    }
+    if (options.nodePeriod === undefined && nodePeriodControl) {
+        osdwanState.nodePeriod = nodePeriodControl.value;
+    }
+
     showView('osdwan-panel', 'osdwan-nav', 'osdwan');
     try {
-        const result = await apiGetResult('/api/osdwan/metrics');
+        const params = new URLSearchParams({
+            all_period: osdwanState.allPeriod,
+            node_period: osdwanState.nodePeriod,
+        });
+        const result = await apiGetResult(`/api/osdwan/metrics?${params.toString()}`);
         const data = result.data || {};
         if (result.code !== 0) {
-            renderOsdwanMetricsError(result.message || 'OSDWAN 数据加载失败', data);
+            renderOsdwanMetricsError(result.message || 'OSDWAN 数据加载失败', data, options);
             return;
         }
-        renderOsdwanMetrics(data);
+        renderOsdwanMetrics(data, options);
         if (options.toast) {
             showToast('OSDWAN 状态已刷新');
         }
     } catch (error) {
-        renderOsdwanMetricsError(error.message);
+        renderOsdwanMetricsError(error.message, {}, options);
         throw error;
     }
 }
@@ -433,10 +450,16 @@ function renderOsdwanPage(data) {
     renderOsdwanUserPage(data);
 }
 
-function renderOsdwanMetrics(data) {
-    osdwanState.data = data;
-    osdwanState.allSamples = data.all_stats?.samples || [];
-    osdwanState.nodeSamples = data.node?.stats?.samples || [];
+function renderOsdwanMetrics(data, options = {}) {
+    const updateCharts = options.charts !== false;
+    if (updateCharts) {
+        osdwanState.data = data;
+        osdwanState.allSamples = data.all_stats?.samples || [];
+        osdwanState.nodeSamples = data.node?.stats?.samples || [];
+        osdwanState.allPeriod = data.all_period || osdwanState.allPeriod;
+        osdwanState.nodePeriod = data.node?.period || osdwanState.nodePeriod;
+        renderOsdwanPeriodControls();
+    }
     const errors = data.errors || {};
     const errorText = Object.values(errors).filter(Boolean).join('；');
     osdwanState.userPeopleCount = data.overall_user_people_count ?? data.user_people_count ?? 0;
@@ -448,19 +471,16 @@ function renderOsdwanMetrics(data) {
     document.getElementById('osdwan-user-count').textContent = renderUserCapacity(data.overall_user_count ?? data.user_count, data.user_capacity);
     document.getElementById('osdwan-person-count').textContent = data.overall_user_people_count ?? data.user_people_count ?? 0;
     document.getElementById('osdwan-proxy-status').textContent = renderProxyStatus(data.proxy_status);
-    document.getElementById('osdwan-all-latest').textContent = renderOsdwanLatest(data.all_stats?.latest);
-    document.getElementById('osdwan-node-latest').textContent = renderOsdwanLatest(data.node?.stats?.latest);
-    document.getElementById('osdwan-all-source').textContent = `最近 ${renderOsdwanPeriod(data.all_period)} · 样本 ${data.all_stats?.sample_count ?? 0} 个`;
-    document.getElementById('osdwan-node-source').textContent = `${data.node?.name || '办公开发'} · 最近 ${renderOsdwanPeriod(data.node?.period)} · 样本 ${data.node?.stats?.sample_count ?? 0} 个`;
+    renderOsdwanLatestMetric('osdwan-all-latest', data.all_stats?.latest);
+    renderOsdwanLatestMetric('osdwan-node-latest', data.node?.stats?.latest);
+    if (!updateCharts) {
+        return;
+    }
+    document.getElementById('osdwan-all-source').textContent = `${renderOsdwanPeriod(data.all_period)} · 样本 ${data.all_stats?.sample_count ?? 0} 个`;
+    document.getElementById('osdwan-node-source').textContent = `${data.node?.name || '办公开发'} · ${renderOsdwanPeriod(data.node?.period)} · 样本 ${data.node?.stats?.sample_count ?? 0} 个`;
 
-    drawBandwidthChart('osdwan-all-chart', osdwanState.allSamples, [
-        {key: 'download_mbps', label: '下行', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)'},
-        {key: 'upload_mbps', label: '上行', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.12)'},
-    ]);
-    drawBandwidthChart('osdwan-node-chart', osdwanState.nodeSamples, [
-        {key: 'download_mbps', label: '下行', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)'},
-        {key: 'upload_mbps', label: '上行', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.12)'},
-    ]);
+    drawBandwidthChart('osdwan-all-chart', osdwanState.allSamples, osdwanChartSeries());
+    drawBandwidthChart('osdwan-node-chart', osdwanState.nodeSamples, osdwanChartSeries());
 }
 
 function renderOsdwanUserPage(data) {
@@ -496,23 +516,22 @@ function renderOsdwanError(message, data = {}) {
     renderOsdwanUsersError(message, data);
 }
 
-function renderOsdwanMetricsError(message, data = {}) {
+function renderOsdwanMetricsError(message, data = {}, options = {}) {
+    const updateCharts = options.charts !== false;
     document.getElementById('osdwan-source').textContent = message;
     document.getElementById('osdwan-user-count').textContent = renderUserCapacity(data.overall_user_count ?? data.user_count, data.user_capacity) || '-';
     document.getElementById('osdwan-person-count').textContent = data.overall_user_people_count ?? data.user_people_count ?? '-';
     document.getElementById('osdwan-proxy-status').textContent = '-';
     document.getElementById('osdwan-all-latest').textContent = '-';
     document.getElementById('osdwan-node-latest').textContent = '-';
+    if (!updateCharts) {
+        osdwanState.proxyStatus = null;
+        return;
+    }
     document.getElementById('osdwan-all-source').textContent = message;
     document.getElementById('osdwan-node-source').textContent = message;
-    drawBandwidthChart('osdwan-all-chart', [], [
-        {key: 'download_mbps', label: '下行', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)'},
-        {key: 'upload_mbps', label: '上行', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.12)'},
-    ]);
-    drawBandwidthChart('osdwan-node-chart', [], [
-        {key: 'download_mbps', label: '下行', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)'},
-        {key: 'upload_mbps', label: '上行', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.12)'},
-    ]);
+    drawBandwidthChart('osdwan-all-chart', [], osdwanChartSeries());
+    drawBandwidthChart('osdwan-node-chart', [], osdwanChartSeries());
     osdwanState.proxyStatus = null;
 }
 
@@ -525,19 +544,53 @@ function renderOsdwanUsersError(message, data = {}) {
     renderOsdwanUserPager();
 }
 
-function renderOsdwanLatest(sample) {
-    if (!sample) {
-        return '-';
+function renderOsdwanLatestMetric(elementId, sample) {
+    const element = document.getElementById(elementId);
+    if (!element) {
+        return;
     }
-    return `↓ ${sample.download_rate || '0 bps'} / ↑ ${sample.upload_rate || '0 bps'}`;
+    if (!sample) {
+        element.textContent = '-';
+        return;
+    }
+    element.innerHTML = `
+        <span class="bandwidth-line down">
+            <span class="bandwidth-line-label"><i class="bi bi-arrow-down"></i>下行</span>
+            <strong title="${escapeHtml(sample.download_rate || '0 bps')}">${escapeHtml(sample.download_rate || '0 bps')}</strong>
+        </span>
+        <span class="bandwidth-line up">
+            <span class="bandwidth-line-label"><i class="bi bi-arrow-up"></i>上行</span>
+            <strong title="${escapeHtml(sample.upload_rate || '0 bps')}">${escapeHtml(sample.upload_rate || '0 bps')}</strong>
+        </span>
+    `;
+}
+
+function osdwanChartSeries() {
+    return [
+        {key: 'download_mbps', label: '下行', color: '#8b7cf6', fill: 'rgba(139, 124, 246, 0.16)', width: 1.7},
+        {key: 'upload_mbps', label: '上行', color: '#4fc3c7', fill: 'rgba(79, 195, 199, 0.18)', width: 1.7},
+    ];
+}
+
+function renderOsdwanPeriodControls() {
+    const allPeriodControl = document.getElementById('osdwan-all-period');
+    const nodePeriodControl = document.getElementById('osdwan-node-period');
+    if (allPeriodControl) {
+        allPeriodControl.value = osdwanState.allPeriod;
+    }
+    if (nodePeriodControl) {
+        nodePeriodControl.value = osdwanState.nodePeriod;
+    }
 }
 
 function renderOsdwanPeriod(period) {
     const labels = {
-        '1day': '1 天',
-        '6hours': '6 小时',
-        '1hour': '1 小时',
-        '24hours': '24 小时',
+        '1hour': '最近1小时',
+        '6hours': '最近6小时',
+        '1day': '最近1天',
+        '1week': '最近1周',
+        '1month': '最近1月',
+        '24hours': '最近1天',
     };
     return labels[period] || period || '-';
 }
@@ -722,7 +775,7 @@ function drawBandwidthChart(canvasId, samples, series) {
         }
 
         ctx.strokeStyle = line.color;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = line.width || 2;
         ctx.beginPath();
         points.forEach((point, index) => {
             if (index === 0) {
@@ -734,12 +787,38 @@ function drawBandwidthChart(canvasId, samples, series) {
         ctx.stroke();
     });
 
+    const firstTimestamp = Number(samples[0].timestamp || 0);
+    const lastTimestamp = Number(samples[samples.length - 1].timestamp || 0);
+    const rangeSeconds = Math.max(0, lastTimestamp - firstTimestamp);
     ctx.fillStyle = '#66737d';
+    chartAxisTicks(samples, width).forEach((tick) => {
+        const x = xFor(tick.index);
+        ctx.textAlign = tick.align;
+        ctx.fillText(formatChartAxisTime(samples[tick.index].timestamp, rangeSeconds), x, height - 10);
+    });
     ctx.textAlign = 'left';
-    ctx.fillText(formatChartTime(samples[0].timestamp), plot.left, height - 10);
-    ctx.textAlign = 'right';
-    ctx.fillText(formatChartTime(samples[samples.length - 1].timestamp), width - plot.right, height - 10);
-    ctx.textAlign = 'left';
+}
+
+function chartAxisTicks(samples, width) {
+    if (!samples.length) {
+        return [];
+    }
+    const desired = width < 640 ? 3 : 5;
+    const maxIndex = samples.length - 1;
+    if (maxIndex === 0) {
+        return [{index: 0, align: 'center'}];
+    }
+    const ticks = [];
+    for (let step = 0; step < desired; step += 1) {
+        const index = Math.round((maxIndex * step) / (desired - 1));
+        if (!ticks.some((tick) => tick.index === index)) {
+            ticks.push({
+                index,
+                align: step === 0 ? 'left' : (step === desired - 1 ? 'right' : 'center'),
+            });
+        }
+    }
+    return ticks;
 }
 
 function renderTrafficTopList(elementId, items) {
@@ -826,6 +905,34 @@ function formatChartTime(timestamp) {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
+    });
+}
+
+function formatChartAxisTime(timestamp, rangeSeconds = 0) {
+    const value = Number(timestamp);
+    if (!Number.isFinite(value) || !value) {
+        return '-';
+    }
+    const date = new Date(value * 1000);
+    if (rangeSeconds >= 2 * 24 * 60 * 60) {
+        return date.toLocaleDateString('zh-CN', {
+            month: '2-digit',
+            day: '2-digit',
+        });
+    }
+    if (rangeSeconds >= 20 * 60 * 60) {
+        return date.toLocaleString('zh-CN', {
+            hour12: false,
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    }
+    return date.toLocaleTimeString('zh-CN', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
     });
 }
 
@@ -2224,7 +2331,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const task = firewallPanel && !firewallPanel.hidden
                 ? loadFirewallBandwidth({toast: false})
                 : osdwanPanel && !osdwanPanel.hidden
-                    ? loadOsdwanMetrics()
+                    ? loadOsdwanMetrics({charts: false})
                     : switchesPanel && !switchesPanel.hidden
                         ? loadSwitches()
                         : loadSummary();
@@ -2315,7 +2422,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const reloadOsdwan = document.getElementById('reload-osdwan');
     if (reloadOsdwan) {
-        reloadOsdwan.addEventListener('click', () => loadOsdwanMetrics({toast: true}));
+        reloadOsdwan.addEventListener('click', () => loadOsdwanMetrics({toast: true, charts: false}));
+    }
+
+    const osdwanAllPeriod = document.getElementById('osdwan-all-period');
+    if (osdwanAllPeriod) {
+        osdwanAllPeriod.addEventListener('change', (event) => {
+            loadOsdwanMetrics({allPeriod: event.target.value});
+        });
+    }
+
+    const osdwanNodePeriod = document.getElementById('osdwan-node-period');
+    if (osdwanNodePeriod) {
+        osdwanNodePeriod.addEventListener('change', (event) => {
+            loadOsdwanMetrics({nodePeriod: event.target.value});
+        });
     }
 
     const osdwanUserSearch = document.getElementById('osdwan-user-search');

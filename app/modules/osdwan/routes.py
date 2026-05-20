@@ -11,6 +11,8 @@ from app.common.responses import success
 
 
 osdwan_bp = Blueprint("osdwan_api", __name__)
+OSDWAN_ALL_PERIODS = {"1day", "1week", "1month"}
+OSDWAN_NODE_PERIODS = {"1hour", "6hours", "1day", "1week", "1month"}
 
 
 @osdwan_bp.route("/api/osdwan/metrics", methods=["GET"])
@@ -59,8 +61,18 @@ def osdwan_overview():
     if not client.configured:
         return success(default_overview(configured=False), message="OSDWAN Token 未配置", code=1)
 
-    all_period = request.args.get("all_period") or current_app.config.get("OSDWAN_ALL_STATS_PERIOD", "1day")
-    node_period = request.args.get("node_period") or current_app.config.get("OSDWAN_NODE_STATS_PERIOD", "6hours")
+    all_period = valid_period(
+        request.args.get("all_period"),
+        current_app.config.get("OSDWAN_ALL_STATS_PERIOD", "1day"),
+        "1day",
+        OSDWAN_ALL_PERIODS,
+    )
+    node_period = valid_period(
+        request.args.get("node_period"),
+        current_app.config.get("OSDWAN_NODE_STATS_PERIOD", "6hours"),
+        "6hours",
+        OSDWAN_NODE_PERIODS,
+    )
     node_id = request.args.get("node_id") or current_app.config.get("OSDWAN_NODE_ID", "2168")
     node_name = current_app.config.get("OSDWAN_NODE_NAME", "办公开发")
     view_type = request.args.get("view_type") or current_app.config.get("OSDWAN_NODE_VIEW_TYPE", "total")
@@ -78,13 +90,13 @@ def osdwan_overview():
     )
     all_stats_payload, all_stats_error = safe_get(
         client,
-        "整体 SaaS 带宽",
+        "带宽统计",
         "/api/Saas/all-network-stats",
         params={"period": all_period},
     )
     node_stats_payload, node_stats_error = safe_get(
         client,
-        f"{node_name}带宽",
+        "SaaS 流量",
         f"/api/Saas/network-stats/{node_id}",
         params={"period": node_period, "view_type": view_type},
     )
@@ -130,8 +142,18 @@ def osdwan_overview():
 
 
 def build_metrics_payload(client):
-    all_period = request.args.get("all_period") or current_app.config.get("OSDWAN_ALL_STATS_PERIOD", "1day")
-    node_period = request.args.get("node_period") or current_app.config.get("OSDWAN_NODE_STATS_PERIOD", "6hours")
+    all_period = valid_period(
+        request.args.get("all_period"),
+        current_app.config.get("OSDWAN_ALL_STATS_PERIOD", "1day"),
+        "1day",
+        OSDWAN_ALL_PERIODS,
+    )
+    node_period = valid_period(
+        request.args.get("node_period"),
+        current_app.config.get("OSDWAN_NODE_STATS_PERIOD", "6hours"),
+        "6hours",
+        OSDWAN_NODE_PERIODS,
+    )
     node_id = request.args.get("node_id") or current_app.config.get("OSDWAN_NODE_ID", "2168")
     node_name = current_app.config.get("OSDWAN_NODE_NAME", "办公开发")
     view_type = request.args.get("view_type") or current_app.config.get("OSDWAN_NODE_VIEW_TYPE", "total")
@@ -139,13 +161,13 @@ def build_metrics_payload(client):
     users_result, users_error = safe_load_users(client, page=1, per_page=1, query="", department="")
     all_stats_payload, all_stats_error = safe_get(
         client,
-        "整体 SaaS 带宽",
+        "带宽统计",
         "/api/Saas/all-network-stats",
         params={"period": all_period},
     )
     node_stats_payload, node_stats_error = safe_get(
         client,
-        f"{node_name}带宽",
+        "SaaS 流量",
         f"/api/Saas/network-stats/{node_id}",
         params={"period": node_period, "view_type": view_type},
     )
@@ -304,6 +326,13 @@ def response_error_message(response):
         return response.text[:160] or "无响应内容"
     message = payload.get("message") if isinstance(payload, dict) else ""
     return str(message or payload)[:160]
+
+
+def valid_period(requested, configured, default, allowed):
+    for value in (requested, configured, default):
+        if value in allowed:
+            return value
+    return default
 
 
 def bounded_int(value, default, minimum, maximum):
@@ -652,7 +681,9 @@ def bandwidth_to_mbps(value, key):
         return number
     if "byte" in key or "octet" in key:
         return number * 8 / 1_000_000
-    if "bps" in key or "bit" in key or "bandwidth" in key or "speed" in key:
+    if "speed" in key:
+        return number * 8 / 1_000_000 if number > 10_000 else number
+    if "bps" in key or "bit" in key or "bandwidth" in key:
         return number / 1_000_000 if number > 10_000 else number
     return number / 1_000_000 if number > 1_000_000 else number
 

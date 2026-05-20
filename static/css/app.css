@@ -362,6 +362,69 @@ select {
     font-weight: 700;
 }
 
+.osdwan-bandwidth-card {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+}
+
+.osdwan-bandwidth-card > div:last-child {
+    min-width: 0;
+}
+
+.osdwan-bandwidth-card .metric-label {
+    font-weight: 700;
+}
+
+.osdwan-bandwidth-value {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+    margin-top: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.osdwan-bandwidth-value .bandwidth-line {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 6px;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 28px;
+    padding: 4px 7px;
+    border: 1px solid #edf1f3;
+    border-radius: 8px;
+    background: #fbfcfd;
+}
+
+.osdwan-bandwidth-value .bandwidth-line-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.osdwan-bandwidth-value strong {
+    min-width: 0;
+    text-align: right;
+    white-space: nowrap;
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.osdwan-bandwidth-value .down i {
+    color: #8b7cf6;
+}
+
+.osdwan-bandwidth-value .up i {
+    color: #4fc3c7;
+}
+
 .panel-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -586,6 +649,10 @@ select {
     margin-top: 14px;
 }
 
+.chart-grid.osdwan-chart-stack {
+    grid-template-columns: 1fr;
+}
+
 .chart-panel {
     min-width: 0;
     padding: 14px;
@@ -599,6 +666,27 @@ select {
     width: 100%;
     height: 260px;
     margin-top: 12px;
+}
+
+.osdwan-chart-stack .bandwidth-chart {
+    height: 320px;
+}
+
+.chart-tools {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.chart-tools select {
+    min-width: 128px;
+    height: 38px;
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    background: var(--panel);
+    padding: 0 10px;
 }
 
 .chart-legend {
@@ -649,11 +737,11 @@ select {
 }
 
 .legend-dot.osdwan-download {
-    background: var(--blue);
+    background: #8b7cf6;
 }
 
 .legend-dot.osdwan-upload {
-    background: var(--accent);
+    background: #4fc3c7;
 }
 
 .info-list {
