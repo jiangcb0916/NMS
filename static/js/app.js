@@ -93,7 +93,7 @@ function showToast(message, type = 'info') {
 const viewTitles = {
     dashboard: ['仪表盘', '系统运行概览'],
     firewallBandwidth: ['防火墙带宽', '华为防火墙上下行趋势'],
-    trafficAnalysis: ['流量分析', '深信服 AC 用户流速排行'],
+    trafficAnalysis: ['流量分析', ''],
     osdwan: ['OSDWAN 监控', '用户与带宽趋势'],
     switches: ['交换机监控', 'Prometheus 交换机目标状态'],
     wireless: ['无线控制器', 'AP、SSID 与无线用户状态'],
@@ -393,9 +393,7 @@ async function loadTrafficAnalysis(options = {}) {
 
         const source = document.getElementById('traffic-analysis-source');
         if (source) {
-            source.textContent = data.source
-                ? `深信服 AC ${data.source} · Top ${trafficAnalysisState.top}`
-                : `深信服 AC 用户流速排行 · Top ${trafficAnalysisState.top}`;
+            source.textContent = '';
         }
 
         if (result.code !== 0) {
@@ -412,7 +410,7 @@ async function loadTrafficAnalysis(options = {}) {
         }
         body.innerHTML = items.map((item) => `
             <tr>
-                <td class="rank-cell">#${escapeHtml(item.rank || '-')}</td>
+                <td class="rank-cell">${escapeHtml(item.rank || '-')}</td>
                 <td class="user-cell">${escapeHtml(item.name || '-')}</td>
                 <td>${renderTrafficAnalysisRealName(item)}</td>
                 <td>${escapeHtml(item.ip || '-')}</td>
@@ -1976,7 +1974,16 @@ function renderClientNameCacheSummary(cache) {
 function renderTrafficAnalysisMetrics(summary) {
     document.getElementById('traffic-user-count').textContent = summary.user_count ?? 0;
     document.getElementById('traffic-status-count').textContent = `${summary.normal_count ?? 0}/${summary.frozen_count ?? 0}`;
-    document.getElementById('traffic-total-rate').textContent = `↓ ${summary.down_rate || '0 bps'} / ↑ ${summary.up_rate || '0 bps'}`;
+    document.getElementById('traffic-total-rate').innerHTML = `
+        <span class="bandwidth-line down">
+            <span class="bandwidth-line-label"><i class="bi bi-arrow-down"></i>下行</span>
+            <strong>${escapeHtml(summary.down_rate || '0 bps')}</strong>
+        </span>
+        <span class="bandwidth-line up">
+            <span class="bandwidth-line-label"><i class="bi bi-arrow-up"></i>上行</span>
+            <strong>${escapeHtml(summary.up_rate || '0 bps')}</strong>
+        </span>
+    `;
     document.getElementById('traffic-session-count').textContent = summary.session_count ?? 0;
 }
 
@@ -2006,10 +2013,10 @@ function renderTrafficAnalysisStatus(item) {
 
 function renderTrafficAnalysisRealName(item) {
     if (item.real_name) {
-        return `<span class="person-chip single">${escapeHtml(item.real_name)}</span>`;
+        return `<span class="person-chip traffic-name-chip">${escapeHtml(item.real_name)}</span>`;
     }
     if (item.name_is_mobile) {
-        return '<span class="status-badge">解析中</span>';
+        return '<span class="traffic-name-chip pending">解析中</span>';
     }
     return '-';
 }
