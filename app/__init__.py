@@ -49,6 +49,7 @@ def register_blueprints(app):
     from app.modules.cache.routes import cache_bp
     from app.modules.dashboard.routes import dashboard_bp
     from app.modules.devices.routes import device_bp
+    from app.modules.events.routes import events_bp
     from app.modules.firewall.routes import firewall_bp
     from app.modules.integrations.status_routes import integration_status_bp
     from app.modules.osdwan.routes import osdwan_bp
@@ -64,6 +65,7 @@ def register_blueprints(app):
     app.register_blueprint(access_control_bp)
     app.register_blueprint(cache_bp)
     app.register_blueprint(dashboard_bp)
+    app.register_blueprint(events_bp)
     app.register_blueprint(device_bp)
     app.register_blueprint(firewall_bp)
     app.register_blueprint(osdwan_bp)

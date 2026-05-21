@@ -1,11 +1,14 @@
 import time
+from datetime import datetime
 
 import requests
 from flask import Blueprint, current_app
 from flask_login import login_required
 
 from app.common.responses import success
+from app.modules.events.service import sync_integration_events
 from app.modules.integrations.dingtalk import DingTalkClient
+from app.modules.osdwan import routes as osdwan_routes
 from app.modules.sangfor_ac.client import SangforACClient
 
 
@@ -15,14 +18,20 @@ integration_status_bp = Blueprint("integration_status_api", __name__, url_prefix
 @integration_status_bp.route("/status", methods=["GET"])
 @login_required
 def integration_status():
-    return success([
+    checks = [
         check_sangfor_ac(),
         check_prometheus_query(),
         check_prometheus_metrics(),
         check_huawei_snmp(),
+        check_osdwan(),
         check_access_control(),
         check_dingtalk(),
-    ])
+    ]
+    try:
+        sync_integration_events(checks)
+    except Exception as exc:
+        current_app.logger.warning("集成状态事件同步失败: %s", exc.__class__.__name__)
+    return success(checks)
 
 
 def check_sangfor_ac():
@@ -98,6 +107,18 @@ def check_huawei_snmp():
     return run_probe("huawei_snmp", "华为防火墙 SNMP", configured=bool(url and target), probe=probe)
 
 
+def check_osdwan():
+    client = osdwan_routes.WanFlowClient()
+
+    def probe():
+        client.timeout = 3
+        payload = client.get("/api/user/userinfo")
+        ok = isinstance(payload, dict)
+        return ok, "Token 正常" if ok else "返回数据格式异常", {"has_userinfo": ok}
+
+    return run_probe("osdwan", "WANFlow OSDWAN", configured=client.configured, probe=probe)
+
+
 def check_access_control():
     config = current_app.config
     url = config.get("ACCESS_CONTROL_API_URL")
@@ -137,6 +158,7 @@ def run_probe(key, label, configured, probe):
             "configured": False,
             "ok": False,
             "seconds": 0,
+            "checked_at": current_time_text(),
             "message": "未配置",
             "details": {},
         }
@@ -150,6 +172,7 @@ def run_probe(key, label, configured, probe):
             "configured": True,
             "ok": bool(ok),
             "seconds": round(time.time() - start, 2),
+            "checked_at": current_time_text(),
             "message": message,
             "details": details,
         }
@@ -160,6 +183,7 @@ def run_probe(key, label, configured, probe):
             "configured": True,
             "ok": False,
             "seconds": round(time.time() - start, 2),
+            "checked_at": current_time_text(),
             "message": "连接失败或超时",
             "details": {},
         }
@@ -170,6 +194,11 @@ def run_probe(key, label, configured, probe):
             "configured": True,
             "ok": False,
             "seconds": round(time.time() - start, 2),
+            "checked_at": current_time_text(),
             "message": "返回数据格式异常",
             "details": {},
         }
+
+
+def current_time_text():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")

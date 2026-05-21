@@ -472,7 +472,7 @@ select {
 .dashboard-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 310px;
-    align-items: start;
+    align-items: stretch;
     gap: 14px;
     margin-top: 14px;
 }
@@ -639,18 +639,26 @@ select {
 
 .dashboard-health {
     display: grid;
-    gap: 8px;
+    gap: 10px;
     padding-top: 2px;
 }
 
-.health-section-label {
-    margin-top: 4px;
+.health-group {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
 }
 
-.health-section-label:not(:first-child) {
-    margin-top: 10px;
-    padding-top: 12px;
+.health-subgrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding-top: 10px;
     border-top: 1px solid #edf1f3;
+}
+
+.health-section-label {
+    margin: 0 0 2px;
 }
 
 .health-row {
@@ -658,12 +666,28 @@ select {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    min-height: 32px;
+    min-height: 28px;
 }
 
 .health-row strong {
+    min-width: 0;
     color: var(--muted);
     font-size: 13px;
+    text-align: right;
+}
+
+.health-subgrid .health-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+}
+
+.health-subgrid .health-row span,
+.health-subgrid .health-row strong {
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .health-row strong.ok {
@@ -1102,6 +1126,10 @@ select {
     grid-template-columns: minmax(260px, 1fr) 130px 150px 120px;
 }
 
+.toolbar-row.events-toolbar {
+    grid-template-columns: minmax(260px, 1fr) 120px 160px 120px 120px;
+}
+
 .toolbar-row input,
 .toolbar-row select {
     min-width: 0;
@@ -1528,6 +1556,49 @@ th {
 .status-badge.bad {
     background: #fde8e8;
     color: var(--red);
+}
+
+.event-message-cell {
+    max-width: 360px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.diagnostic-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.diagnostic-summary-item {
+    display: grid;
+    gap: 4px;
+    min-height: 76px;
+    padding: 14px;
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    background: #fbfcfd;
+}
+
+.diagnostic-summary-item span {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.diagnostic-summary-item strong {
+    font-size: 24px;
+    line-height: 1.1;
+}
+
+.diagnostic-detail-cell {
+    max-width: 320px;
+    color: var(--muted);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .empty-state {

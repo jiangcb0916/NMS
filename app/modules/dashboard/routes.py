@@ -6,6 +6,7 @@ from app.extensions import db
 from app.models.cache import DeviceOsCache, UserNameCache
 from app.models.device import Device
 from app.models.user import User
+from app.modules.events.service import safe_event_summary, safe_sync_dashboard_events
 from app.modules.firewall import routes as firewall_routes
 from app.modules.firewall.routes import default_payload as default_firewall_payload
 from app.modules.firewall.routes import fetch_huawei_firewall_status
@@ -40,7 +41,7 @@ def summary():
 def overview():
     summary_data = summary_payload()
     wireless_data = dashboard_wireless_payload()
-    return success({
+    payload = {
         "summary": summary_data,
         "access_clients": dashboard_access_clients_payload(),
         "switches": dashboard_switches_payload(),
@@ -52,7 +53,10 @@ def overview():
             "wireless_users": wireless_data["user_tops"],
             "aps": wireless_data["ap_tops"],
         },
-    })
+    }
+    safe_sync_dashboard_events(payload)
+    payload["events"] = safe_event_summary()
+    return success(payload)
 
 
 def summary_payload():

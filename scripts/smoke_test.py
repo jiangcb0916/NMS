@@ -19,6 +19,7 @@ from app.models.user import User
 from app.modules.access_control import name_cache as access_control_name_cache
 from app.modules.access_control import routes as access_control_routes
 from app.modules.dashboard import routes as dashboard_routes
+from app.modules.events.service import upsert_event
 from app.modules.firewall import routes as firewall_routes
 from app.modules.osdwan import routes as osdwan_routes
 from app.modules.sangfor_ac import routes as sangfor_ac_routes
@@ -57,6 +58,28 @@ def main():
 
     health_response = client.get("/api/health")
     assert health_response.status_code == 200, health_response.get_data(as_text=True)
+
+    with app.app_context():
+        smoke_event = upsert_event(
+            "smoke:event",
+            "smoke",
+            "warning",
+            "smoke event",
+            "smoke event message",
+            {"safe": True},
+        )
+        smoke_event_id = smoke_event.id
+
+    events_response = client.get("/api/events")
+    assert events_response.status_code == 200, events_response.get_data(as_text=True)
+    events_data = events_response.get_json()["data"]
+    assert events_data["total"] == 1
+    assert events_data["summary"]["unacknowledged"] == 1
+
+    ack_event_response = client.post(f"/api/events/{smoke_event_id}/ack")
+    assert ack_event_response.status_code == 200, ack_event_response.get_data(as_text=True)
+    resolve_event_response = client.post(f"/api/events/{smoke_event_id}/resolve")
+    assert resolve_event_response.status_code == 200, resolve_event_response.get_data(as_text=True)
 
     class FakeAccessControlClient:
         configured = True

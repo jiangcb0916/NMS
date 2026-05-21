@@ -137,35 +137,56 @@
                 </div>
             </div>
             <div class="dashboard-health">
-                <div class="health-section-label">状态</div>
-                <div class="health-row">
-                    <span>防火墙</span>
-                    <strong id="health-firewall">-</strong>
+                <div class="health-group">
+                    <div class="health-section-label">状态</div>
+                    <div class="health-row">
+                        <span>防火墙</span>
+                        <strong id="health-firewall">-</strong>
+                    </div>
+                    <div class="health-row">
+                        <span>交换机</span>
+                        <strong id="health-switches">-</strong>
+                    </div>
+                    <div class="health-row">
+                        <span>无线控制器</span>
+                        <strong id="health-wireless">-</strong>
+                    </div>
+                    <div class="health-row">
+                        <span>OSDWAN</span>
+                        <strong id="health-osdwan">-</strong>
+                    </div>
                 </div>
-                <div class="health-row">
-                    <span>交换机</span>
-                    <strong id="health-switches">-</strong>
-                </div>
-                <div class="health-row">
-                    <span>无线控制器</span>
-                    <strong id="health-wireless">-</strong>
-                </div>
-                <div class="health-row">
-                    <span>OSDWAN</span>
-                    <strong id="health-osdwan">-</strong>
-                </div>
-                <div class="health-section-label">防火墙资源</div>
-                <div class="health-row">
-                    <span>CPU</span>
-                    <strong id="health-firewall-cpu">-</strong>
-                </div>
-                <div class="health-row">
-                    <span>内存</span>
-                    <strong id="health-firewall-memory">-</strong>
-                </div>
-                <div class="health-row">
-                    <span>总带宽</span>
-                    <strong id="health-firewall-bandwidth">-</strong>
+                <div class="health-subgrid">
+                    <div class="health-group">
+                        <div class="health-section-label">事件摘要</div>
+                        <div class="health-row">
+                            <span>严重事件</span>
+                            <strong id="health-event-critical">-</strong>
+                        </div>
+                        <div class="health-row">
+                            <span>未确认</span>
+                            <strong id="health-event-open">-</strong>
+                        </div>
+                        <div class="health-row">
+                            <span>异常来源</span>
+                            <strong id="health-event-sources">-</strong>
+                        </div>
+                    </div>
+                    <div class="health-group">
+                        <div class="health-section-label">防火墙资源</div>
+                        <div class="health-row">
+                            <span>CPU</span>
+                            <strong id="health-firewall-cpu">-</strong>
+                        </div>
+                        <div class="health-row">
+                            <span>内存</span>
+                            <strong id="health-firewall-memory">-</strong>
+                        </div>
+                        <div class="health-row">
+                            <span>总带宽</span>
+                            <strong id="health-firewall-bandwidth">-</strong>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -733,6 +754,131 @@
             </button>
         </div>
     </section>
+</section>
+
+<section class="panel events-panel app-view" id="events-panel" hidden>
+    <div class="panel-header">
+        <div>
+            <h2>事件中心</h2>
+            <p class="panel-subtitle">外部系统与核心监控异常</p>
+        </div>
+        <div class="button-row">
+            <button class="small-button" id="reload-events" type="button">
+                <i class="bi bi-arrow-clockwise"></i>
+                <span>刷新</span>
+            </button>
+        </div>
+    </div>
+    <div class="toolbar-row events-toolbar">
+        <input id="event-search" placeholder="搜索标题、来源、消息">
+        <select id="event-severity-filter" aria-label="事件级别">
+            <option value="">全部级别</option>
+            <option value="critical">严重</option>
+            <option value="warning">警告</option>
+            <option value="info">信息</option>
+        </select>
+        <select id="event-source-filter" aria-label="事件来源">
+            <option value="">全部来源</option>
+        </select>
+        <select id="event-status-filter" aria-label="事件状态">
+            <option value="">全部状态</option>
+            <option value="open">未确认</option>
+            <option value="acknowledged">已确认</option>
+            <option value="resolved">已恢复</option>
+        </select>
+        <select id="event-page-size" aria-label="每页数量">
+            <option value="10">10 / 页</option>
+            <option value="20" selected>20 / 页</option>
+            <option value="50">50 / 页</option>
+            <option value="100">100 / 页</option>
+        </select>
+    </div>
+    <div class="list-summary" id="events-summary">-</div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>级别</th>
+                    <th>来源</th>
+                    <th>标题</th>
+                    <th>消息</th>
+                    <th>状态</th>
+                    <th>最近出现</th>
+                    <th>次数</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="events-table-body">
+                <tr>
+                    <td colspan="8">暂无数据</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="pagination-row">
+        <button class="small-button" id="events-prev" type="button">
+            <i class="bi bi-chevron-left"></i>
+            <span>上一页</span>
+        </button>
+        <span id="events-page">-</span>
+        <button class="small-button" id="events-next" type="button">
+            <span>下一页</span>
+            <i class="bi bi-chevron-right"></i>
+        </button>
+    </div>
+</section>
+
+<section class="panel diagnostics-panel app-view" id="diagnostics-panel" hidden>
+    <div class="panel-header">
+        <div>
+            <h2>诊断中心</h2>
+            <p class="panel-subtitle">外部集成配置与连通性</p>
+        </div>
+        <div class="button-row">
+            <button class="small-button" id="reload-diagnostics" type="button">
+                <i class="bi bi-arrow-clockwise"></i>
+                <span>刷新</span>
+            </button>
+        </div>
+    </div>
+    <div class="diagnostic-summary-grid" id="diagnostics-summary">
+        <div class="diagnostic-summary-item">
+            <span>正常</span>
+            <strong id="diagnostics-ok">-</strong>
+        </div>
+        <div class="diagnostic-summary-item">
+            <span>异常</span>
+            <strong id="diagnostics-bad">-</strong>
+        </div>
+        <div class="diagnostic-summary-item">
+            <span>未配置</span>
+            <strong id="diagnostics-unconfigured">-</strong>
+        </div>
+        <div class="diagnostic-summary-item">
+            <span>平均耗时</span>
+            <strong id="diagnostics-seconds">-</strong>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>集成</th>
+                    <th>配置</th>
+                    <th>状态</th>
+                    <th>最近检查</th>
+                    <th>耗时</th>
+                    <th>消息</th>
+                    <th>安全详情</th>
+                </tr>
+            </thead>
+            <tbody id="diagnostics-table-body">
+                <tr>
+                    <td colspan="7">暂无数据</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
 </section>
 
 <section class="panel users-panel app-view" id="users-panel" hidden>
