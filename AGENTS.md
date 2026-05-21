@@ -17,6 +17,7 @@ http://127.0.0.1:5001
 - 先读代码再改。优先查看 `app/modules/*/routes.py`、`templates/index.html`、`static/js/app.js`、`static/css/app.css` 和 `app/config.py`。
 - 保持改动小而准。不要顺手重构无关模块，不要改动用户没有要求的页面。
 - 尊重现有工作区和服务器改动。看到未提交修改时先理解来源，不要用 `git reset --hard` 或 `git checkout --` 覆盖。
+- Git 本地操作和 GitHub 同步要分开处理。除非用户明确要求 `push`、同步 GitHub 或服务器部署，不要自动执行 `git push`、远端同步或部署动作。
 - 不提交 `.env`、`instance/`、数据库、会话文件、真实 token、真实密码或共享密钥。
 - 新增配置时同步检查 `app/config.py`、`.env.example`、`README.md` 和 `docs/server-docker-deploy.md` 是否需要更新。
 - 外部接口可能不稳定，页面应能显示“未配置/异常/暂无数据”，不能让一个接口失败拖垮整个页面。
@@ -156,7 +157,8 @@ curl -sS http://127.0.0.1:5001/api/health
 
 ## 部署注意
 
-- 本地代码更新到服务器的常规流程：本地提交并推送 GitHub，服务器执行 `git pull --ff-only`，然后重启或重建容器。
+- 本地代码更新到服务器的常规流程：本地提交并推送 GitHub，服务器执行 `git pull --ff-only`，然后重启或重建容器。这个流程只在用户明确要求同步/部署时执行。
+- 本地验证不需要推送 GitHub。功能分支、本地提交、合并 `main`、推送 GitHub、服务器拉取和容器重启是独立步骤，按用户当次要求逐步执行。
 - 服务器网络异常时，`git pull` 可能报 `Could not resolve host: github.com`，先排查 DNS/网络，不要盲目改代码。
 - 服务器如果有本地修改，`git pull --ff-only` 可能提示文件会被覆盖。先执行 `git status` 和 `git diff`，确认是否为服务器专用改动。
 - 服务器上的 `.env` 和 `instance/` 必须保留，不提交、不覆盖。SQLite 数据库和 Flask session 都在 `instance/`。
