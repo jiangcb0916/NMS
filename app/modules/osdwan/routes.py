@@ -655,7 +655,7 @@ def bandwidth_to_mbps(value, key):
     if "byte" in key or "octet" in key:
         return number * 8 / 1_000_000
     if "speed" in key:
-        return number * 8 / 1_000_000 if number > 10_000 else number
+        return number * 8 / 1_000_000
     if "bps" in key or "bit" in key or "bandwidth" in key:
         return number / 1_000_000 if number > 10_000 else number
     return number / 1_000_000 if number > 1_000_000 else number

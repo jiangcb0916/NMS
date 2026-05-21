@@ -528,14 +528,14 @@ def main():
         if url.endswith("/api/Saas/all-network-stats"):
             assert params["period"] == "1day"
             return FakeOsdwanResponse({"data": [
-                {"time": 1760000000, "total_download_speed": 120000, "total_upload_speed": 40000},
+                {"time": 1760000000, "total_download_speed": 21549.83, "total_upload_speed": 9895.78},
                 {"time": 1760000300, "total_download_speed": 180000, "total_upload_speed": 60000},
             ]})
         if url.endswith("/api/Saas/network-stats/2168"):
             assert params["period"] == "6hours"
             assert params["view_type"] == "total"
             return FakeOsdwanResponse({"data": {"list": [
-                {"timestamp": 1760000000, "down_speed": "11250000", "up_speed": "3750000"},
+                {"timestamp": 1760000000, "down_speed": "9318750", "up_speed": "3750000"},
                 {"timestamp": 1760000300, "down_speed": "18750000", "up_speed": "6250000"},
             ]}})
         raise AssertionError(url)
@@ -593,8 +593,13 @@ def main():
         assert osdwan_data["proxy_status"]["online"] == 2
         assert osdwan_data["user_people"][0]["name"] == "alice"
         assert osdwan_data["all_stats"]["sample_count"] == 2
+        assert osdwan_data["all_stats"]["samples"][0]["download_mbps"] == 0.172
+        assert osdwan_data["all_stats"]["samples"][0]["upload_mbps"] == 0.079
+        assert osdwan_data["all_stats"]["samples"][0]["download_rate"] == "172 Kbps"
+        assert osdwan_data["all_stats"]["samples"][0]["upload_rate"] == "79 Kbps"
         assert osdwan_data["all_stats"]["latest"]["download_mbps"] == 1.44
         assert osdwan_data["node"]["name"] == "办公开发"
+        assert osdwan_data["node"]["stats"]["samples"][0]["download_mbps"] == 74.55
         assert osdwan_data["node"]["stats"]["latest"]["upload_mbps"] == 50
 
         osdwan_metrics_response = client.get("/api/osdwan/metrics")
