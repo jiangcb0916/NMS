@@ -969,6 +969,69 @@ select {
     flex-wrap: wrap;
 }
 
+.range-dropdown {
+    position: relative;
+}
+
+.range-dropdown-trigger {
+    min-width: 138px;
+    justify-content: space-between;
+}
+
+.range-dropdown-trigger .bi-chevron-down {
+    font-size: 12px;
+    transition: transform 0.16s ease;
+}
+
+.range-dropdown.open .bi-chevron-down {
+    transform: rotate(180deg);
+}
+
+.range-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 30;
+    display: grid;
+    gap: 4px;
+    min-width: 150px;
+    padding: 6px;
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: 0 12px 30px rgba(31, 37, 41, 0.14);
+}
+
+.range-dropdown-menu[hidden] {
+    display: none;
+}
+
+.range-option {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 34px;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+}
+
+.range-option:hover,
+.range-option:focus-visible {
+    background: #edf4f5;
+    outline: none;
+}
+
+.range-option.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+}
+
 .devices-panel,
 .wireless-panel,
 .switches-panel,
@@ -1724,6 +1787,16 @@ th {
     }
 
     .pagination-row {
+        justify-content: flex-start;
+    }
+
+    .firewall-bandwidth-panel > .panel-header {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .firewall-bandwidth-panel > .panel-header > .button-row {
+        width: 100%;
         justify-content: flex-start;
     }
 }

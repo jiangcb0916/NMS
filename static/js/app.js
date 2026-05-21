@@ -455,9 +455,71 @@ function renderFirewallBandwidthPage(data) {
 }
 
 function renderFirewallRangeButtons() {
+    const label = document.getElementById('firewall-range-label');
+    const rangeLabel = renderFirewallRangeLabel(firewallBandwidthState.range);
+    if (label) {
+        label.textContent = rangeLabel;
+    }
+    const toggle = document.getElementById('firewall-range-toggle');
+    if (toggle) {
+        toggle.setAttribute('aria-label', `选择时间范围，当前${rangeLabel}`);
+    }
     document.querySelectorAll('[data-firewall-range]').forEach((button) => {
-        button.classList.toggle('active', button.dataset.firewallRange === firewallBandwidthState.range);
+        const active = button.dataset.firewallRange === firewallBandwidthState.range;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-checked', String(active));
     });
+}
+
+function openRangeDropdown(dropdown) {
+    if (!dropdown) {
+        return;
+    }
+    const trigger = dropdown.querySelector('[data-range-toggle]');
+    const menu = dropdown.querySelector('.range-dropdown-menu');
+    dropdown.classList.add('open');
+    if (trigger) {
+        trigger.setAttribute('aria-expanded', 'true');
+    }
+    if (menu) {
+        menu.hidden = false;
+    }
+}
+
+function closeRangeDropdown(dropdown) {
+    if (!dropdown) {
+        return;
+    }
+    const trigger = dropdown.querySelector('[data-range-toggle]');
+    const menu = dropdown.querySelector('.range-dropdown-menu');
+    dropdown.classList.remove('open');
+    if (trigger) {
+        trigger.setAttribute('aria-expanded', 'false');
+    }
+    if (menu) {
+        menu.hidden = true;
+    }
+}
+
+function closeRangeDropdowns(except = null) {
+    document.querySelectorAll('[data-range-dropdown]').forEach((dropdown) => {
+        if (dropdown !== except) {
+            closeRangeDropdown(dropdown);
+        }
+    });
+}
+
+function toggleRangeDropdown(dropdown) {
+    if (!dropdown) {
+        return;
+    }
+    const shouldOpen = !dropdown.classList.contains('open');
+    closeRangeDropdowns(dropdown);
+    if (shouldOpen) {
+        openRangeDropdown(dropdown);
+    } else {
+        closeRangeDropdown(dropdown);
+    }
 }
 
 async function loadTrafficAnalysis(options = {}) {
@@ -1658,8 +1720,19 @@ function renderSwitchTrafficError(message) {
 }
 
 function renderSwitchTrafficRangeButtons() {
+    const label = document.getElementById('switch-traffic-range-label');
+    const rangeLabel = renderFirewallRangeLabel(switchState.trafficRange);
+    if (label) {
+        label.textContent = rangeLabel;
+    }
+    const toggle = document.getElementById('switch-traffic-range-toggle');
+    if (toggle) {
+        toggle.setAttribute('aria-label', `选择时间范围，当前${rangeLabel}`);
+    }
     document.querySelectorAll('[data-switch-traffic-range]').forEach((button) => {
-        button.classList.toggle('active', button.dataset.switchTrafficRange === switchState.trafficRange);
+        const active = button.dataset.switchTrafficRange === switchState.trafficRange;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-checked', String(active));
     });
 }
 
@@ -2799,17 +2872,38 @@ document.addEventListener('DOMContentLoaded', () => {
         reloadSwitches.addEventListener('click', () => loadSwitches({page: switchState.page}));
     }
 
+    document.querySelectorAll('[data-range-toggle]').forEach((button) => {
+        button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleRangeDropdown(button.closest('[data-range-dropdown]'));
+        });
+    });
+
     document.querySelectorAll('[data-firewall-range]').forEach((button) => {
         button.addEventListener('click', () => {
+            closeRangeDropdown(button.closest('[data-range-dropdown]'));
             loadFirewallBandwidth({range: button.dataset.firewallRange});
         });
     });
 
     document.querySelectorAll('[data-switch-traffic-range]').forEach((button) => {
         button.addEventListener('click', () => {
+            closeRangeDropdown(button.closest('[data-range-dropdown]'));
             loadSwitchDetailData({range: button.dataset.switchTrafficRange})
                 .catch((error) => showToast(error.message, 'error'));
         });
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('[data-range-dropdown]')) {
+            closeRangeDropdowns();
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeRangeDropdowns();
+        }
     });
 
     window.addEventListener('resize', debounce(() => {

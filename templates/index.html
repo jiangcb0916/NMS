@@ -218,33 +218,24 @@
             <p class="panel-subtitle" id="firewall-bandwidth-source">-</p>
         </div>
         <div class="button-row">
-            <button class="small-button" type="button" data-firewall-range="5m">
-                <span>5 分钟</span>
-            </button>
-            <button class="small-button" type="button" data-firewall-range="15m">
-                <span>15 分钟</span>
-            </button>
-            <button class="small-button" type="button" data-firewall-range="30m">
-                <span>30 分钟</span>
-            </button>
-            <button class="small-button" type="button" data-firewall-range="1h">
-                <span>1 小时</span>
-            </button>
-            <button class="small-button" type="button" data-firewall-range="3h">
-                <span>3 小时</span>
-            </button>
-            <button class="small-button active" type="button" data-firewall-range="6h">
-                <span>6 小时</span>
-            </button>
-            <button class="small-button" type="button" data-firewall-range="12h">
-                <span>12 小时</span>
-            </button>
-            <button class="small-button" type="button" data-firewall-range="24h">
-                <span>24 小时</span>
-            </button>
-            <button class="small-button" type="button" data-firewall-range="2d">
-                <span>2 天</span>
-            </button>
+            <div class="range-dropdown" data-range-dropdown>
+                <button class="small-button range-dropdown-trigger" id="firewall-range-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="firewall-range-menu" data-range-toggle>
+                    <i class="bi bi-clock"></i>
+                    <span id="firewall-range-label">最近 6 小时</span>
+                    <i class="bi bi-chevron-down"></i>
+                </button>
+                <div class="range-dropdown-menu" id="firewall-range-menu" role="menu" hidden>
+                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="5m">5 分钟</button>
+                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="15m">15 分钟</button>
+                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="30m">30 分钟</button>
+                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="1h">1 小时</button>
+                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="3h">3 小时</button>
+                    <button class="range-option active" type="button" role="menuitemradio" aria-checked="true" data-firewall-range="6h">6 小时</button>
+                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="12h">12 小时</button>
+                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="24h">24 小时</button>
+                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="2d">2 天</button>
+                </div>
+            </div>
             <button class="small-button" id="reload-firewall-bandwidth" type="button">
                 <i class="bi bi-arrow-clockwise"></i>
                 <span>刷新</span>
@@ -632,30 +623,23 @@
                 <p class="panel-subtitle" id="switch-detail-subtitle">-</p>
             </div>
             <div class="button-row">
-                <button class="small-button" type="button" data-switch-traffic-range="5m">
-                    <span>5 分钟</span>
-                </button>
-                <button class="small-button" type="button" data-switch-traffic-range="15m">
-                    <span>15 分钟</span>
-                </button>
-                <button class="small-button" type="button" data-switch-traffic-range="30m">
-                    <span>30 分钟</span>
-                </button>
-                <button class="small-button active" type="button" data-switch-traffic-range="1h">
-                    <span>1 小时</span>
-                </button>
-                <button class="small-button" type="button" data-switch-traffic-range="3h">
-                    <span>3 小时</span>
-                </button>
-                <button class="small-button" type="button" data-switch-traffic-range="6h">
-                    <span>6 小时</span>
-                </button>
-                <button class="small-button" type="button" data-switch-traffic-range="12h">
-                    <span>12 小时</span>
-                </button>
-                <button class="small-button" type="button" data-switch-traffic-range="24h">
-                    <span>24 小时</span>
-                </button>
+                <div class="range-dropdown" data-range-dropdown>
+                    <button class="small-button range-dropdown-trigger" id="switch-traffic-range-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="switch-traffic-range-menu" data-range-toggle>
+                        <i class="bi bi-clock"></i>
+                        <span id="switch-traffic-range-label">最近 1 小时</span>
+                        <i class="bi bi-chevron-down"></i>
+                    </button>
+                    <div class="range-dropdown-menu" id="switch-traffic-range-menu" role="menu" hidden>
+                        <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-switch-traffic-range="5m">5 分钟</button>
+                        <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-switch-traffic-range="15m">15 分钟</button>
+                        <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-switch-traffic-range="30m">30 分钟</button>
+                        <button class="range-option active" type="button" role="menuitemradio" aria-checked="true" data-switch-traffic-range="1h">1 小时</button>
+                        <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-switch-traffic-range="3h">3 小时</button>
+                        <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-switch-traffic-range="6h">6 小时</button>
+                        <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-switch-traffic-range="12h">12 小时</button>
+                        <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-switch-traffic-range="24h">24 小时</button>
+                    </div>
+                </div>
                 <button class="small-button" id="reload-switch-detail" type="button">
                     <i class="bi bi-arrow-clockwise"></i>
                     <span>刷新</span>
