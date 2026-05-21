@@ -175,6 +175,31 @@ def main():
                 ],
             }
 
+        def get_app_rank(self, top=60, groups=None, line="0"):
+            assert top == 10
+            assert groups is None
+            assert line == "0"
+            return {
+                "code": 0,
+                "message": "Successfully",
+                "data": [
+                    {
+                        "app": "访问网站",
+                        "up": 1000,
+                        "down": 2000,
+                        "total": 3000,
+                        "rate": 75,
+                    },
+                    {
+                        "app": "钉钉",
+                        "up": 500,
+                        "down": 500,
+                        "total": 1000,
+                        "rate": 25,
+                    },
+                ],
+            }
+
     original_sangfor_ac_client = sangfor_ac_routes.SangforACClient
     sangfor_ac_routes.SangforACClient = FakeSangforACClient
     try:

@@ -224,8 +224,7 @@ def dashboard_traffic_apps_payload():
 
     try:
         client.timeout = 5
-        top = current_app.config.get("SANGFOR_AC_USER_RANK_TOP", 10000)
-        result = sangfor_ac_routes.get_cached_user_rank(client, top, "0")
+        result = client.get_app_rank(top=10, line="0")
         if result.get("code") != 0:
             return empty_traffic_apps_dashboard(
                 configured=True,
@@ -234,15 +233,14 @@ def dashboard_traffic_apps_payload():
             )
 
         rows = result.get("data") or []
-        apps = aggregate_dashboard_apps(rows)
+        apps = normalize_dashboard_apps(rows)
         return {
             "configured": True,
             "ok": True,
             "error": "",
             "source": sangfor_ac_routes.ac_source(client),
-            "user_count": len(rows),
             "total_apps": len(apps),
-            "items": apps[:5],
+            "items": apps[:TOP_LIMIT],
         }
     except Exception as exc:
         current_app.logger.warning("Dashboard 应用排行读取失败: %s", exc.__class__.__name__)
@@ -261,36 +259,30 @@ def empty_traffic_apps_dashboard(configured, error="", source=""):
     }
 
 
-def aggregate_dashboard_apps(rows):
-    app_map = {}
+def normalize_dashboard_apps(rows):
+    apps = []
     for row in rows:
-        detail_rows = ((row or {}).get("detail") or {}).get("data") or []
-        for item in detail_rows:
-            if not isinstance(item, dict):
-                continue
-            name = sangfor_ac_routes.string_value(item.get("app"))
-            stats = app_map.setdefault(name, {
-                "app": name,
-                "up_bytes": 0,
-                "down_bytes": 0,
-                "total_bytes": 0,
-                "user_count": 0,
-            })
-            up_bytes = sangfor_ac_routes.number_value(item.get("up"))
-            down_bytes = sangfor_ac_routes.number_value(item.get("down"))
-            total_bytes = sangfor_ac_routes.number_value(item.get("total")) or (up_bytes + down_bytes)
-            stats["up_bytes"] += up_bytes
-            stats["down_bytes"] += down_bytes
-            stats["total_bytes"] += total_bytes
-            stats["user_count"] += 1
+        if not isinstance(row, dict):
+            continue
+        up_bytes = sangfor_ac_routes.number_value(row.get("up"))
+        down_bytes = sangfor_ac_routes.number_value(row.get("down"))
+        total_bytes = sangfor_ac_routes.number_value(row.get("total")) or (up_bytes + down_bytes)
+        apps.append({
+            "app": sangfor_ac_routes.string_value(row.get("app")),
+            "up_bytes": up_bytes,
+            "down_bytes": down_bytes,
+            "total_bytes": total_bytes,
+            "percent": sangfor_ac_routes.number_value(row.get("rate")),
+        })
 
-    apps = sorted(app_map.values(), key=lambda item: item["total_bytes"], reverse=True)
-    total = sum(item["total_bytes"] for item in apps)
+    apps.sort(key=lambda item: item["total_bytes"], reverse=True)
+    total_bytes_all = sum(item["total_bytes"] for item in apps)
     for item in apps:
         item["up_rate"] = sangfor_ac_routes.format_byte_rate(item["up_bytes"])
         item["down_rate"] = sangfor_ac_routes.format_byte_rate(item["down_bytes"])
         item["total_rate"] = sangfor_ac_routes.format_byte_rate(item["total_bytes"])
-        item["percent"] = round((item["total_bytes"] / total * 100), 1) if total else 0
+        if not item["percent"]:
+            item["percent"] = round((item["total_bytes"] / total_bytes_all * 100), 1) if total_bytes_all else 0
     return apps
 
 

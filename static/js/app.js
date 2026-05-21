@@ -387,7 +387,7 @@ function renderDashboardAppRank(payload) {
 
     const items = payload.items || [];
     if (subtitle) {
-        subtitle.textContent = `共 ${payload.total_apps || 0} 个应用 · ${payload.user_count || 0} 个用户`;
+        subtitle.textContent = `共 ${payload.total_apps || 0} 个应用`;
     }
     if (!items.length) {
         list.innerHTML = '<li class="empty-state">暂无数据</li>';
