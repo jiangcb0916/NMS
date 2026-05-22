@@ -1,5 +1,6 @@
 import csv
 import io
+from datetime import timedelta
 
 from flask import Blueprint, Response, current_app, request
 from flask_login import login_required
@@ -8,7 +9,7 @@ from sqlalchemy import or_
 from app.common.responses import created, failure, success
 from app.common.validators import optional_string, required_string, validate_ip, validate_mac
 from app.extensions import db
-from app.models.base import now_local
+from app.models.base import format_datetime, now_local
 from app.models.device import Device
 from app.modules.auth.decorators import require_admin
 from app.modules.devices.status import (
@@ -51,6 +52,7 @@ def list_devices():
         "categories": device_categories(),
         "status": normalize_status(request.args.get("status")),
         "status_counts": status_counts,
+        "status_freshness": device_status_freshness(),
     })
 
 
@@ -351,6 +353,25 @@ def device_status_counts(query):
         "all": total,
         "online": online,
         "offline": total - online,
+    }
+
+
+def device_status_freshness():
+    threshold_seconds = max(0, int(current_app.config["DEVICE_STATUS_CHECK_INTERVAL"]))
+    cutoff = now_local() - timedelta(seconds=threshold_seconds)
+    values = [row[0] for row in db.session.query(Device.last_check_time).all()]
+    checked_values = [value for value in values if value is not None]
+    unchecked_count = len(values) - len(checked_values)
+    expired_count = sum(1 for value in checked_values if value < cutoff)
+    newest = max(checked_values) if checked_values else None
+    oldest = min(checked_values) if checked_values else None
+    return {
+        "latest_check_time": format_datetime(newest),
+        "oldest_check_time": format_datetime(oldest),
+        "unchecked_count": unchecked_count,
+        "expired_count": expired_count,
+        "threshold_seconds": threshold_seconds,
+        "needs_refresh": unchecked_count > 0 or expired_count > 0,
     }
 
 

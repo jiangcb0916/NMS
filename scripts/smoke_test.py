@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import io
+import logging
 import os
 import sys
 import time
@@ -19,10 +20,11 @@ from app.models.user import User
 from app.modules.access_control import name_cache as access_control_name_cache
 from app.modules.access_control import routes as access_control_routes
 from app.modules.dashboard import routes as dashboard_routes
-from app.modules.events.service import upsert_event
+from app.modules.devices import status as device_status
 from app.modules.firewall import routes as firewall_routes
 from app.modules.osdwan import routes as osdwan_routes
 from app.modules.sangfor_ac import routes as sangfor_ac_routes
+from app.modules.switches import trace as switch_trace
 from app.modules.switches import routes as switch_routes
 from app.modules.wireless import routes as wireless_routes
 
@@ -58,28 +60,6 @@ def main():
 
     health_response = client.get("/api/health")
     assert health_response.status_code == 200, health_response.get_data(as_text=True)
-
-    with app.app_context():
-        smoke_event = upsert_event(
-            "smoke:event",
-            "smoke",
-            "warning",
-            "smoke event",
-            "smoke event message",
-            {"safe": True},
-        )
-        smoke_event_id = smoke_event.id
-
-    events_response = client.get("/api/events")
-    assert events_response.status_code == 200, events_response.get_data(as_text=True)
-    events_data = events_response.get_json()["data"]
-    assert events_data["total"] == 1
-    assert events_data["summary"]["unacknowledged"] == 1
-
-    ack_event_response = client.post(f"/api/events/{smoke_event_id}/ack")
-    assert ack_event_response.status_code == 200, ack_event_response.get_data(as_text=True)
-    resolve_event_response = client.post(f"/api/events/{smoke_event_id}/resolve")
-    assert resolve_event_response.status_code == 200, resolve_event_response.get_data(as_text=True)
 
     class FakeAccessControlClient:
         configured = True
@@ -535,6 +515,70 @@ def main():
         assert switch_history_data["sample_count"] == 3
         assert switch_history_data["samples"][-1]["total_in_mbps"] == 16
         assert switch_history_data["samples"][-1]["total_out_rate"] == "5.00 Mbps"
+
+        arp_entry = switch_trace.parse_arp("172.16.70.17    9009-d091-478f  1  D-0  GE0/0/4", "172.16.70.17")
+        assert arp_entry["mac"] == "9009-d091-478f"
+        assert arp_entry["interface"] == "GE0/0/4"
+        assert switch_trace.parse_arp("172.16.70.176   6424-4d65-7bd3  14  D-0  GE1/0/11", "172.16.70.17") is None
+        assert switch_trace.command_interface_name("GE0/0/4") == "GigabitEthernet 0/0/4"
+        assert switch_trace.command_interface_name("GigabitEthernet0/0/4") == "GigabitEthernet 0/0/4"
+        mac_entries = switch_trace.parse_mac_entries("9009-d091-478f dynamic 1/- GE0/0/4")
+        assert mac_entries[0]["interface"] == "GE0/0/4"
+        lldp_neighbor = switch_trace.parse_lldp_neighbor("\n".join([
+            "Management Address : 172.16.100.8",
+            "System Name        : Access-SW-01",
+            "Port ID            : GE0/0/24",
+            "System Description : Huawei S5735",
+        ]))
+        assert lldp_neighbor["management_ip"] == "172.16.100.8"
+        assert lldp_neighbor["system_name"] == "Access-SW-01"
+        lldp_neighbor_value = switch_trace.parse_lldp_neighbor("\n".join([
+            "Management address type  :ipv4",
+            "Management address value :172.16.100.37",
+            "System name         :7F-Office-Switch-01",
+            "Port ID        :GigabitEthernet0/0/48",
+        ]))
+        assert lldp_neighbor_value["management_ip"] == "172.16.100.37"
+        assert lldp_neighbor_value["system_name"] == "7F-Office-Switch-01"
+
+        original_trace_terminal_ip = switch_routes.trace_terminal_ip
+
+        def fake_trace_terminal_ip(ip):
+            assert ip == "172.16.70.17"
+            return {
+                "target_ip": ip,
+                "target_mac": "9009-d091-478f",
+                "start_switch": "172.16.100.5",
+                "final_switch": "172.16.100.8",
+                "final_interface": "GE0/0/12",
+                "result_type": "terminal",
+                "configured": True,
+                "hops": [{
+                    "index": 1,
+                    "switch_ip": "172.16.100.5",
+                    "ingress_interface": "GE0/0/4",
+                    "mac_count": 2,
+                    "neighbor": {"management_ip": "172.16.100.8", "system_name": "Access-SW-01"},
+                    "commands": [{"command": "display arp | include 172.16.70.17", "summary": "执行成功"}],
+                    "status": "发现下联交换机，继续追踪",
+                    "error": "",
+                }],
+                "error": "",
+            }, "已定位到普通终端接口", 0
+
+        switch_routes.trace_terminal_ip = fake_trace_terminal_ip
+        try:
+            trace_response = client.post("/api/statistics/switches/trace-terminal", json={"ip": "172.16.70.17"})
+            assert trace_response.status_code == 200, trace_response.get_data(as_text=True)
+            trace_json = trace_response.get_json()
+            assert trace_json["code"] == 0
+            assert trace_json["data"]["target_mac"] == "9009-d091-478f"
+            assert trace_json["data"]["final_interface"] == "GE0/0/12"
+
+            invalid_trace_response = client.post("/api/statistics/switches/trace-terminal", json={"ip": "bad-ip"})
+            assert invalid_trace_response.status_code == 400, invalid_trace_response.get_data(as_text=True)
+        finally:
+            switch_routes.trace_terminal_ip = original_trace_terminal_ip
     finally:
         wireless_routes.PrometheusClient = original_prometheus_client
         switch_routes.PrometheusClient = original_switch_prometheus_client
@@ -712,7 +756,12 @@ def main():
             return fake_osdwan_get(url, params=params, headers=headers, timeout=timeout)
 
         osdwan_routes.requests.get = fake_osdwan_partial_get
-        osdwan_partial_response = client.get("/api/osdwan/overview")
+        original_logger_level = app.logger.level
+        app.logger.setLevel(logging.ERROR)
+        try:
+            osdwan_partial_response = client.get("/api/osdwan/overview")
+        finally:
+            app.logger.setLevel(original_logger_level)
         assert osdwan_partial_response.status_code == 200, osdwan_partial_response.get_data(as_text=True)
         osdwan_partial = osdwan_partial_response.get_json()
         assert osdwan_partial["code"] == 0
@@ -925,8 +974,11 @@ def main():
 
     device_list_response = client.get("/api/access-control/device-list?q=smoke&category=smoke&page=1&per_page=10")
     assert device_list_response.status_code == 200, device_list_response.get_data(as_text=True)
-    assert device_list_response.get_json()["data"]["total"] == 1
-    assert device_list_response.get_json()["data"]["status_counts"]["offline"] == 1
+    device_list_data = device_list_response.get_json()["data"]
+    assert device_list_data["total"] == 1
+    assert device_list_data["status_counts"]["offline"] == 1
+    assert device_list_data["status_freshness"]["unchecked_count"] == 1
+    assert device_list_data["status_freshness"]["needs_refresh"] is True
 
     offline_device_response = client.get("/api/access-control/device-list?q=smoke&status=offline&page=1&per_page=10")
     assert offline_device_response.status_code == 200, offline_device_response.get_data(as_text=True)
@@ -948,6 +1000,25 @@ def main():
     export_device_response = client.get("/api/access-control/device-list/export?q=smoke&status=offline")
     assert export_device_response.status_code == 200, export_device_response.get_data(as_text=True)
     assert b"smoke-device-edited" in export_device_response.data
+
+    original_device_ping = device_status.ping_device
+    device_status.ping_device = lambda ip_address, timeout_seconds=1: ip_address == "192.0.2.10"
+    try:
+        refresh_status_response = client.post("/api/access-control/device-status/refresh")
+    finally:
+        device_status.ping_device = original_device_ping
+    assert refresh_status_response.status_code == 200, refresh_status_response.get_data(as_text=True)
+    refresh_status_data = refresh_status_response.get_json()["data"]
+    assert refresh_status_data["checked_devices"] == 1
+    assert refresh_status_data["online_devices"] == 1
+    assert refresh_status_data["checked_at"]
+
+    refreshed_device_response = client.get("/api/access-control/device-list?q=smoke-device-edited&page=1&per_page=10")
+    refreshed_device_data = refreshed_device_response.get_json()["data"]
+    assert refreshed_device_data["devices"][0]["is_online"] is True
+    assert refreshed_device_data["devices"][0]["last_check_time"]
+    assert refreshed_device_data["status_freshness"]["expired_count"] == 0
+    assert refreshed_device_data["status_freshness"]["unchecked_count"] == 0
 
     import_csv = "username,ip_address,mac_address,category,details\nsmoke-import-device,192.0.2.11,00:11:22:33:44:66,smoke-import,imported\n"
     import_device_response = client.post(

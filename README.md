@@ -11,7 +11,7 @@
 - 缓存管理：姓名缓存、设备系统缓存状态
 - 无线控制器状态：AP、SSID、在线用户等固定 Prometheus label 查询数据
 - OSDWAN 监控：WANFlow 用户列表、整体 SaaS 服务带宽、办公开发节点带宽图
-- 交换机监控：Prometheus targets 中 `job=sw` 的采集状态、端口状态、端口速率和历史流量趋势
+- 交换机监控：Prometheus targets 中 `job=sw` 的采集状态、端口状态、端口速率、历史流量趋势和 Huawei 终端端口定位
 - 外部接口状态检查：深信服 AC、无线 Prometheus 查询、用户名 Metrics、钉钉、联软准入
 - 旧数据迁移：用户、设备、姓名缓存、设备系统缓存
 
@@ -104,6 +104,12 @@ SWITCH_PROMETHEUS_JOB=sw
 SWITCH_TARGET_GROUP=pool-sw
 SWITCH_TRAFFIC_RATE_WINDOW=5m
 SWITCH_PORT_EXCLUDE_PATTERNS=^(InLoopBack|LoopBack|NULL|Console|MEth|Vlanif|Vlan-interface|Stack-Port|Aux|Tunnel)
+SWITCH_TRACE_CORE_IP=172.16.100.5
+SWITCH_SSH_USERNAME=
+SWITCH_SSH_PASSWORD=
+SWITCH_SSH_PORT=22
+SWITCH_SSH_TIMEOUT=8
+SWITCH_TRACE_MAX_HOPS=5
 OSDWAN_API_BASE_URL=https://api.wanflow.com
 OSDWAN_CONSOLE_ORIGIN=https://console.wanflow.com
 OSDWAN_TOKEN=
@@ -221,6 +227,12 @@ docker compose exec web python scripts/migrate_legacy_data.py
 | `SWITCH_TARGET_GROUP` | 交换机 targets 页面分组标识，仅用于页面展示 | `pool-sw` |
 | `SWITCH_TRAFFIC_RATE_WINDOW` | 交换机端口/流量 Prometheus rate 计算窗口 | `5m` |
 | `SWITCH_PORT_EXCLUDE_PATTERNS` | 默认业务端口视图隐藏的端口名正则，多个规则用英文逗号分隔 | `^(InLoopBack\|LoopBack\|NULL\|Console\|MEth\|Vlanif\|Vlan-interface\|Stack-Port\|Aux\|Tunnel)` |
+| `SWITCH_TRACE_CORE_IP` | Huawei 终端定位起始核心交换机 IP | `172.16.100.5` |
+| `SWITCH_SSH_USERNAME` | Huawei 交换机 SSH 用户名，仅后端读取 | 空 |
+| `SWITCH_SSH_PASSWORD` | Huawei 交换机 SSH 密码，仅后端读取 | 空 |
+| `SWITCH_SSH_PORT` | Huawei 交换机 SSH 端口 | `22` |
+| `SWITCH_SSH_TIMEOUT` | Huawei 交换机 SSH 连接与命令超时秒数 | `8` |
+| `SWITCH_TRACE_MAX_HOPS` | 终端端口定位最大 LLDP 追踪跳数 | `5` |
 | `HUAWEI_SNMP_URL` | 华为防火墙 SNMP exporter 接口，Dashboard 带宽卡片使用 | `http://172.16.80.125:9116/snmp` |
 | `HUAWEI_SNMP_AUTH` | 华为防火墙 SNMP exporter auth 参数 | `secure_v3` |
 | `HUAWEI_SNMP_MODULE` | 华为防火墙 SNMP exporter module 参数 | `hw_health` |

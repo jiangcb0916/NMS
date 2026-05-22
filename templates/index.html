@@ -158,21 +158,6 @@
                 </div>
                 <div class="health-subgrid">
                     <div class="health-group">
-                        <div class="health-section-label">事件摘要</div>
-                        <div class="health-row">
-                            <span>严重事件</span>
-                            <strong id="health-event-critical">-</strong>
-                        </div>
-                        <div class="health-row">
-                            <span>未确认</span>
-                            <strong id="health-event-open">-</strong>
-                        </div>
-                        <div class="health-row">
-                            <span>异常来源</span>
-                            <strong id="health-event-sources">-</strong>
-                        </div>
-                    </div>
-                    <div class="health-group">
                         <div class="health-section-label">防火墙资源</div>
                         <div class="health-row">
                             <span>CPU</span>
@@ -577,6 +562,24 @@
             </div>
         </article>
     </section>
+    <section class="switch-trace-section" aria-labelledby="switch-trace-title">
+        <div class="switch-trace-header">
+            <div>
+                <h3 id="switch-trace-title">终端定位</h3>
+                <p class="panel-subtitle">从核心交换机开始按 ARP、MAC 表和 LLDP 自动追踪用户端口</p>
+            </div>
+            <span class="status-badge" id="switch-trace-core">核心 172.16.100.5</span>
+        </div>
+        <form class="toolbar-row switch-trace-toolbar" id="switch-trace-form">
+            <input id="switch-trace-ip" name="ip" placeholder="输入终端 IP，例如 172.16.70.17" autocomplete="off">
+            <button class="small-button primary" id="switch-trace-button" type="submit">
+                <i class="bi bi-search"></i>
+                <span>开始追踪</span>
+            </button>
+        </form>
+        <div class="list-summary" id="switch-trace-summary">输入终端 IP 后开始定位真实接入口</div>
+        <div class="switch-trace-result" id="switch-trace-result" hidden></div>
+    </section>
     <div class="toolbar-row switch-toolbar">
         <input id="switch-search" placeholder="搜索 IP、厂商、模块、状态、错误">
         <select id="switch-vendor-filter" aria-label="厂商筛选">
@@ -754,131 +757,6 @@
             </button>
         </div>
     </section>
-</section>
-
-<section class="panel events-panel app-view" id="events-panel" hidden>
-    <div class="panel-header">
-        <div>
-            <h2>事件中心</h2>
-            <p class="panel-subtitle">外部系统与核心监控异常</p>
-        </div>
-        <div class="button-row">
-            <button class="small-button" id="reload-events" type="button">
-                <i class="bi bi-arrow-clockwise"></i>
-                <span>刷新</span>
-            </button>
-        </div>
-    </div>
-    <div class="toolbar-row events-toolbar">
-        <input id="event-search" placeholder="搜索标题、来源、消息">
-        <select id="event-severity-filter" aria-label="事件级别">
-            <option value="">全部级别</option>
-            <option value="critical">严重</option>
-            <option value="warning">警告</option>
-            <option value="info">信息</option>
-        </select>
-        <select id="event-source-filter" aria-label="事件来源">
-            <option value="">全部来源</option>
-        </select>
-        <select id="event-status-filter" aria-label="事件状态">
-            <option value="">全部状态</option>
-            <option value="open">未确认</option>
-            <option value="acknowledged">已确认</option>
-            <option value="resolved">已恢复</option>
-        </select>
-        <select id="event-page-size" aria-label="每页数量">
-            <option value="10">10 / 页</option>
-            <option value="20" selected>20 / 页</option>
-            <option value="50">50 / 页</option>
-            <option value="100">100 / 页</option>
-        </select>
-    </div>
-    <div class="list-summary" id="events-summary">-</div>
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>级别</th>
-                    <th>来源</th>
-                    <th>标题</th>
-                    <th>消息</th>
-                    <th>状态</th>
-                    <th>最近出现</th>
-                    <th>次数</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody id="events-table-body">
-                <tr>
-                    <td colspan="8">暂无数据</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-    <div class="pagination-row">
-        <button class="small-button" id="events-prev" type="button">
-            <i class="bi bi-chevron-left"></i>
-            <span>上一页</span>
-        </button>
-        <span id="events-page">-</span>
-        <button class="small-button" id="events-next" type="button">
-            <span>下一页</span>
-            <i class="bi bi-chevron-right"></i>
-        </button>
-    </div>
-</section>
-
-<section class="panel diagnostics-panel app-view" id="diagnostics-panel" hidden>
-    <div class="panel-header">
-        <div>
-            <h2>诊断中心</h2>
-            <p class="panel-subtitle">外部集成配置与连通性</p>
-        </div>
-        <div class="button-row">
-            <button class="small-button" id="reload-diagnostics" type="button">
-                <i class="bi bi-arrow-clockwise"></i>
-                <span>刷新</span>
-            </button>
-        </div>
-    </div>
-    <div class="diagnostic-summary-grid" id="diagnostics-summary">
-        <div class="diagnostic-summary-item">
-            <span>正常</span>
-            <strong id="diagnostics-ok">-</strong>
-        </div>
-        <div class="diagnostic-summary-item">
-            <span>异常</span>
-            <strong id="diagnostics-bad">-</strong>
-        </div>
-        <div class="diagnostic-summary-item">
-            <span>未配置</span>
-            <strong id="diagnostics-unconfigured">-</strong>
-        </div>
-        <div class="diagnostic-summary-item">
-            <span>平均耗时</span>
-            <strong id="diagnostics-seconds">-</strong>
-        </div>
-    </div>
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>集成</th>
-                    <th>配置</th>
-                    <th>状态</th>
-                    <th>最近检查</th>
-                    <th>耗时</th>
-                    <th>消息</th>
-                    <th>安全详情</th>
-                </tr>
-            </thead>
-            <tbody id="diagnostics-table-body">
-                <tr>
-                    <td colspan="7">暂无数据</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
 </section>
 
 <section class="panel users-panel app-view" id="users-panel" hidden>

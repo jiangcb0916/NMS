@@ -36,6 +36,22 @@ async function apiPost(url, payload = {}) {
     return result.data;
 }
 
+async function apiPostResult(url, payload = {}) {
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify(payload)
+    });
+    const result = await response.json();
+    if (!response.ok) {
+        throw new Error(result.message || '请求失败');
+    }
+    return result;
+}
+
 async function apiPostForm(url, formData) {
     const response = await fetch(url, {
         method: 'POST',
@@ -99,21 +115,7 @@ const viewTitles = {
     wireless: ['无线控制器', 'AP、SSID 与无线用户状态'],
     devices: ['设备列表', '本地设备清单和在线状态'],
     clients: ['客户端列表', '联软准入终端数据'],
-    events: ['事件中心', '外部系统与核心监控异常'],
-    diagnostics: ['诊断中心', '外部集成配置与连通性'],
     users: ['用户管理', '系统账号与权限']
-};
-
-const eventState = {
-    page: 1,
-    perPage: 20,
-    query: '',
-    source: '',
-    severity: '',
-    status: '',
-    pages: 0,
-    total: 0,
-    sources: []
 };
 
 const clientState = {
@@ -156,6 +158,9 @@ const switchState = {
     portPages: 0,
     portTotal: 0,
     trafficRange: '1h',
+    traceLoading: false,
+    traceData: null,
+    traceIp: '',
     ports: [],
     trafficSamples: [],
     pages: 0,
@@ -182,7 +187,10 @@ const deviceState = {
         all: 0,
         online: 0,
         offline: 0
-    }
+    },
+    statusFreshness: null,
+    statusRefreshing: false,
+    lastAutoRefreshAt: 0
 };
 
 const wirelessUserState = {
@@ -284,7 +292,6 @@ async function loadSummary(options = {}) {
     renderFirewallDashboard(data.firewall || {});
     renderDashboardOsdwan(osdwan);
     renderDashboardHealth(data);
-    renderDashboardEvents(data.events || {});
     renderDashboardAppRank(data.traffic_apps || {});
     renderTrafficTopList('wireless-user-upload-top', data.tops?.wireless_users?.upload || []);
     renderTrafficTopList('wireless-user-download-top', data.tops?.wireless_users?.download || []);
@@ -341,15 +348,6 @@ function renderDashboardHealth(data) {
     renderHealthItem('health-firewall-cpu', firewall.configured, firewall.ok, firewall.configured ? `${formatNumber(firewall.cpu_usage, 1)}%` : '未配置');
     renderHealthItem('health-firewall-memory', firewall.configured, firewall.ok, firewall.configured ? `${formatNumber(firewall.memory_usage, 1)}%` : '未配置');
     renderHealthItem('health-firewall-bandwidth', firewall.configured, firewall.ok, firewall.configured ? formatMbps(firewall.total_bandwidth) : '未配置');
-}
-
-function renderDashboardEvents(events) {
-    const critical = Number(events.critical_active || 0);
-    const open = Number(events.unacknowledged || 0);
-    const sources = events.active_sources || [];
-    renderHealthItem('health-event-critical', true, critical === 0, `${critical} 个`);
-    renderHealthItem('health-event-open', true, open === 0, `${open} 个`);
-    renderHealthItem('health-event-sources', true, sources.length === 0, sources.length ? sources.slice(0, 2).join('、') : '无');
 }
 
 function scheduleDashboardFirewallWarmup(firewall) {
@@ -428,265 +426,6 @@ function renderDashboardAppRank(payload) {
             <span class="traffic-value">${escapeHtml(item.total_rate || '0 bps')}</span>
         </li>
     `).join('');
-}
-
-async function loadEvents(options = {}) {
-    eventState.page = options.page || eventState.page;
-    eventState.perPage = options.perPage || eventState.perPage;
-    eventState.query = options.query !== undefined ? options.query : eventState.query;
-    eventState.source = options.source !== undefined ? options.source : eventState.source;
-    eventState.severity = options.severity !== undefined ? options.severity : eventState.severity;
-    eventState.status = options.status !== undefined ? options.status : eventState.status;
-
-    const searchControl = document.getElementById('event-search');
-    const severityControl = document.getElementById('event-severity-filter');
-    const sourceControl = document.getElementById('event-source-filter');
-    const statusControl = document.getElementById('event-status-filter');
-    const pageSizeControl = document.getElementById('event-page-size');
-    if (options.query === undefined && searchControl) {
-        eventState.query = searchControl.value.trim();
-    }
-    if (options.severity === undefined && severityControl) {
-        eventState.severity = severityControl.value;
-    }
-    if (options.source === undefined && sourceControl) {
-        eventState.source = sourceControl.value;
-    }
-    if (options.status === undefined && statusControl) {
-        eventState.status = statusControl.value;
-    }
-    if (options.perPage === undefined && pageSizeControl) {
-        eventState.perPage = Number(pageSizeControl.value);
-    }
-
-    showView('events-panel', 'events-nav', 'events');
-    const body = document.getElementById('events-table-body');
-    const summary = document.getElementById('events-summary');
-    body.innerHTML = '<tr><td colspan="8">加载中</td></tr>';
-    summary.textContent = '加载中';
-
-    try {
-        const params = new URLSearchParams({
-            page: eventState.page,
-            per_page: eventState.perPage,
-            q: eventState.query,
-            source: eventState.source,
-            severity: eventState.severity,
-            status: eventState.status
-        });
-        const result = await apiGet(`/api/events?${params.toString()}`);
-        const events = result.events || [];
-        eventState.page = result.page || eventState.page;
-        eventState.pages = result.pages || 0;
-        eventState.total = result.total || 0;
-        eventState.sources = result.sources || [];
-        eventState.source = result.source || '';
-        renderEventSourceOptions();
-        renderEventPager();
-
-        summary.textContent = `${renderEventSummaryPrefix()}共 ${eventState.total} 条，当前显示 ${result.returned || events.length} 条，未确认 ${result.summary?.unacknowledged || 0} 条，严重 ${result.summary?.critical_active || 0} 条`;
-        if (!events.length) {
-            body.innerHTML = '<tr><td colspan="8">暂无数据</td></tr>';
-            return;
-        }
-        body.innerHTML = events.map((item) => `
-            <tr>
-                <td>${renderEventSeverity(item.severity)}</td>
-                <td>${escapeHtml(item.source || '-')}</td>
-                <td>${escapeHtml(item.title || '-')}</td>
-                <td class="event-message-cell" title="${escapeHtml(item.message || '')}">${escapeHtml(item.message || '-')}</td>
-                <td>${renderEventStatus(item.status)}</td>
-                <td>${escapeHtml(item.last_seen || '-')}</td>
-                <td>${escapeHtml(item.occurrence_count ?? 0)}</td>
-                <td>${renderEventActions(item)}</td>
-            </tr>
-        `).join('');
-    } catch (error) {
-        body.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
-        summary.textContent = '加载失败';
-    }
-}
-
-function renderEventSourceOptions() {
-    const select = document.getElementById('event-source-filter');
-    if (!select) {
-        return;
-    }
-    const selected = eventState.source;
-    select.innerHTML = '<option value="">全部来源</option>' + eventState.sources.map((source) => (
-        `<option value="${escapeHtml(source)}">${escapeHtml(source)}</option>`
-    )).join('');
-    select.value = selected;
-}
-
-function renderEventPager() {
-    document.getElementById('events-page').textContent = eventState.pages
-        ? `${eventState.page} / ${eventState.pages}`
-        : '-';
-    document.getElementById('events-prev').disabled = eventState.page <= 1;
-    document.getElementById('events-next').disabled = eventState.page >= eventState.pages;
-}
-
-function renderEventSummaryPrefix() {
-    const parts = [];
-    if (eventState.query) {
-        parts.push(`搜索“${eventState.query}”`);
-    }
-    if (eventState.source) {
-        parts.push(`来源 ${eventState.source}`);
-    }
-    if (eventState.severity) {
-        parts.push(`级别 ${eventSeverityLabel(eventState.severity)}`);
-    }
-    if (eventState.status) {
-        parts.push(`状态 ${eventStatusLabel(eventState.status)}`);
-    }
-    return parts.length ? `${parts.join('，')}，` : '';
-}
-
-function renderEventSeverity(value) {
-    const className = value === 'critical' ? 'bad' : (value === 'warning' ? 'warn' : 'ok');
-    return `<span class="status-badge ${className}">${escapeHtml(eventSeverityLabel(value))}</span>`;
-}
-
-function renderEventStatus(value) {
-    const className = value === 'resolved' ? 'ok' : (value === 'acknowledged' ? 'warn' : 'bad');
-    return `<span class="status-badge ${className}">${escapeHtml(eventStatusLabel(value))}</span>`;
-}
-
-function renderEventActions(item) {
-    if (item.status === 'resolved') {
-        return '<span class="empty-state">-</span>';
-    }
-    const acknowledgeButton = item.status === 'open'
-        ? `<button class="row-button" type="button" data-event-action="ack" data-event-id="${escapeHtml(item.id)}">确认</button>`
-        : '';
-    return `
-        <div class="action-cell">
-            ${acknowledgeButton}
-            <button class="row-button" type="button" data-event-action="resolve" data-event-id="${escapeHtml(item.id)}">恢复</button>
-        </div>
-    `;
-}
-
-function eventSeverityLabel(value) {
-    return {
-        critical: '严重',
-        warning: '警告',
-        info: '信息'
-    }[value] || value || '-';
-}
-
-function eventStatusLabel(value) {
-    return {
-        open: '未确认',
-        acknowledged: '已确认',
-        resolved: '已恢复'
-    }[value] || value || '-';
-}
-
-async function handleEventAction(button) {
-    const action = button.dataset.eventAction;
-    const eventId = button.dataset.eventId;
-    if (!action || !eventId) {
-        return;
-    }
-    button.disabled = true;
-    try {
-        await apiPost(`/api/events/${eventId}/${action}`);
-        await loadEvents({page: eventState.page});
-        if (!document.getElementById('dashboard-panel').hidden) {
-            await loadSummary({skipFirewallWarmup: true});
-        }
-        showToast(action === 'ack' ? '事件已确认' : '事件已恢复');
-    } catch (error) {
-        showToast(error.message, 'error');
-    } finally {
-        button.disabled = false;
-    }
-}
-
-async function loadDiagnostics(options = {}) {
-    showView('diagnostics-panel', 'diagnostics-nav', 'diagnostics');
-    const body = document.getElementById('diagnostics-table-body');
-    body.innerHTML = '<tr><td colspan="7">检查中</td></tr>';
-    try {
-        const items = await apiGet('/api/integrations/status');
-        renderDiagnostics(items || []);
-        if (options.toast) {
-            showToast('诊断已刷新');
-        }
-    } catch (error) {
-        body.innerHTML = `<tr><td colspan="7">${escapeHtml(error.message)}</td></tr>`;
-        renderDiagnosticsSummary([]);
-        showToast(error.message, 'error');
-    }
-}
-
-function renderDiagnostics(items) {
-    renderDiagnosticsSummary(items);
-    const body = document.getElementById('diagnostics-table-body');
-    if (!items.length) {
-        body.innerHTML = '<tr><td colspan="7">暂无数据</td></tr>';
-        return;
-    }
-    body.innerHTML = items.map((item) => `
-        <tr>
-            <td>${escapeHtml(item.label || item.key || '-')}</td>
-            <td>${renderDiagnosticConfigured(item)}</td>
-            <td>${renderDiagnosticStatus(item)}</td>
-            <td>${escapeHtml(item.checked_at || '-')}</td>
-            <td>${formatNumber(item.seconds || 0, 2)}s</td>
-            <td class="event-message-cell" title="${escapeHtml(item.message || '')}">${escapeHtml(item.message || '-')}</td>
-            <td class="diagnostic-detail-cell" title="${escapeHtml(formatDiagnosticDetails(item.details || {}))}">${escapeHtml(formatDiagnosticDetails(item.details || {}))}</td>
-        </tr>
-    `).join('');
-}
-
-function renderDiagnosticsSummary(items) {
-    const ok = items.filter((item) => item.configured && item.ok).length;
-    const unconfigured = items.filter((item) => !item.configured).length;
-    const bad = items.filter((item) => item.configured && !item.ok).length;
-    const secondsItems = items.filter((item) => item.configured);
-    const avgSeconds = secondsItems.length
-        ? secondsItems.reduce((total, item) => total + Number(item.seconds || 0), 0) / secondsItems.length
-        : 0;
-    document.getElementById('diagnostics-ok').textContent = ok;
-    document.getElementById('diagnostics-bad').textContent = bad;
-    document.getElementById('diagnostics-unconfigured').textContent = unconfigured;
-    document.getElementById('diagnostics-seconds').textContent = secondsItems.length ? `${formatNumber(avgSeconds, 2)}s` : '-';
-}
-
-function renderDiagnosticConfigured(item) {
-    const className = item.configured ? 'ok' : 'warn';
-    const label = item.configured ? '已配置' : '未配置';
-    return `<span class="status-badge ${className}">${label}</span>`;
-}
-
-function renderDiagnosticStatus(item) {
-    if (!item.configured) {
-        return '<span class="status-badge warn">未配置</span>';
-    }
-    return item.ok
-        ? '<span class="status-badge ok">正常</span>'
-        : '<span class="status-badge bad">异常</span>';
-}
-
-function formatDiagnosticDetails(details) {
-    const entries = Object.entries(details || {})
-        .filter(([key]) => !/token|secret|password|key/i.test(key))
-        .map(([key, value]) => `${key}: ${formatDetailValue(value)}`);
-    return entries.length ? entries.join('，') : '-';
-}
-
-function formatDetailValue(value) {
-    if (value === null || value === undefined) {
-        return '-';
-    }
-    if (typeof value === 'object') {
-        return JSON.stringify(value);
-    }
-    return String(value);
 }
 
 async function loadFirewallBandwidth(options = {}) {
@@ -1552,13 +1291,15 @@ async function loadDevices(options = {}) {
         deviceState.categories = result.categories || [];
         deviceState.status = result.status || '';
         deviceState.statusCounts = result.status_counts || {all: 0, online: 0, offline: 0};
+        deviceState.statusFreshness = result.status_freshness || null;
         renderDeviceCategoryOptions();
         renderDeviceStatusFilters();
         renderDevicePager();
 
-        summary.textContent = `${renderDeviceSummaryPrefix()}共 ${deviceState.total} 台，当前显示 ${result.returned || devices.length} 台`;
+        summary.textContent = `${renderDeviceSummaryPrefix()}共 ${deviceState.total} 台，当前显示 ${result.returned || devices.length} 台${renderDeviceFreshnessSummary(deviceState.statusFreshness)}`;
         if (!devices.length) {
             body.innerHTML = '<tr><td colspan="7">暂无数据</td></tr>';
+            maybeAutoRefreshDeviceStatus(deviceState.statusFreshness, options);
             return;
         }
         body.innerHTML = devices.map((device) => `
@@ -1572,6 +1313,7 @@ async function loadDevices(options = {}) {
                 <td>${renderDeviceActions(device)}</td>
             </tr>
         `).join('');
+        maybeAutoRefreshDeviceStatus(deviceState.statusFreshness, options);
     } catch (error) {
         body.innerHTML = `<tr><td colspan="7">${escapeHtml(error.message)}</td></tr>`;
         summary.textContent = '加载失败';
@@ -1750,6 +1492,236 @@ async function loadSwitches(options = {}) {
         body.innerHTML = `<tr><td colspan="9">${escapeHtml(error.message)}</td></tr>`;
         summary.textContent = '加载失败';
     }
+}
+
+async function traceSwitchTerminal(event) {
+    if (event) {
+        event.preventDefault();
+    }
+    const input = document.getElementById('switch-trace-ip');
+    const button = document.getElementById('switch-trace-button');
+    const summary = document.getElementById('switch-trace-summary');
+    const resultPanel = document.getElementById('switch-trace-result');
+    const ip = input ? input.value.trim() : '';
+    if (!ip) {
+        showToast('请输入终端 IP', 'error');
+        if (input) {
+            input.focus();
+        }
+        return;
+    }
+
+    switchState.traceLoading = true;
+    switchState.traceIp = ip;
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="bi bi-hourglass-split"></i><span>追踪中</span>';
+    }
+    if (summary) {
+        summary.textContent = `正在从核心交换机追踪 ${ip}`;
+    }
+    if (resultPanel) {
+        resultPanel.hidden = false;
+        resultPanel.innerHTML = '<div class="trace-empty">正在执行 ARP、MAC 表和 LLDP 查询</div>';
+    }
+
+    try {
+        const result = await apiPostResult('/api/statistics/switches/trace-terminal', {ip});
+        switchState.traceData = result.data || {};
+        renderSwitchTraceResult(switchState.traceData, result.message || '', result.code || 0);
+        showToast(result.code === 0 ? '终端定位完成' : (result.message || '终端定位异常'), result.code === 0 ? 'info' : 'error');
+    } catch (error) {
+        switchState.traceData = null;
+        renderSwitchTraceError(error.message);
+        showToast(error.message, 'error');
+    } finally {
+        switchState.traceLoading = false;
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = '<i class="bi bi-search"></i><span>开始追踪</span>';
+        }
+    }
+}
+
+function renderSwitchTraceResult(data, message, code) {
+    const summary = document.getElementById('switch-trace-summary');
+    const resultPanel = document.getElementById('switch-trace-result');
+    const core = document.getElementById('switch-trace-core');
+    if (!resultPanel) {
+        return;
+    }
+    const resultType = data.result_type || 'failed';
+    const finalText = renderSwitchTraceFinalText(data, message);
+    if (core && data.start_switch) {
+        core.textContent = `核心 ${data.start_switch}`;
+    }
+    if (summary) {
+        summary.innerHTML = `${renderSwitchTraceBadge(resultType, code)} <span>${escapeHtml(finalText)}</span>`;
+    }
+    const keyInfo = buildSwitchTraceKeyInfo(data);
+    resultPanel.hidden = false;
+    resultPanel.innerHTML = `
+        <div class="trace-summary-table-wrap">
+            <table class="trace-summary-table">
+                <thead>
+                    <tr>
+                        <th>IP 地址</th>
+                        <th>MAC 地址</th>
+                        <th>核心交换机端口</th>
+                        <th>接入交换机</th>
+                        <th>接入交换机端口</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>${escapeHtml(keyInfo.ip)}</td>
+                        <td>${escapeHtml(keyInfo.mac)}</td>
+                        <td>${escapeHtml(keyInfo.corePort)}</td>
+                        <td>${escapeHtml(keyInfo.accessSwitch)}</td>
+                        <td>${escapeHtml(keyInfo.accessPort)}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderSwitchTraceError(message) {
+    const summary = document.getElementById('switch-trace-summary');
+    const resultPanel = document.getElementById('switch-trace-result');
+    if (summary) {
+        summary.textContent = message || '终端定位失败';
+    }
+    if (resultPanel) {
+        resultPanel.hidden = false;
+        resultPanel.innerHTML = `<div class="trace-empty error">${escapeHtml(message || '终端定位失败')}</div>`;
+    }
+}
+
+function renderSwitchTraceFinalText(data, message) {
+    const switchIp = data.final_switch || data.start_switch || '-';
+    const interfaceName = data.final_interface || '-';
+    if (data.result_type === 'terminal') {
+        return `最终端口 ${switchIp} / ${interfaceName}`;
+    }
+    if (data.result_type === 'downstream') {
+        return `已定位到下联口 ${switchIp} / ${interfaceName}`;
+    }
+    if (data.result_type === 'not_found') {
+        return message || '核心 ARP 未找到';
+    }
+    return message || '追踪失败';
+}
+
+function buildSwitchTraceKeyInfo(data) {
+    const hops = data.hops || [];
+    const coreHop = hops.find((hop) => hop.switch_ip === data.start_switch) || hops[0] || {};
+    const finalHop = hops[hops.length - 1] || {};
+    const neighbor = coreHop.neighbor || {};
+    const finalSwitch = data.final_switch || finalHop.switch_ip || '';
+    const accessSwitch = finalSwitch && finalSwitch !== data.start_switch
+        ? finalSwitch
+        : neighbor.management_ip || finalSwitch || data.start_switch || '-';
+    return {
+        ip: data.target_ip || switchState.traceIp || '-',
+        mac: data.target_mac || coreHop.target_mac || finalHop.target_mac || '-',
+        corePort: coreHop.ingress_interface || '-',
+        accessSwitch,
+        accessPort: data.final_interface || finalHop.ingress_interface || '-'
+    };
+}
+
+function renderSwitchTraceHop(hop, data) {
+    const neighbor = hop.neighbor || {};
+    const fields = [
+        ['交换机', hop.switch_name ? `${hop.switch_name} · ${hop.switch_ip || '-'}` : (hop.switch_ip || '-')],
+        ['入口接口', hop.ingress_interface || '-'],
+        ['目标 MAC', hop.target_mac || data.target_mac || '-'],
+        ['接口 MAC 数量', hop.mac_count ?? '-'],
+        ['LLDP 邻居', neighbor.system_name || '-'],
+        ['邻居管理 IP', neighbor.management_ip || '-'],
+        ['对端接口', neighbor.port_id || '-']
+    ];
+    const commands = hop.commands || [];
+    return `
+        <li class="trace-hop-card">
+            <div class="trace-hop-heading">
+                <div>
+                    <span class="trace-step">第 ${escapeHtml(hop.index || '-')} 跳</span>
+                    <strong>${escapeHtml(hop.switch_ip || '-')}</strong>
+                </div>
+                ${renderSwitchTraceHopBadge(hop)}
+            </div>
+            <dl class="trace-hop-fields">
+                ${fields.map(([label, value]) => `
+                    <div>
+                        <dt>${escapeHtml(label)}</dt>
+                        <dd>${escapeHtml(value)}</dd>
+                    </div>
+                `).join('')}
+            </dl>
+            ${renderSwitchTraceMacSamples(hop.mac_samples || [])}
+            ${commands.length ? `
+                <ul class="trace-command-list">
+                    ${commands.map((command) => renderSwitchTraceCommand(command)).join('')}
+                </ul>
+            ` : ''}
+            ${hop.error ? `<div class="trace-hop-error">${escapeHtml(hop.error)}</div>` : ''}
+        </li>
+    `;
+}
+
+function renderSwitchTraceMacSamples(samples) {
+    if (!samples.length) {
+        return '';
+    }
+    return `
+        <div class="trace-mac-samples">
+            ${samples.slice(0, 6).map((mac) => `<code>${escapeHtml(mac)}</code>`).join('')}
+            ${samples.length > 6 ? `<span>+${samples.length - 6}</span>` : ''}
+        </div>
+    `;
+}
+
+function renderSwitchTraceCommand(command) {
+    const preview = command.output_preview ? `<span>${escapeHtml(command.output_preview)}</span>` : '';
+    const error = command.error ? `<strong>${escapeHtml(command.error)}</strong>` : '';
+    return `
+        <li>
+            <code>${escapeHtml(command.command || '-')}</code>
+            <em>${escapeHtml(command.summary || '-')}</em>
+            ${preview}
+            ${error}
+        </li>
+    `;
+}
+
+function renderSwitchTraceBadge(resultType, code) {
+    const className = resultType === 'terminal'
+        ? 'ok'
+        : resultType === 'downstream' || resultType === 'not_found'
+            ? 'warn'
+            : code === 0
+                ? 'warn'
+                : 'bad';
+    return `<span class="status-badge ${className}">${escapeHtml(renderSwitchTraceTypeLabel(resultType))}</span>`;
+}
+
+function renderSwitchTraceHopBadge(hop) {
+    const hasError = Boolean(hop.error);
+    const neighbor = hop.neighbor || {};
+    const className = hasError ? 'bad' : neighbor.management_ip ? 'warn' : 'ok';
+    return `<span class="status-badge ${className}">${escapeHtml(hop.status || '已检查')}</span>`;
+}
+
+function renderSwitchTraceTypeLabel(resultType) {
+    const labels = {
+        terminal: '普通终端',
+        downstream: '下联口',
+        not_found: '未找到',
+        failed: '异常'
+    };
+    return labels[resultType] || '异常';
 }
 
 async function openSwitchDetail(instance) {
@@ -2195,13 +2167,29 @@ async function saveDevice(event) {
     }
 }
 
-async function refreshDeviceStatus() {
+async function refreshDeviceStatus(options = {}) {
+    if (deviceState.statusRefreshing) {
+        return;
+    }
+    const button = document.getElementById('refresh-device-status');
+    const originalButtonHtml = button ? button.innerHTML : '';
+    deviceState.statusRefreshing = true;
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="bi bi-hourglass-split"></i><span>刷新中</span>';
+    }
     try {
         await apiPost('/api/access-control/device-status/refresh');
-        await Promise.all([loadDevices(), loadSummary()]);
-        showToast('设备状态已刷新');
+        await Promise.all([loadDevices({skipAutoRefresh: true}), loadSummary()]);
+        showToast(options.auto ? '设备状态已自动刷新' : '设备状态已刷新');
     } catch (error) {
         showToast(error.message, 'error');
+    } finally {
+        deviceState.statusRefreshing = false;
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = originalButtonHtml;
+        }
     }
 }
 
@@ -2260,6 +2248,42 @@ function renderDeviceSummaryPrefix() {
         return '离线设备，';
     }
     return '';
+}
+
+function renderDeviceFreshnessSummary(freshness) {
+    if (!freshness) {
+        return '';
+    }
+    const latest = freshness.latest_check_time
+        ? `最新检查 ${freshness.latest_check_time}`
+        : '暂无检查记录';
+    const expired = `过期 ${Number(freshness.expired_count || 0)} 台`;
+    const unchecked = Number(freshness.unchecked_count || 0);
+    return unchecked > 0
+        ? `，${latest}，${expired}，未检查 ${unchecked} 台`
+        : `，${latest}，${expired}`;
+}
+
+function maybeAutoRefreshDeviceStatus(freshness, options = {}) {
+    if (
+        options.skipAutoRefresh
+        || deviceState.statusRefreshing
+        || !freshness?.needs_refresh
+        || !canManageDeviceStatus()
+    ) {
+        return;
+    }
+
+    const now = Date.now();
+    if (now - deviceState.lastAutoRefreshAt < 60 * 1000) {
+        return;
+    }
+    deviceState.lastAutoRefreshAt = now;
+    refreshDeviceStatus({auto: true});
+}
+
+function canManageDeviceStatus() {
+    return Boolean(currentUser && (currentUser.is_superuser || currentUser.role === 'admin'));
 }
 
 function renderDeviceStatus(device) {
@@ -2960,8 +2984,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const trafficAnalysisPanel = document.getElementById('traffic-analysis-panel');
             const osdwanPanel = document.getElementById('osdwan-panel');
             const switchesPanel = document.getElementById('switches-panel');
-            const eventsPanel = document.getElementById('events-panel');
-            const diagnosticsPanel = document.getElementById('diagnostics-panel');
             const task = firewallPanel && !firewallPanel.hidden
                 ? loadFirewallBandwidth({toast: false})
                 : trafficAnalysisPanel && !trafficAnalysisPanel.hidden
@@ -2970,11 +2992,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         ? loadOsdwanMetrics({charts: false})
                         : switchesPanel && !switchesPanel.hidden
                             ? loadSwitches()
-                            : eventsPanel && !eventsPanel.hidden
-                                ? loadEvents({page: eventState.page})
-                                : diagnosticsPanel && !diagnosticsPanel.hidden
-                                    ? loadDiagnostics()
-                                    : loadSummary();
+                            : loadSummary();
             task
                 .then(() => showToast('已刷新'))
                 .catch((error) => showToast(error.message, 'error'));
@@ -3058,35 +3076,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const eventsNav = document.getElementById('events-nav');
-    if (eventsNav) {
-        eventsNav.addEventListener('click', (event) => {
-            event.preventDefault();
-            loadEvents({page: 1});
-        });
-    }
-
-    const diagnosticsNav = document.getElementById('diagnostics-nav');
-    if (diagnosticsNav) {
-        diagnosticsNav.addEventListener('click', (event) => {
-            event.preventDefault();
-            loadDiagnostics();
-        });
-    }
-
     const reloadUsers = document.getElementById('reload-users');
     if (reloadUsers) {
         reloadUsers.addEventListener('click', loadUsers);
-    }
-
-    const reloadEvents = document.getElementById('reload-events');
-    if (reloadEvents) {
-        reloadEvents.addEventListener('click', () => loadEvents({page: eventState.page}));
-    }
-
-    const reloadDiagnostics = document.getElementById('reload-diagnostics');
-    if (reloadDiagnostics) {
-        reloadDiagnostics.addEventListener('click', () => loadDiagnostics({toast: true}));
     }
 
     const reloadFirewallBandwidth = document.getElementById('reload-firewall-bandwidth');
@@ -3102,70 +3094,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const reloadOsdwan = document.getElementById('reload-osdwan');
     if (reloadOsdwan) {
         reloadOsdwan.addEventListener('click', () => loadOsdwanMetrics({toast: true, charts: false}));
-    }
-
-    const eventSearch = document.getElementById('event-search');
-    if (eventSearch) {
-        eventSearch.addEventListener('input', debounce((event) => {
-            loadEvents({page: 1, query: event.target.value.trim()});
-        }));
-    }
-
-    const eventSeverityFilter = document.getElementById('event-severity-filter');
-    if (eventSeverityFilter) {
-        eventSeverityFilter.addEventListener('change', (event) => {
-            loadEvents({page: 1, severity: event.target.value});
-        });
-    }
-
-    const eventSourceFilter = document.getElementById('event-source-filter');
-    if (eventSourceFilter) {
-        eventSourceFilter.addEventListener('change', (event) => {
-            loadEvents({page: 1, source: event.target.value});
-        });
-    }
-
-    const eventStatusFilter = document.getElementById('event-status-filter');
-    if (eventStatusFilter) {
-        eventStatusFilter.addEventListener('change', (event) => {
-            loadEvents({page: 1, status: event.target.value});
-        });
-    }
-
-    const eventPageSize = document.getElementById('event-page-size');
-    if (eventPageSize) {
-        eventPageSize.addEventListener('change', (event) => {
-            loadEvents({page: 1, perPage: Number(event.target.value)});
-        });
-    }
-
-    const eventsPrev = document.getElementById('events-prev');
-    if (eventsPrev) {
-        eventsPrev.addEventListener('click', () => {
-            if (eventState.page > 1) {
-                loadEvents({page: eventState.page - 1});
-            }
-        });
-    }
-
-    const eventsNext = document.getElementById('events-next');
-    if (eventsNext) {
-        eventsNext.addEventListener('click', () => {
-            if (eventState.page < eventState.pages) {
-                loadEvents({page: eventState.page + 1});
-            }
-        });
-    }
-
-    const eventsTableBody = document.getElementById('events-table-body');
-    if (eventsTableBody) {
-        eventsTableBody.addEventListener('click', (event) => {
-            const button = event.target.closest('[data-event-action]');
-            if (!button || button.disabled) {
-                return;
-            }
-            handleEventAction(button);
-        });
     }
 
     const trafficAnalysisSearch = document.getElementById('traffic-analysis-search');
@@ -3249,6 +3177,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const reloadSwitches = document.getElementById('reload-switches');
     if (reloadSwitches) {
         reloadSwitches.addEventListener('click', () => loadSwitches({page: switchState.page}));
+    }
+
+    const switchTraceForm = document.getElementById('switch-trace-form');
+    if (switchTraceForm) {
+        switchTraceForm.addEventListener('submit', traceSwitchTerminal);
     }
 
     document.querySelectorAll('[data-range-toggle]').forEach((button) => {

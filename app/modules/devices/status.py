@@ -1,9 +1,10 @@
 import platform
 import subprocess
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from app.extensions import db
-from app.models.base import now_local
+from app.models.base import format_datetime, now_local
 from app.models.device import Device
 
 
@@ -32,19 +33,42 @@ def update_device_status(device, timeout_seconds=1):
     return device.is_online
 
 
-def refresh_all_device_status(timeout_seconds=1):
-    devices = Device.query.order_by(Device.created_at.desc()).all()
-    online = 0
+def refresh_all_device_status(timeout_seconds=1, max_workers=16):
+    devices = [
+        (row.id, row.ip_address)
+        for row in Device.query.with_entities(Device.id, Device.ip_address)
+        .order_by(Device.created_at.desc())
+        .all()
+    ]
+    if not devices:
+        return {
+            "checked_devices": 0,
+            "online_devices": 0,
+            "offline_devices": 0,
+            "checked_at": None,
+        }
 
-    for device in devices:
-        if update_device_status(device, timeout_seconds=timeout_seconds):
-            online += 1
+    worker_count = max(1, min(int(max_workers or 1), len(devices)))
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        results = list(executor.map(
+            lambda item: (item[0], ping_device(item[1], timeout_seconds=timeout_seconds)),
+            devices,
+        ))
+
+    checked_at = now_local()
+    status_by_id = {device_id: is_online for device_id, is_online in results}
+    online = sum(1 for is_online in status_by_id.values() if is_online)
+
+    for device in Device.query.filter(Device.id.in_(status_by_id.keys())).all():
+        device.is_online = status_by_id[device.id]
+        device.last_check_time = checked_at
 
     db.session.commit()
     return {
         "checked_devices": len(devices),
         "online_devices": online,
         "offline_devices": len(devices) - online,
+        "checked_at": format_datetime(checked_at),
     }
 
 

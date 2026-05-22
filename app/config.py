@@ -89,6 +89,12 @@ class Config:
         "SWITCH_PORT_EXCLUDE_PATTERNS",
         r"^(InLoopBack|LoopBack|NULL|Console|MEth|Vlanif|Vlan-interface|Stack-Port|Aux|Tunnel)",
     )
+    SWITCH_TRACE_CORE_IP = os.environ.get("SWITCH_TRACE_CORE_IP", "172.16.100.5")
+    SWITCH_SSH_USERNAME = os.environ.get("SWITCH_SSH_USERNAME")
+    SWITCH_SSH_PASSWORD = os.environ.get("SWITCH_SSH_PASSWORD")
+    SWITCH_SSH_PORT = env_int("SWITCH_SSH_PORT", 22)
+    SWITCH_SSH_TIMEOUT = env_int("SWITCH_SSH_TIMEOUT", 8)
+    SWITCH_TRACE_MAX_HOPS = env_int("SWITCH_TRACE_MAX_HOPS", 5)
 
     HUAWEI_SNMP_URL = os.environ.get("HUAWEI_SNMP_URL", "http://172.16.80.125:9116/snmp")
     HUAWEI_SNMP_AUTH = os.environ.get("HUAWEI_SNMP_AUTH", "secure_v3")

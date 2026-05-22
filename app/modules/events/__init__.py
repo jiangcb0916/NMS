@@ -1,1 +1,0 @@
-"""Event center module."""

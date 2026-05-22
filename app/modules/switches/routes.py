@@ -5,8 +5,10 @@ import time
 from flask import Blueprint, current_app, request
 from flask_login import login_required
 
-from app.common.responses import success
+from app.common.responses import failure, success
+from app.common.validators import validate_ip
 from app.modules.integrations.prometheus import PrometheusClient
+from app.modules.switches.trace import trace_terminal_ip
 
 
 switch_bp = Blueprint("switch_api", __name__)
@@ -161,6 +163,19 @@ def switch_traffic_history(instance):
         "job": switch_job(),
         "queried_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     })
+
+
+@switch_bp.route("/api/statistics/switches/trace-terminal", methods=["POST"])
+@login_required
+def switch_trace_terminal():
+    data = request.get_json(silent=True) or {}
+    try:
+        target_ip = validate_ip(data.get("ip"), "终端 IP")
+    except ValueError as exc:
+        return failure(str(exc), status=400)
+
+    payload, message, code = trace_terminal_ip(target_ip)
+    return success(payload, message=message, code=code)
 
 
 def build_switch_targets(client=None):
