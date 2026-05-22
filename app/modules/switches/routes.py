@@ -7,6 +7,7 @@ from flask_login import login_required
 
 from app.common.responses import failure, success
 from app.common.validators import validate_ip
+from app.models.device import Device
 from app.modules.integrations.prometheus import PrometheusClient
 from app.modules.switches.trace import trace_terminal_ip
 
@@ -175,7 +176,13 @@ def switch_trace_terminal():
         return failure(str(exc), status=400)
 
     payload, message, code = trace_terminal_ip(target_ip)
+    payload["target_name"] = trace_target_name(target_ip)
     return success(payload, message=message, code=code)
+
+
+def trace_target_name(target_ip):
+    device = Device.query.filter_by(ip_address=target_ip).first()
+    return device.username if device else "无"
 
 
 def build_switch_targets(client=None):
