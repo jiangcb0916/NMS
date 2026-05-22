@@ -824,7 +824,7 @@
 
     <input id="device-import-file" type="file" accept=".csv,text/csv" hidden>
     <div class="toolbar-row device-toolbar">
-        <input id="device-search" placeholder="搜索名称、IP、MAC、分类、备注">
+        <input id="device-search" placeholder="搜索名称、IP、MAC、接入交换机、接口、分类、备注">
         <select id="device-category-filter" aria-label="设备分类">
             <option value="">全部分类</option>
         </select>
@@ -1100,7 +1100,7 @@
 </section>
 
 <div class="modal-backdrop" id="device-modal" hidden>
-    <form class="modal-card" id="device-form">
+    <form class="modal-card device-modal-card" id="device-form">
         <div class="modal-header">
             <h2 id="device-modal-title">新增设备</h2>
             <button class="icon-button" type="button" data-close-modal="device-modal" title="关闭">
@@ -1115,16 +1115,31 @@
             </label>
             <label>
                 <span>IP 地址</span>
-                <input id="device-ip" name="ip_address" autocomplete="off" required>
+                <div class="input-action-row">
+                    <input id="device-ip" name="ip_address" autocomplete="off" required>
+                    <button class="small-button" id="device-port-preview-button" type="button">
+                        <i class="bi bi-search"></i>
+                        <span>智能查询</span>
+                    </button>
+                </div>
             </label>
             <label>
                 <span>MAC 地址</span>
-                <input id="device-mac" name="mac_address" autocomplete="off">
+                <input id="device-mac" name="mac_address" autocomplete="off" placeholder="智能查询后自动填充">
             </label>
             <label>
                 <span>分类</span>
                 <input id="device-category" name="category" autocomplete="off" placeholder="未分类">
             </label>
+            <label>
+                <span>接入交换机 IP</span>
+                <input id="device-access-switch" name="access_switch_ip" autocomplete="off" placeholder="智能查询后自动填充">
+            </label>
+            <label>
+                <span>接入接口</span>
+                <input id="device-access-interface" name="access_interface" autocomplete="off" placeholder="智能查询后自动填充">
+            </label>
+            <div class="device-lookup-status full-field" id="device-port-preview-status" hidden></div>
             <label class="full-field">
                 <span>备注</span>
                 <textarea id="device-details" name="details" rows="4"></textarea>

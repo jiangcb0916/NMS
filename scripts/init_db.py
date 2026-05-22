@@ -4,6 +4,8 @@ import secrets
 import sys
 from pathlib import Path
 
+from sqlalchemy import text
+
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
@@ -18,6 +20,7 @@ def main():
 
     with app.app_context():
         db.create_all()
+        ensure_device_access_columns()
 
         username = os.environ.get("ADMIN_USERNAME", "admin")
         password = os.environ.get("ADMIN_PASSWORD")
@@ -56,6 +59,25 @@ def main():
                 print("该密码为临时生成，请首次登录后修改")
         else:
             print("数据库初始化完成，管理员账号已存在")
+
+
+def ensure_device_access_columns():
+    if db.engine.dialect.name != "sqlite":
+        return
+
+    columns = {
+        row[1]
+        for row in db.session.execute(text("PRAGMA table_info(devices)")).fetchall()
+    }
+    additions = {
+        "access_switch_ip": "VARCHAR(45)",
+        "access_interface": "VARCHAR(100)",
+        "access_updated_at": "DATETIME",
+    }
+    for column, column_type in additions.items():
+        if column not in columns:
+            db.session.execute(text(f"ALTER TABLE devices ADD COLUMN {column} {column_type}"))
+    db.session.commit()
 
 
 if __name__ == "__main__":

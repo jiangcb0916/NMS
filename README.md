@@ -302,13 +302,13 @@ LEGACY_DATABASE_PATH=/path/to/network_management.db python scripts/migrate_legac
 设备列表支持 CSV 导入。推荐表头：
 
 ```csv
-username,ip_address,mac_address,category,details
+username,ip_address,mac_address,access_switch_ip,access_interface,category,details
 ```
 
 也兼容常见中文表头：
 
 ```csv
-名称,IP地址,MAC地址,分类,备注
+名称,IP地址,MAC地址,接入交换机IP,接入接口,分类,备注
 ```
 
 导入时以 `ip_address` 判断是否已存在：存在则更新，不存在则新增。

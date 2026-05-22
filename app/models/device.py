@@ -9,6 +9,9 @@ class Device(db.Model):
     username = db.Column(db.String(100), nullable=False)
     ip_address = db.Column(db.String(45), nullable=False, unique=True, index=True)
     mac_address = db.Column(db.String(28), nullable=True)
+    access_switch_ip = db.Column(db.String(45), nullable=True)
+    access_interface = db.Column(db.String(100), nullable=True)
+    access_updated_at = db.Column(db.DateTime, nullable=True)
     details = db.Column(db.Text, nullable=True)
     category = db.Column(db.String(50), default="未分类", nullable=False)
     is_online = db.Column(db.Boolean, default=False, nullable=False)
@@ -22,6 +25,9 @@ class Device(db.Model):
             "username": self.username,
             "ip_address": self.ip_address,
             "mac_address": self.mac_address,
+            "access_switch_ip": self.access_switch_ip,
+            "access_interface": self.access_interface,
+            "access_updated_at": format_datetime(self.access_updated_at),
             "details": self.details,
             "category": self.category,
             "is_online": self.is_online,

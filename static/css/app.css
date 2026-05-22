@@ -1969,6 +1969,10 @@ th {
     box-shadow: 0 18px 45px rgba(0, 0, 0, 0.24);
 }
 
+.device-modal-card {
+    width: min(760px, 100%);
+}
+
 .compact-modal {
     width: min(420px, 100%);
 }
@@ -2032,6 +2036,62 @@ th {
 
 .full-field {
     grid-column: 1 / -1;
+}
+
+.input-action-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+}
+
+.input-action-row .small-button {
+    min-height: 40px;
+    white-space: nowrap;
+}
+
+.device-lookup-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 8px 10px;
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    background: #f7f9fa;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.device-lookup-status[hidden] {
+    display: none;
+}
+
+.device-lookup-status i {
+    flex: 0 0 auto;
+}
+
+.device-lookup-status.ok {
+    border-color: #c8e7e2;
+    background: #f1fbf8;
+    color: var(--accent);
+}
+
+.device-lookup-status.warn {
+    border-color: #f1dfa9;
+    background: #fffbeb;
+    color: #9a6700;
+}
+
+.device-lookup-status.error {
+    border-color: #f1c7c7;
+    background: #fff1f2;
+    color: var(--red);
+}
+
+.device-lookup-status.loading {
+    border-color: #c7d7f6;
+    background: #eff6ff;
+    color: #1d4ed8;
 }
 
 .form-grid input:disabled {
@@ -2170,7 +2230,8 @@ th {
         .switch-stat-strip,
     .inline-form,
     .toolbar-row,
-        .form-grid {
+        .form-grid,
+        .input-action-row {
         grid-template-columns: 1fr;
     }
 

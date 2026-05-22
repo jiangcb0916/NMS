@@ -21,6 +21,7 @@ from app.models.user import User
 from app.modules.access_control import name_cache as access_control_name_cache
 from app.modules.access_control import routes as access_control_routes
 from app.modules.dashboard import routes as dashboard_routes
+from app.modules.devices import routes as device_routes
 from app.modules.devices import status as device_status
 from app.modules.firewall import routes as firewall_routes
 from app.modules.osdwan import routes as osdwan_routes
@@ -601,6 +602,7 @@ def main():
         assert switch_trace.is_legacy_ssh_host_key_error(ValueError("p must be exactly 1024, 2048, 3072, or 4096 bits long"))
 
         original_trace_terminal_ip = switch_routes.trace_terminal_ip
+        original_device_trace_terminal_ip = device_routes.trace_terminal_ip
         with app.app_context():
             trace_device = Device(
                 username="trace-terminal",
@@ -636,6 +638,7 @@ def main():
             }, "已定位到普通终端接口", 0
 
         switch_routes.trace_terminal_ip = fake_trace_terminal_ip
+        device_routes.trace_terminal_ip = fake_trace_terminal_ip
         try:
             trace_response = client.post("/api/statistics/switches/trace-terminal", json={"ip": "172.16.70.17"})
             assert trace_response.status_code == 200, trace_response.get_data(as_text=True)
@@ -645,10 +648,19 @@ def main():
             assert trace_json["data"]["target_mac"] == "9009-d091-478f"
             assert trace_json["data"]["final_interface"] == "GE0/0/12"
 
+            preview_response = client.post("/api/access-control/device-port-preview", json={"ip_address": "172.16.70.17"})
+            assert preview_response.status_code == 200, preview_response.get_data(as_text=True)
+            preview_json = preview_response.get_json()
+            assert preview_json["code"] == 0
+            assert preview_json["data"]["mac_address"] == "90:09:D0:91:47:8F"
+            assert preview_json["data"]["access_switch_ip"] == "172.16.100.8"
+            assert preview_json["data"]["access_interface"] == "GE0/0/12"
+
             invalid_trace_response = client.post("/api/statistics/switches/trace-terminal", json={"ip": "bad-ip"})
             assert invalid_trace_response.status_code == 400, invalid_trace_response.get_data(as_text=True)
         finally:
             switch_routes.trace_terminal_ip = original_trace_terminal_ip
+            device_routes.trace_terminal_ip = original_device_trace_terminal_ip
             with app.app_context():
                 device = Device.query.get(trace_device_id)
                 if device:
@@ -1040,12 +1052,17 @@ def main():
     create_device_response = client.post("/api/access-control/device-list", json={
         "username": "smoke-device",
         "ip_address": "192.0.2.10",
-        "mac_address": "00:11:22:33:44:55",
+        "mac_address": "0011-2233-4455",
+        "access_switch_ip": "172.16.100.8",
+        "access_interface": "GE0/0/10",
         "category": "smoke",
         "details": "smoke test",
     })
     assert create_device_response.status_code in {200, 201}, create_device_response.get_data(as_text=True)
     created_device = create_device_response.get_json()["data"]
+    assert created_device["mac_address"] == "00:11:22:33:44:55"
+    assert created_device["access_switch_ip"] == "172.16.100.8"
+    assert created_device["access_interface"] == "GE0/0/10"
 
     device_list_response = client.get("/api/access-control/device-list?q=smoke&category=smoke&page=1&per_page=10")
     assert device_list_response.status_code == 200, device_list_response.get_data(as_text=True)
@@ -1067,6 +1084,8 @@ def main():
         "username": "smoke-device-edited",
         "ip_address": "192.0.2.10",
         "mac_address": "00:11:22:33:44:55",
+        "access_switch_ip": "172.16.100.9",
+        "access_interface": "GE0/0/11",
         "category": "smoke-edited",
         "details": "updated",
     })
@@ -1075,6 +1094,7 @@ def main():
     export_device_response = client.get("/api/access-control/device-list/export?q=smoke&status=offline")
     assert export_device_response.status_code == 200, export_device_response.get_data(as_text=True)
     assert b"smoke-device-edited" in export_device_response.data
+    assert b"172.16.100.9" in export_device_response.data
 
     original_device_ping = device_status.ping_device
     device_status.ping_device = lambda ip_address, timeout_seconds=1: ip_address == "192.0.2.10"
@@ -1092,10 +1112,12 @@ def main():
     refreshed_device_data = refreshed_device_response.get_json()["data"]
     assert refreshed_device_data["devices"][0]["is_online"] is True
     assert refreshed_device_data["devices"][0]["last_check_time"]
+    assert refreshed_device_data["devices"][0]["access_switch_ip"] == "172.16.100.9"
+    assert refreshed_device_data["devices"][0]["access_interface"] == "GE0/0/11"
     assert refreshed_device_data["status_freshness"]["expired_count"] == 0
     assert refreshed_device_data["status_freshness"]["unchecked_count"] == 0
 
-    import_csv = "username,ip_address,mac_address,category,details\nsmoke-import-device,192.0.2.11,00:11:22:33:44:66,smoke-import,imported\n"
+    import_csv = "username,ip_address,mac_address,access_switch_ip,access_interface,category,details\nsmoke-import-device,192.0.2.11,00:11:22:33:44:66,172.16.100.12,GE0/0/12,smoke-import,imported\n"
     import_device_response = client.post(
         "/api/access-control/device-list/import",
         data={"file": (io.BytesIO(import_csv.encode("utf-8")), "devices.csv")},
@@ -1106,6 +1128,8 @@ def main():
 
     imported_list_response = client.get("/api/access-control/device-list?q=smoke-import-device")
     imported_device = imported_list_response.get_json()["data"]["devices"][0]
+    assert imported_device["access_switch_ip"] == "172.16.100.12"
+    assert imported_device["access_interface"] == "GE0/0/12"
     delete_device_response = client.delete(f"/api/access-control/device-list/{created_device['id']}")
     assert delete_device_response.status_code == 200, delete_device_response.get_data(as_text=True)
     delete_imported_response = client.delete(f"/api/access-control/device-list/{imported_device['id']}")

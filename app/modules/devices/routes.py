@@ -19,6 +19,7 @@ from app.modules.devices.status import (
     stop_status_monitoring,
     update_device_status,
 )
+from app.modules.switches.trace import trace_terminal_ip
 
 
 device_bp = Blueprint("device_api", __name__, url_prefix="/api/access-control")
@@ -104,7 +105,17 @@ def create_device():
 def export_devices():
     output = io.StringIO()
     output.write("\ufeff")
-    fieldnames = ["username", "ip_address", "mac_address", "category", "details", "is_online", "last_check_time"]
+    fieldnames = [
+        "username",
+        "ip_address",
+        "mac_address",
+        "access_switch_ip",
+        "access_interface",
+        "category",
+        "details",
+        "is_online",
+        "last_check_time",
+    ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
 
@@ -154,6 +165,10 @@ def import_devices():
             "category": row_value(row, "category", "分类", "类别"),
             "details": row_value(row, "details", "详情", "备注", "说明"),
         }
+        if row_has_any(row, "access_switch_ip", "接入交换机", "接入交换机IP", "交换机IP"):
+            data["access_switch_ip"] = row_value(row, "access_switch_ip", "接入交换机", "接入交换机IP", "交换机IP")
+        if row_has_any(row, "access_interface", "接入接口", "接口位置", "端口", "接入口"):
+            data["access_interface"] = row_value(row, "access_interface", "接入接口", "接口位置", "端口", "接入口")
 
         if not data["username"] and not data["ip_address"]:
             skipped_count += 1
@@ -252,6 +267,31 @@ def ip_to_username():
     })
 
 
+@device_bp.route("/device-port-preview", methods=["POST"])
+@login_required
+def preview_device_port():
+    data = request.get_json(silent=True) or {}
+    try:
+        target_ip = validate_ip(required_string(data, "ip_address", "IP地址", max_length=45))
+    except ValueError as exc:
+        return failure(str(exc), status=400)
+
+    payload, message, code = trace_terminal_ip(target_ip)
+    access_info = build_access_location(payload)
+    mac_address = normalize_trace_mac(payload.get("target_mac"))
+
+    return success({
+        "ip_address": target_ip,
+        "mac_address": mac_address,
+        "access_switch_ip": access_info.get("access_switch_ip"),
+        "access_interface": access_info.get("access_interface"),
+        "access_updated_at": format_datetime(now_local()) if access_info else None,
+        "result_type": payload.get("result_type") or "failed",
+        "configured": payload.get("configured", True),
+        "message": message,
+    }, message=message, code=code)
+
+
 @device_bp.route("/device-status/<int:device_id>", methods=["POST"])
 @login_required
 def check_device_status(device_id):
@@ -312,13 +352,24 @@ def parse_device_payload(data):
     details = optional_string(data, "details")
     category = optional_string(data, "category", max_length=50) or "未分类"
 
-    return {
+    payload = {
         "username": username,
         "ip_address": ip_address,
         "mac_address": mac_address,
         "details": details,
         "category": category,
     }
+    access_present = "access_switch_ip" in data or "access_interface" in data
+    if access_present:
+        access_switch_ip = optional_string(data, "access_switch_ip", max_length=45)
+        access_interface = optional_string(data, "access_interface", max_length=100)
+        if access_switch_ip:
+            access_switch_ip = validate_ip(access_switch_ip, "接入交换机IP")
+        payload["access_switch_ip"] = access_switch_ip
+        payload["access_interface"] = access_interface
+        payload["access_updated_at"] = now_local() if access_switch_ip or access_interface else None
+
+    return payload
 
 
 def filtered_device_query(apply_status=True):
@@ -333,6 +384,8 @@ def filtered_device_query(apply_status=True):
             Device.username.ilike(like_value),
             Device.ip_address.ilike(like_value),
             Device.mac_address.ilike(like_value),
+            Device.access_switch_ip.ilike(like_value),
+            Device.access_interface.ilike(like_value),
             Device.category.ilike(like_value),
             Device.details.ilike(like_value),
         ))
@@ -402,9 +455,61 @@ def int_arg(name, default, min_value=None, max_value=None):
 
 
 def row_value(row, *names):
-    normalized = {str(key).strip().lower(): value for key, value in row.items() if key is not None}
+    normalized = {normalize_csv_header(key): value for key, value in row.items() if key is not None}
     for name in names:
-        value = normalized.get(str(name).strip().lower())
+        value = normalized.get(normalize_csv_header(name))
         if value is not None:
             return str(value).strip()
     return ""
+
+
+def row_has_any(row, *names):
+    normalized_names = {normalize_csv_header(key) for key in row.keys() if key is not None}
+    return any(normalize_csv_header(name) in normalized_names for name in names)
+
+
+def normalize_csv_header(value):
+    return "".join(str(value).strip().lower().split()).replace("_", "")
+
+
+def normalize_trace_mac(value):
+    if not value:
+        return None
+    hex_value = "".join(char for char in str(value) if char.lower() in "0123456789abcdef")
+    if len(hex_value) != 12:
+        return None
+    return ":".join(hex_value[i:i + 2] for i in range(0, 12, 2)).upper()
+
+
+def build_access_location(trace_payload):
+    if not trace_payload:
+        return {}
+    final_switch = trace_payload.get("final_switch") or ""
+    final_interface = trace_payload.get("final_interface") or ""
+    if final_switch and final_interface:
+        return {
+            "access_switch_ip": final_switch,
+            "access_interface": final_interface,
+        }
+
+    start_switch = trace_payload.get("start_switch") or ""
+    hops = trace_payload.get("hops") if isinstance(trace_payload.get("hops"), list) else []
+    for hop in reversed(hops):
+        switch_ip = hop.get("switch_ip") or ""
+        interface = hop.get("ingress_interface") or ""
+        if switch_ip and interface and switch_ip != start_switch:
+            return {
+                "access_switch_ip": switch_ip,
+                "access_interface": interface,
+            }
+
+    core_hop = next((hop for hop in hops if hop.get("switch_ip") == start_switch), hops[0] if hops else {})
+    neighbor = core_hop.get("neighbor") if isinstance(core_hop.get("neighbor"), dict) else {}
+    neighbor_ip = neighbor.get("management_ip") or ""
+    neighbor_port = neighbor.get("port_id") or ""
+    if neighbor_ip:
+        return {
+            "access_switch_ip": neighbor_ip,
+            "access_interface": neighbor_port,
+        }
+    return {}

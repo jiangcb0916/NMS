@@ -2149,6 +2149,8 @@ async function saveDevice(event) {
         username: document.getElementById('device-username').value.trim(),
         ip_address: document.getElementById('device-ip').value.trim(),
         mac_address: document.getElementById('device-mac').value.trim(),
+        access_switch_ip: document.getElementById('device-access-switch').value.trim(),
+        access_interface: document.getElementById('device-access-interface').value.trim(),
         category: document.getElementById('device-category').value.trim(),
         details: document.getElementById('device-details').value.trim()
     };
@@ -2169,6 +2171,108 @@ async function saveDevice(event) {
         message.textContent = error.message;
     } finally {
         saveButton.disabled = false;
+    }
+}
+
+async function previewDevicePort() {
+    const ipInput = document.getElementById('device-ip');
+    const button = document.getElementById('device-port-preview-button');
+    const ip = ipInput ? ipInput.value.trim() : '';
+    if (!ip) {
+        setDevicePortPreviewStatus('error', '请先填写 IP 地址');
+        if (ipInput) {
+            ipInput.focus();
+        }
+        return;
+    }
+
+    const originalButtonHtml = button ? button.innerHTML : '';
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="bi bi-hourglass-split"></i><span>查询中</span>';
+    }
+    setDevicePortPreviewStatus('loading', '正在查询 ARP、MAC 表和 LLDP');
+
+    try {
+        const result = await apiPostResult('/api/access-control/device-port-preview', {ip_address: ip});
+        const data = result.data || {};
+        if (result.code === 0 && (data.mac_address || data.access_switch_ip || data.access_interface)) {
+            fillDevicePortPreview(data);
+            const hasAccessLocation = Boolean(data.access_switch_ip || data.access_interface);
+            setDevicePortPreviewStatus(
+                hasAccessLocation ? 'ok' : 'warn',
+                hasAccessLocation
+                    ? `已填充 ${data.access_switch_ip || '-'} / ${data.access_interface || '-'}`
+                    : '已解析 MAC，未定位到接入口'
+            );
+            return;
+        }
+
+        const statusType = result.code === 0 ? 'warn' : 'error';
+        setDevicePortPreviewStatus(statusType, renderDevicePreviewMessage(data, result.message));
+    } catch (error) {
+        setDevicePortPreviewStatus('error', error.message || '智能查询失败');
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = originalButtonHtml;
+        }
+    }
+}
+
+function fillDevicePortPreview(data) {
+    const mac = document.getElementById('device-mac');
+    const switchIp = document.getElementById('device-access-switch');
+    const accessInterface = document.getElementById('device-access-interface');
+    if (mac && data.mac_address) {
+        mac.value = data.mac_address;
+    }
+    if (switchIp && data.access_switch_ip) {
+        switchIp.value = data.access_switch_ip;
+    }
+    if (accessInterface && data.access_interface) {
+        accessInterface.value = data.access_interface;
+    }
+}
+
+function renderDevicePreviewMessage(data, fallback = '') {
+    const resultType = data?.result_type || '';
+    const message = fallback || data?.message || '';
+    const lowerMessage = message.toLowerCase();
+    if (resultType === 'not_found' || message.includes('未找到')) {
+        return '未找到该 IP 的 MAC 或接入口';
+    }
+    if (lowerMessage.includes('ssh') || lowerMessage.includes('netmiko') || lowerMessage.includes('timeout') || lowerMessage.includes('authentication')) {
+        return '交换机 SSH 查询失败';
+    }
+    if (data?.configured === false) {
+        return message || '交换机查询未配置';
+    }
+    return message || '智能查询失败';
+}
+
+function setDevicePortPreviewStatus(type, message) {
+    const status = document.getElementById('device-port-preview-status');
+    if (!status) {
+        return;
+    }
+    const icons = {
+        ok: 'bi-check-circle',
+        warn: 'bi-info-circle',
+        error: 'bi-exclamation-triangle',
+        loading: 'bi-hourglass-split'
+    };
+    status.hidden = false;
+    status.className = `device-lookup-status full-field ${type}`;
+    status.innerHTML = `<i class="bi ${icons[type] || 'bi-info-circle'}"></i><span>${escapeHtml(message || '')}</span>`;
+}
+
+function resetDevicePortPreviewStatus() {
+    const status = document.getElementById('device-port-preview-status');
+    if (status) {
+        status.hidden = true;
+        status.className = 'device-lookup-status full-field';
+        status.textContent = '';
     }
 }
 
@@ -2307,6 +2411,14 @@ function renderDevicePortLookup(device) {
     if (isWirelessDeviceIp(ip)) {
         return '<span class="device-port-note">无线端口</span>';
     }
+    if (!current && (device.access_switch_ip || device.access_interface)) {
+        return renderDevicePortCard(
+            device,
+            device.access_switch_ip || '-',
+            device.access_interface || '-',
+            device.access_updated_at ? `保存于 ${device.access_updated_at}` : '已保存接入位置'
+        );
+    }
     if (!isTraceableDeviceIp(ip)) {
         return '<span class="device-port-empty"></span>';
     }
@@ -2319,23 +2431,7 @@ function renderDevicePortLookup(device) {
         `;
     }
     if (current?.status === 'success') {
-        return `
-            <div class="device-port-card" title="接入交换机 ${escapeHtml(current.switchIp || '-')}，端口 ${escapeHtml(current.interfaceName || '-')}">
-                <div class="device-port-lines">
-                    <span class="device-port-switch">
-                        <i class="bi bi-hdd-network"></i>
-                        <span>${escapeHtml(current.switchIp || '-')}</span>
-                    </span>
-                    <span class="device-port-interface">
-                        <i class="bi bi-ethernet"></i>
-                        <span>${escapeHtml(current.interfaceName || '-')}</span>
-                    </span>
-                </div>
-                <button class="device-port-icon-button" type="button" data-device-action="trace-port" data-device-id="${escapeHtml(device.id)}" title="重新查看" aria-label="重新查看端口">
-                    <i class="bi bi-arrow-clockwise"></i>
-                </button>
-            </div>
-        `;
+        return renderDevicePortCard(device, current.switchIp || '-', current.interfaceName || '-', '本次查看结果');
     }
     if (current?.status === 'notice') {
         return `
@@ -2368,6 +2464,31 @@ function renderDevicePortLookup(device) {
             <i class="bi bi-search"></i>
             <span>查看端口</span>
         </button>
+    `;
+}
+
+function renderDevicePortCard(device, switchIp, interfaceName, titlePrefix = '') {
+    const titleText = [
+        titlePrefix,
+        `接入交换机 ${switchIp || '-'}`,
+        `端口 ${interfaceName || '-'}`
+    ].filter(Boolean).join('，');
+    return `
+        <div class="device-port-card" title="${escapeHtml(titleText)}">
+            <div class="device-port-lines">
+                <span class="device-port-switch">
+                    <i class="bi bi-hdd-network"></i>
+                    <span>${escapeHtml(switchIp || '-')}</span>
+                </span>
+                <span class="device-port-interface">
+                    <i class="bi bi-ethernet"></i>
+                    <span>${escapeHtml(interfaceName || '-')}</span>
+                </span>
+            </div>
+            <button class="device-port-icon-button" type="button" data-device-action="trace-port" data-device-id="${escapeHtml(device.id)}" title="重新查看" aria-label="重新查看端口">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
     `;
 }
 
@@ -2454,7 +2575,7 @@ function buildDeviceAccessPortInfo(data) {
 
     const finalSwitch = data.final_switch || '';
     const finalInterface = data.final_interface || '';
-    if (finalSwitch && finalInterface && finalSwitch !== startSwitch) {
+    if (finalSwitch && finalInterface) {
         return {
             switchIp: finalSwitch,
             interfaceName: finalInterface
@@ -2504,6 +2625,7 @@ function openCreateDeviceModal() {
     document.getElementById('device-form').reset();
     document.getElementById('device-id').value = '';
     document.getElementById('device-form-message').textContent = '';
+    resetDevicePortPreviewStatus();
     openModal('device-modal');
 }
 
@@ -2517,9 +2639,12 @@ function openEditDeviceModal(device) {
     document.getElementById('device-username').value = device.username || '';
     document.getElementById('device-ip').value = device.ip_address || '';
     document.getElementById('device-mac').value = device.mac_address || '';
+    document.getElementById('device-access-switch').value = device.access_switch_ip || '';
+    document.getElementById('device-access-interface').value = device.access_interface || '';
     document.getElementById('device-category').value = device.category || '';
     document.getElementById('device-details').value = device.details || '';
     document.getElementById('device-form-message').textContent = '';
+    resetDevicePortPreviewStatus();
     openModal('device-modal');
 }
 
@@ -3824,6 +3949,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const deviceForm = document.getElementById('device-form');
     if (deviceForm) {
         deviceForm.addEventListener('submit', saveDevice);
+    }
+
+    const devicePortPreviewButton = document.getElementById('device-port-preview-button');
+    if (devicePortPreviewButton) {
+        devicePortPreviewButton.addEventListener('click', previewDevicePort);
+    }
+
+    const deviceIpInput = document.getElementById('device-ip');
+    if (deviceIpInput) {
+        deviceIpInput.addEventListener('input', resetDevicePortPreviewStatus);
     }
 
     const refreshDeviceStatusButton = document.getElementById('refresh-device-status');

@@ -39,7 +39,8 @@ def validate_mac(value, label="MAC地址"):
     if value is None or value == "":
         return None
     value = str(value).strip()
-    pattern = r"^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"
+    pattern = r"^(?:[0-9A-Fa-f]{12}|(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|[0-9A-Fa-f]{4}[-:.][0-9A-Fa-f]{4}[-:.][0-9A-Fa-f]{4})$"
     if not re.match(pattern, value):
-        raise ValueError(f"{label}格式不正确，应为 XX:XX:XX:XX:XX:XX 或 XX-XX-XX-XX-XX-XX")
-    return value.upper().replace("-", ":")
+        raise ValueError(f"{label}格式不正确，应为 XX:XX:XX:XX:XX:XX、XX-XX-XX-XX-XX-XX、XXXX-XXXX-XXXX 或 XXXXXXXXXXXX")
+    hex_value = re.sub(r"[^0-9A-Fa-f]", "", value)
+    return ":".join(hex_value[i:i + 2] for i in range(0, 12, 2)).upper()
