@@ -1565,6 +1565,7 @@ function renderSwitchTraceResult(data, message, code) {
             <table class="trace-summary-table">
                 <thead>
                     <tr>
+                        <th>名称</th>
                         <th>IP 地址</th>
                         <th>MAC 地址</th>
                         <th>核心交换机端口</th>
@@ -1574,6 +1575,7 @@ function renderSwitchTraceResult(data, message, code) {
                 </thead>
                 <tbody>
                     <tr>
+                        <td>${escapeHtml(keyInfo.name)}</td>
                         <td>${escapeHtml(keyInfo.ip)}</td>
                         <td>${escapeHtml(keyInfo.mac)}</td>
                         <td>${escapeHtml(keyInfo.corePort)}</td>
@@ -1623,6 +1625,7 @@ function buildSwitchTraceKeyInfo(data) {
         ? finalSwitch
         : neighbor.management_ip || finalSwitch || data.start_switch || '-';
     return {
+        name: data.target_name || '无',
         ip: data.target_ip || switchState.traceIp || '-',
         mac: data.target_mac || coreHop.target_mac || finalHop.target_mac || '-',
         corePort: coreHop.ingress_interface || '-',

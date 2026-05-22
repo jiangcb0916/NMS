@@ -16,6 +16,7 @@ from app import create_app
 from app.extensions import db
 from app.models.base import now_local
 from app.models.cache import UserNameCache
+from app.models.device import Device
 from app.models.user import User
 from app.modules.access_control import name_cache as access_control_name_cache
 from app.modules.access_control import routes as access_control_routes
@@ -542,6 +543,16 @@ def main():
         assert lldp_neighbor_value["system_name"] == "7F-Office-Switch-01"
 
         original_trace_terminal_ip = switch_routes.trace_terminal_ip
+        with app.app_context():
+            trace_device = Device(
+                username="trace-terminal",
+                ip_address="172.16.70.17",
+                mac_address="90-09-d0-91-47-8f",
+                category="smoke",
+            )
+            db.session.add(trace_device)
+            db.session.commit()
+            trace_device_id = trace_device.id
 
         def fake_trace_terminal_ip(ip):
             assert ip == "172.16.70.17"
@@ -572,6 +583,7 @@ def main():
             assert trace_response.status_code == 200, trace_response.get_data(as_text=True)
             trace_json = trace_response.get_json()
             assert trace_json["code"] == 0
+            assert trace_json["data"]["target_name"] == "trace-terminal"
             assert trace_json["data"]["target_mac"] == "9009-d091-478f"
             assert trace_json["data"]["final_interface"] == "GE0/0/12"
 
@@ -579,6 +591,11 @@ def main():
             assert invalid_trace_response.status_code == 400, invalid_trace_response.get_data(as_text=True)
         finally:
             switch_routes.trace_terminal_ip = original_trace_terminal_ip
+            with app.app_context():
+                device = Device.query.get(trace_device_id)
+                if device:
+                    db.session.delete(device)
+                    db.session.commit()
     finally:
         wireless_routes.PrometheusClient = original_prometheus_client
         switch_routes.PrometheusClient = original_switch_prometheus_client
