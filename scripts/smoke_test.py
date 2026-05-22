@@ -588,6 +588,37 @@ def main():
             "lldp_management_ip": "192.168.0.1",
             "platform": "huawei",
         }) == "cisco"
+        assert switch_trace.infer_platform_from_mac("d468-ba01-3672") == "cisco"
+        interface_arp_entries = switch_trace.parse_arp_entries_by_macs(
+            "\n".join([
+                "172.16.100.20   d468-ba01-3672  18        D-0  GE1/0/10",
+                "172.16.101.11   186f-2d0b-9b00  16        D-0  GE1/0/10",
+            ]),
+            {"d468-ba01-3672", "186f-2d0b-9b00"},
+        )
+        assert interface_arp_entries[0]["ip"] == "172.16.100.20"
+
+        class FakeTraceSession:
+            host = "172.16.100.5"
+            platform = "huawei"
+
+            def run(self, command):
+                assert command == "display arp"
+                return "\n".join([
+                    "172.16.100.20   d468-ba01-3672  18        D-0  GE1/0/10",
+                    "172.16.101.11   186f-2d0b-9b00  16        D-0  GE1/0/10",
+                ])
+
+        fallback_hop = {"commands": [], "neighbor": {}}
+        fallback_neighbor = switch_trace.infer_downstream_neighbor_from_interface_macs(
+            FakeTraceSession(),
+            ["186f-2d0b-9b00", "d468-ba01-3672"],
+            fallback_hop,
+            trace_config,
+        )
+        assert fallback_neighbor["management_ip"] == "172.16.100.20"
+        assert fallback_neighbor["platform"] == "cisco"
+        assert fallback_hop["commands"][-1]["summary"] == "通过接口 MAC/ARP 推断下联 172.16.100.20"
         cisco_config = switch_trace.SwitchTraceConfig("172.16.100.5", "huawei", "huawei-pass", 22, 8, "cisco", "cisco-pass", 2222, 12, "auto", 23, 5)
         cisco_settings = switch_trace.ssh_settings_for_platform(cisco_config, "cisco")
         assert cisco_settings["username"] == "cisco"

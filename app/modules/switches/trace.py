@@ -228,10 +228,18 @@ def trace_terminal_ip(target_ip):
                 neighbor = lldp_result.get("neighbor") or {}
                 neighbor_ip = resolve_lldp_neighbor_management_ip(session, neighbor, hop, config)
                 if not neighbor_ip:
+                    neighbor = infer_downstream_neighbor_from_interface_macs(
+                        session,
+                        interface_result.get("macs") or [],
+                        hop,
+                        config,
+                    )
+                    neighbor_ip = neighbor.get("management_ip") or ""
+                if not neighbor_ip:
                     message = (
                         "聚合口成员未发现可继续追踪的 LLDP 管理 IP"
                         if is_aggregate_interface
-                        else "该接口学习到多个 MAC，但 LLDP 未发现可继续追踪的管理 IP"
+                        else "该接口学习到多个 MAC，但未发现可继续追踪的管理 IP"
                     )
                     return finish_trace(
                         payload,
@@ -423,6 +431,7 @@ def lookup_interface_macs(session, interface, hop):
                 "command_failed": True,
                 "mac_count": None,
                 "mac_samples": [],
+                "macs": [],
             }
         hop["commands"][-1]["summary"] = "接口过滤不支持，改用全表解析"
         entries = lookup_cisco_mac_table(session, hop, target_mac=hop.get("target_mac"), interface=interface)
@@ -436,6 +445,7 @@ def lookup_interface_macs(session, interface, hop):
     return {
         "mac_count": len(unique_macs),
         "mac_samples": unique_macs[:8],
+        "macs": unique_macs,
     }
 
 
@@ -521,6 +531,47 @@ def resolve_lldp_neighbor_management_ip(session, neighbor, hop, config):
         hop["neighbor"] = neighbor
         return ""
     return neighbor_ip
+
+
+def infer_downstream_neighbor_from_interface_macs(session, macs, hop, config):
+    entries = lookup_arp_entries_by_macs(session, macs, hop)
+    candidates = [
+        entry for entry in entries
+        if entry.get("ip") != session.host and is_expected_switch_management_ip(entry.get("ip"), config)
+    ]
+    if not candidates:
+        if hop.get("commands"):
+            hop["commands"][-1]["summary"] = "接口 MAC/ARP 未推断到下联管理 IP"
+        return {}
+
+    selected = candidates[0]
+    if hop.get("commands"):
+        hop["commands"][-1]["summary"] = f"通过接口 MAC/ARP 推断下联 {selected['ip']}"
+    neighbor = {
+        "chassis_id": selected["mac"],
+        "chassis_mac": selected["mac"],
+        "system_name": "",
+        "management_ip": selected["ip"],
+        "port_id": "",
+        "model": "",
+        "platform": infer_platform_from_mac(selected["mac"]),
+        "resolved_by": "interface_arp_mac",
+    }
+    hop["neighbor"] = neighbor
+    return neighbor
+
+
+def lookup_arp_entries_by_macs(session, macs, hop):
+    mac_set = {normalize_mac(mac) for mac in macs if mac}
+    if not mac_set:
+        return []
+
+    command = "show ip arp" if session.platform == "cisco" else "display arp"
+    output = run_command(session, hop, command)
+    entries = parse_arp_entries_by_macs(output, mac_set)
+    if not entries and session.platform == "cisco":
+        hop["commands"][-1]["summary"] = "ARP 全表未匹配接口 MAC"
+    return entries
 
 
 def lookup_arp_by_mac(session, mac, hop, config):
@@ -630,6 +681,26 @@ def parse_arp_by_mac(output, target_mac):
         entries.append({
             "ip": ip_value,
             "mac": normalized_target,
+            "interface": last_interface(line),
+            "raw_line": line,
+        })
+    return entries
+
+
+def parse_arp_entries_by_macs(output, target_macs):
+    normalized_targets = {normalize_mac(mac) for mac in target_macs if mac}
+    entries = []
+    for line in useful_lines(output):
+        ip = first_valid_ip(line)
+        mac = first_mac(line)
+        if not ip or not mac:
+            continue
+        normalized_mac = normalize_mac(mac)
+        if normalized_mac not in normalized_targets:
+            continue
+        entries.append({
+            "ip": ip,
+            "mac": normalized_mac,
             "interface": last_interface(line),
             "raw_line": line,
         })
@@ -764,6 +835,13 @@ def infer_neighbor_platform(neighbor):
     ):
         return "cisco"
     return neighbor.get("platform") or infer_platform_from_text(neighbor.get("system_name"), neighbor.get("model"))
+
+
+def infer_platform_from_mac(mac):
+    hex_value = re.sub(r"[^0-9A-Fa-f]", "", str(mac or "")).lower()
+    if hex_value.startswith("d468ba"):
+        return "cisco"
+    return "huawei"
 
 
 def infer_platform_from_text(*values):
