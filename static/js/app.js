@@ -190,7 +190,8 @@ const deviceState = {
     },
     statusFreshness: null,
     statusRefreshing: false,
-    lastAutoRefreshAt: 0
+    lastAutoRefreshAt: 0,
+    portLookups: {}
 };
 
 const wirelessUserState = {
@@ -1271,7 +1272,7 @@ async function loadDevices(options = {}) {
     const body = document.getElementById('devices-table-body');
     const summary = document.getElementById('devices-summary');
     panel.hidden = false;
-    body.innerHTML = '<tr><td colspan="7">加载中</td></tr>';
+    body.innerHTML = '<tr><td colspan="8">加载中</td></tr>';
     summary.textContent = '加载中';
 
     try {
@@ -1298,7 +1299,7 @@ async function loadDevices(options = {}) {
 
         summary.textContent = `${renderDeviceSummaryPrefix()}共 ${deviceState.total} 台，当前显示 ${result.returned || devices.length} 台${renderDeviceFreshnessSummary(deviceState.statusFreshness)}`;
         if (!devices.length) {
-            body.innerHTML = '<tr><td colspan="7">暂无数据</td></tr>';
+            body.innerHTML = '<tr><td colspan="8">暂无数据</td></tr>';
             maybeAutoRefreshDeviceStatus(deviceState.statusFreshness, options);
             return;
         }
@@ -1306,6 +1307,7 @@ async function loadDevices(options = {}) {
             <tr>
                 <td title="${escapeHtml(device.details || '')}">${escapeHtml(device.username)}</td>
                 <td>${escapeHtml(device.ip_address)}</td>
+                <td class="device-port-cell" data-device-port-cell="${escapeHtml(device.id)}">${renderDevicePortLookup(device)}</td>
                 <td>${escapeHtml(device.mac_address || '-')}</td>
                 <td>${escapeHtml(device.category || '未分类')}</td>
                 <td>${renderDeviceStatus(device)}</td>
@@ -1315,7 +1317,7 @@ async function loadDevices(options = {}) {
         `).join('');
         maybeAutoRefreshDeviceStatus(deviceState.statusFreshness, options);
     } catch (error) {
-        body.innerHTML = `<tr><td colspan="7">${escapeHtml(error.message)}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
         summary.textContent = '加载失败';
     }
 }
@@ -2293,6 +2295,194 @@ function renderDeviceStatus(device) {
     return device.is_online
         ? '<span class="status-badge ok">在线</span>'
         : '<span class="status-badge bad">离线</span>';
+}
+
+function renderDevicePortLookup(device) {
+    const ip = String(device.ip_address || '').trim();
+    const lookup = deviceState.portLookups[device.id];
+    if (lookup && lookup.ip !== ip) {
+        delete deviceState.portLookups[device.id];
+    }
+    const current = deviceState.portLookups[device.id];
+    if (isWirelessDeviceIp(ip)) {
+        return '<span class="device-port-note">无线端口</span>';
+    }
+    if (!isTraceableDeviceIp(ip)) {
+        return '<span class="device-port-empty"></span>';
+    }
+    if (current?.status === 'loading') {
+        return `
+            <span class="device-port-state loading">
+                <i class="bi bi-hourglass-split"></i>
+                <span>查看中</span>
+            </span>
+        `;
+    }
+    if (current?.status === 'success') {
+        return `
+            <div class="device-port-card" title="接入交换机 ${escapeHtml(current.switchIp || '-')}，端口 ${escapeHtml(current.interfaceName || '-')}">
+                <div class="device-port-lines">
+                    <span class="device-port-switch">
+                        <i class="bi bi-hdd-network"></i>
+                        <span>${escapeHtml(current.switchIp || '-')}</span>
+                    </span>
+                    <span class="device-port-interface">
+                        <i class="bi bi-ethernet"></i>
+                        <span>${escapeHtml(current.interfaceName || '-')}</span>
+                    </span>
+                </div>
+                <button class="device-port-icon-button" type="button" data-device-action="trace-port" data-device-id="${escapeHtml(device.id)}" title="重新查看" aria-label="重新查看端口">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+        `;
+    }
+    if (current?.status === 'notice') {
+        return `
+            <div class="device-port-inline">
+                <span class="device-port-state muted">
+                    <i class="bi bi-info-circle"></i>
+                    <span>${escapeHtml(current.message || '未定位到接入交换机')}</span>
+                </span>
+                <button class="device-port-icon-button" type="button" data-device-action="trace-port" data-device-id="${escapeHtml(device.id)}" title="重新查看" aria-label="重新查看端口">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+        `;
+    }
+    if (current?.status === 'error') {
+        return `
+            <div class="device-port-inline">
+                <span class="device-port-state error">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <span>${escapeHtml(current.message || '追踪失败')}</span>
+                </span>
+                <button class="device-port-icon-button" type="button" data-device-action="trace-port" data-device-id="${escapeHtml(device.id)}" title="重试" aria-label="重试查看端口">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+        `;
+    }
+    return `
+        <button class="device-port-lookup-button" type="button" data-device-action="trace-port" data-device-id="${escapeHtml(device.id)}" title="按需追踪接入交换机端口">
+            <i class="bi bi-search"></i>
+            <span>查看端口</span>
+        </button>
+    `;
+}
+
+function isTraceableDeviceIp(ip) {
+    return /^172\.16\.(?:70|101)\.(?:25[0-5]|2[0-4]\d|1?\d?\d)$/.test(ip);
+}
+
+function isWirelessDeviceIp(ip) {
+    return /^172\.16\.64\.(?:25[0-5]|2[0-4]\d|1?\d?\d)$/.test(ip);
+}
+
+function updateDevicePortCell(device) {
+    const cell = document.querySelector(`[data-device-port-cell="${CSS.escape(String(device.id))}"]`);
+    if (cell) {
+        cell.innerHTML = renderDevicePortLookup(device);
+    }
+}
+
+async function traceDevicePort(device) {
+    if (!device) {
+        showToast('设备不存在', 'error');
+        return;
+    }
+    const ip = String(device.ip_address || '').trim();
+    if (!isTraceableDeviceIp(ip)) {
+        showToast('该网段不需要端口追踪', 'info');
+        return;
+    }
+
+    deviceState.portLookups[device.id] = {status: 'loading', ip};
+    updateDevicePortCell(device);
+    try {
+        const result = await apiPostResult('/api/statistics/switches/trace-terminal', {ip});
+        const data = result.data || {};
+        const accessPort = buildDeviceAccessPortInfo(data);
+        if (result.code === 0 && accessPort) {
+            deviceState.portLookups[device.id] = {
+                status: 'success',
+                ip,
+                switchIp: accessPort.switchIp,
+                interfaceName: accessPort.interfaceName
+            };
+            showToast('端口查看完成');
+        } else if (result.code === 0) {
+            deviceState.portLookups[device.id] = {
+                status: 'notice',
+                ip,
+                message: '未定位到接入交换机'
+            };
+            showToast('未定位到接入交换机', 'info');
+        } else {
+            deviceState.portLookups[device.id] = {
+                status: 'error',
+                ip,
+                message: renderDevicePortErrorLabel(data, result.message)
+            };
+            showToast(renderDevicePortErrorLabel(data, result.message), 'error');
+        }
+    } catch (error) {
+        deviceState.portLookups[device.id] = {
+            status: 'error',
+            ip,
+            message: renderDevicePortErrorLabel({}, error.message)
+        };
+        showToast(renderDevicePortErrorLabel({}, error.message), 'error');
+    } finally {
+        updateDevicePortCell(device);
+    }
+}
+
+function buildDeviceAccessPortInfo(data) {
+    const startSwitch = data.start_switch || '';
+    const hops = Array.isArray(data.hops) ? data.hops : [];
+    const accessHop = [...hops].reverse().find((hop) => {
+        const switchIp = hop.switch_ip || '';
+        return switchIp && switchIp !== startSwitch && hop.ingress_interface;
+    });
+    if (accessHop) {
+        return {
+            switchIp: accessHop.switch_ip,
+            interfaceName: accessHop.ingress_interface
+        };
+    }
+
+    const finalSwitch = data.final_switch || '';
+    const finalInterface = data.final_interface || '';
+    if (finalSwitch && finalInterface && finalSwitch !== startSwitch) {
+        return {
+            switchIp: finalSwitch,
+            interfaceName: finalInterface
+        };
+    }
+
+    const coreHop = hops.find((hop) => hop.switch_ip === startSwitch) || hops[0] || {};
+    const neighbor = coreHop.neighbor || {};
+    const neighborIp = neighbor.management_ip || '';
+    if (neighborIp && neighborIp !== startSwitch) {
+        return {
+            switchIp: neighborIp,
+            interfaceName: neighbor.port_id || '-'
+        };
+    }
+
+    return null;
+}
+
+function renderDevicePortErrorLabel(data, message = '') {
+    const text = String(message || data.error || '').toLowerCase();
+    if (data.result_type === 'not_found' || text.includes('arp') || text.includes('未找到')) {
+        return '未找到';
+    }
+    if (text.includes('ssh') || text.includes('netmiko') || text.includes('timeout') || text.includes('authentication')) {
+        return 'SSH 失败';
+    }
+    return '追踪失败';
 }
 
 function renderDeviceActions(device) {
@@ -3349,6 +3539,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 openEditDeviceModal(device);
             } else if (button.dataset.deviceAction === 'check') {
                 checkDeviceStatus(device);
+            } else if (button.dataset.deviceAction === 'trace-port') {
+                traceDevicePort(device);
             } else if (button.dataset.deviceAction === 'delete') {
                 deleteDevice(device);
             }

@@ -109,6 +109,12 @@ SWITCH_SSH_USERNAME=
 SWITCH_SSH_PASSWORD=
 SWITCH_SSH_PORT=22
 SWITCH_SSH_TIMEOUT=8
+SWITCH_CISCO_SSH_USERNAME=
+SWITCH_CISCO_SSH_PASSWORD=
+SWITCH_CISCO_SSH_PORT=22
+SWITCH_CISCO_SSH_TIMEOUT=8
+SWITCH_CISCO_TRANSPORT=auto
+SWITCH_CISCO_TELNET_PORT=23
 SWITCH_TRACE_MAX_HOPS=5
 OSDWAN_API_BASE_URL=https://api.wanflow.com
 OSDWAN_CONSOLE_ORIGIN=https://console.wanflow.com
@@ -232,6 +238,12 @@ docker compose exec web python scripts/migrate_legacy_data.py
 | `SWITCH_SSH_PASSWORD` | Huawei 交换机 SSH 密码，仅后端读取 | 空 |
 | `SWITCH_SSH_PORT` | Huawei 交换机 SSH 端口 | `22` |
 | `SWITCH_SSH_TIMEOUT` | Huawei 交换机 SSH 连接与命令超时秒数 | `8` |
+| `SWITCH_CISCO_SSH_USERNAME` | Cisco PoE/接入交换机 SSH 用户名，空则沿用 `SWITCH_SSH_USERNAME` | 空 |
+| `SWITCH_CISCO_SSH_PASSWORD` | Cisco PoE/接入交换机 SSH 密码，仅后端读取 | 空 |
+| `SWITCH_CISCO_SSH_PORT` | Cisco PoE/接入交换机 SSH 端口 | `22` |
+| `SWITCH_CISCO_SSH_TIMEOUT` | Cisco PoE/接入交换机 SSH 连接与命令超时秒数 | `8` |
+| `SWITCH_CISCO_TRANSPORT` | Cisco 连接方式，`auto` 遇到旧 SSH HostKey 问题时回退 Telnet，可设 `ssh` 或 `telnet` | `auto` |
+| `SWITCH_CISCO_TELNET_PORT` | Cisco Telnet 回退端口 | `23` |
 | `SWITCH_TRACE_MAX_HOPS` | 终端端口定位最大 LLDP 追踪跳数 | `5` |
 | `HUAWEI_SNMP_URL` | 华为防火墙 SNMP exporter 接口，Dashboard 带宽卡片使用 | `http://172.16.80.125:9116/snmp` |
 | `HUAWEI_SNMP_AUTH` | 华为防火墙 SNMP exporter auth 参数 | `secure_v3` |

@@ -523,6 +523,22 @@ def main():
         assert switch_trace.parse_arp("172.16.70.176   6424-4d65-7bd3  14  D-0  GE1/0/11", "172.16.70.17") is None
         assert switch_trace.command_interface_name("GE0/0/4") == "GigabitEthernet 0/0/4"
         assert switch_trace.command_interface_name("GigabitEthernet0/0/4") == "GigabitEthernet 0/0/4"
+        assert switch_trace.command_interface_name("Eth-Trunk16") == "Eth-Trunk 16"
+        assert switch_trace.cisco_mac("186f-2d0b-e080") == "18:6f:2d:0b:e0:80"
+        assert switch_trace.cisco_interface_name("GigabitEthernet1/0/36") == "Gi1/0/36"
+        for trunk_id in (1, 2, 13, 14, 15, 16, 17, 18, 22):
+            assert switch_trace.is_eth_trunk(f"Eth-Trunk{trunk_id}")
+            assert switch_trace.command_interface_name(f"Eth-Trunk{trunk_id}") == f"Eth-Trunk {trunk_id}"
+        trunk_arp_entry = switch_trace.parse_arp("172.16.70.34    64db-8bc1-7170  20  D-0  Eth-Trunk16", "172.16.70.34")
+        assert trunk_arp_entry["mac"] == "64db-8bc1-7170"
+        assert trunk_arp_entry["interface"] == "Eth-Trunk16"
+        assert switch_trace.is_eth_trunk("Eth-Trunk16")
+        assert switch_trace.parse_eth_trunk_members("\n".join([
+            "Eth-Trunk16 current state : UP",
+            "PortName                      Status      Weight",
+            "GigabitEthernet0/0/47          UP          1",
+            "GigabitEthernet0/0/48          UP          1",
+        ])) == ["GigabitEthernet0/0/47", "GigabitEthernet0/0/48"]
         mac_entries = switch_trace.parse_mac_entries("9009-d091-478f dynamic 1/- GE0/0/4")
         assert mac_entries[0]["interface"] == "GE0/0/4"
         lldp_neighbor = switch_trace.parse_lldp_neighbor("\n".join([
@@ -541,6 +557,48 @@ def main():
         ]))
         assert lldp_neighbor_value["management_ip"] == "172.16.100.37"
         assert lldp_neighbor_value["system_name"] == "7F-Office-Switch-01"
+        cisco_poe_neighbor = switch_trace.parse_lldp_neighbor("\n".join([
+            "Chassis type   :macAddress",
+            "Chassis ID     :d468-ba01-36d5",
+            "Management address value :192.168.0.1",
+            "System name         :Cisco-PoE-01",
+            "Port ID        :GigabitEthernet1/0/9",
+        ]))
+        assert cisco_poe_neighbor["management_ip"] == "192.168.0.1"
+        assert cisco_poe_neighbor["chassis_mac"] == "d468-ba01-36d5"
+        assert cisco_poe_neighbor["platform"] == "cisco"
+        poe_arp_entries = switch_trace.parse_arp_by_mac(
+            "172.16.100.14    d468-ba01-36d5  20  D-0  GE1/0/9",
+            "d468-ba01-36d5",
+        )
+        assert poe_arp_entries[0]["ip"] == "172.16.100.14"
+        cisco_mac_entries = switch_trace.parse_mac_entries(
+            "18:6f:2d:0b:e0:80  101     Gi1/0/36 dynamic         aging",
+            target_mac="186f-2d0b-e080",
+        )
+        assert cisco_mac_entries[0]["interface"] == "Gi1/0/36"
+        assert switch_trace.same_interface("GigabitEthernet1/0/36", "Gi1/0/36")
+        trace_config = switch_trace.SwitchTraceConfig("172.16.100.5", "", "", 22, 8, "", "", 22, 8, "auto", 23, 5)
+        assert switch_trace.is_expected_switch_management_ip("172.16.100.14", trace_config)
+        assert not switch_trace.is_expected_switch_management_ip("192.168.0.1", trace_config)
+        assert switch_trace.is_known_fake_management_ip("192.168.0.1")
+        assert switch_trace.infer_neighbor_platform({
+            "resolved_by": "arp_mac",
+            "lldp_management_ip": "192.168.0.1",
+            "platform": "huawei",
+        }) == "cisco"
+        cisco_config = switch_trace.SwitchTraceConfig("172.16.100.5", "huawei", "huawei-pass", 22, 8, "cisco", "cisco-pass", 2222, 12, "auto", 23, 5)
+        cisco_settings = switch_trace.ssh_settings_for_platform(cisco_config, "cisco")
+        assert cisco_settings["username"] == "cisco"
+        assert cisco_settings["password"] == "cisco-pass"
+        assert cisco_settings["port"] == 2222
+        assert cisco_settings["timeout"] == 12
+        cisco_attempts = switch_trace.connection_attempts_for_platform(cisco_config, "cisco")
+        assert [attempt["transport"] for attempt in cisco_attempts] == ["ssh", "telnet"]
+        assert cisco_attempts[1]["device_type"] == "cisco_ios_telnet"
+        cisco_fallback_user_config = switch_trace.SwitchTraceConfig("172.16.100.5", "shared-user", "huawei-pass", 22, 8, "", "cisco-pass", 22, 8, "ssh", 23, 5)
+        assert switch_trace.ssh_settings_for_platform(cisco_fallback_user_config, "cisco")["username"] == "shared-user"
+        assert switch_trace.is_legacy_ssh_host_key_error(ValueError("p must be exactly 1024, 2048, 3072, or 4096 bits long"))
 
         original_trace_terminal_ip = switch_routes.trace_terminal_ip
         with app.app_context():

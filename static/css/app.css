@@ -1762,6 +1762,128 @@ th {
     cursor: default;
 }
 
+.device-port-cell {
+    min-width: 210px;
+}
+
+.device-port-note,
+.device-port-empty {
+    color: var(--muted);
+}
+
+.device-port-lookup-button,
+.device-port-icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.device-port-lookup-button {
+    gap: 6px;
+    min-height: 30px;
+    border-radius: 8px;
+    padding: 0 10px;
+    font-size: 13px;
+}
+
+.device-port-lookup-button i {
+    color: var(--accent);
+}
+
+.device-port-icon-button {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    color: var(--muted);
+    flex: 0 0 auto;
+}
+
+.device-port-lookup-button:hover,
+.device-port-icon-button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.device-port-card,
+.device-port-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+}
+
+.device-port-card {
+    padding: 5px 6px 5px 8px;
+    border: 1px solid #d7eeee;
+    border-radius: 8px;
+    background: #f5fbfb;
+}
+
+.device-port-lines {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.device-port-switch,
+.device-port-interface,
+.device-port-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.device-port-switch {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.device-port-interface {
+    color: var(--text);
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.device-port-switch i,
+.device-port-interface i,
+.device-port-state i {
+    color: var(--accent);
+    flex: 0 0 auto;
+}
+
+.device-port-state {
+    min-height: 28px;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: #edf1f3;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.device-port-state.loading {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.device-port-state.muted {
+    background: #f3f5f6;
+}
+
+.device-port-state.error {
+    background: #fff1f2;
+    color: var(--red);
+}
+
+.device-port-state.error i {
+    color: var(--red);
+}
+
 .status-badges {
     display: inline-flex;
     align-items: center;
