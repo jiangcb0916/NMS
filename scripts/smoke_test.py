@@ -583,6 +583,33 @@ def main():
         assert switch_trace.is_expected_switch_management_ip("172.16.100.14", trace_config)
         assert not switch_trace.is_expected_switch_management_ip("192.168.0.1", trace_config)
         assert switch_trace.is_known_fake_management_ip("192.168.0.1")
+        h3c_neighbor = switch_trace.parse_lldp_neighbor("\n".join([
+            "Chassis ID     :3891-d539-901c",
+            "Management address value :192.168.0.233",
+            "System name         :F-A2-Switch1",
+            "System description  :H3C Switch S5120-28P-WiNet Software Version 5.20, Release 1515",
+        ]))
+
+        class FakeNoNeighborArpSession:
+            host = "172.16.100.5"
+            platform = "huawei"
+
+            def arp_lookup_command(self, value):
+                return f"display arp | include {value}"
+
+            def run(self, command):
+                assert command == "display arp | include 3891-d539-901c"
+                return ""
+
+        untrusted_hop = {"commands": [], "neighbor": h3c_neighbor}
+        assert switch_trace.resolve_lldp_neighbor_management_ip(
+            FakeNoNeighborArpSession(),
+            h3c_neighbor,
+            untrusted_hop,
+            trace_config,
+        ) == ""
+        assert h3c_neighbor["lldp_management_ip"] == "192.168.0.233"
+        assert h3c_neighbor["management_ip"] == ""
         assert switch_trace.infer_neighbor_platform({
             "resolved_by": "arp_mac",
             "lldp_management_ip": "192.168.0.1",

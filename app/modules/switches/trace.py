@@ -525,9 +525,10 @@ def resolve_lldp_neighbor_management_ip(session, neighbor, hop, config):
             hop["neighbor"] = neighbor
             return arp_entry["ip"]
 
-    if is_known_fake_management_ip(neighbor_ip):
+    if neighbor_ip:
         neighbor["lldp_management_ip"] = neighbor_ip
         neighbor["management_ip"] = ""
+        neighbor["resolved_by"] = "untrusted_lldp_management_ip"
         hop["neighbor"] = neighbor
         return ""
     return neighbor_ip

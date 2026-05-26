@@ -22,9 +22,12 @@ def create_app(config_object=Config):
     Path(app.config["INSTANCE_DIR"]).mkdir(parents=True, exist_ok=True)
     Path(app.config["SESSION_FILE_DIR"]).mkdir(parents=True, exist_ok=True)
 
+    ensure_session_cookie_name(app)
+
     db.init_app(app)
     login_manager.init_app(app)
     server_session.init_app(app)
+    ensure_session_cookie_value_text(app)
 
     login_manager.login_view = "web.login_page"
     login_manager.login_message = "请先登录"
@@ -41,6 +44,39 @@ def create_app(config_object=Config):
     register_blueprints(app)
 
     return app
+
+
+def ensure_session_cookie_name(app):
+    if not hasattr(app, "session_cookie_name"):
+        app.session_cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
+
+
+def ensure_session_cookie_value_text(app):
+    session_interface = app.session_interface
+    if not getattr(session_interface, "use_signer", False) or not hasattr(session_interface, "_get_signer"):
+        return
+
+    original_get_signer = session_interface._get_signer
+
+    def get_text_signer(current_app):
+        signer = original_get_signer(current_app)
+        if signer is None:
+            return None
+        return TextCookieSigner(signer)
+
+    session_interface._get_signer = get_text_signer
+
+
+class TextCookieSigner:
+    def __init__(self, signer):
+        self.signer = signer
+
+    def sign(self, value):
+        signed = self.signer.sign(value)
+        return signed.decode() if isinstance(signed, bytes) else signed
+
+    def unsign(self, value):
+        return self.signer.unsign(value)
 
 
 def register_blueprints(app):
