@@ -99,8 +99,12 @@ async function apiDelete(url) {
 
 function showToast(message, type = 'info') {
     const stack = document.getElementById('toast-stack');
+    if (!stack) {
+        return;
+    }
     const item = document.createElement('div');
     item.className = `toast-message ${type}`;
+    item.setAttribute('role', type === 'error' ? 'alert' : 'status');
     item.textContent = message;
     stack.appendChild(item);
     setTimeout(() => item.remove(), 3500);
@@ -109,7 +113,7 @@ function showToast(message, type = 'info') {
 const viewTitles = {
     dashboard: ['仪表盘', '系统运行概览'],
     firewallBandwidth: ['防火墙带宽', '华为防火墙上下行趋势'],
-    trafficAnalysis: ['流量分析', ''],
+    trafficAnalysis: ['流量分析', 'AC 用户速率与应用明细'],
     osdwan: ['OSDWAN 监控', '用户与带宽趋势'],
     switches: ['交换机监控', 'Prometheus 交换机目标状态'],
     wireless: ['无线控制器', 'AP、SSID 与无线用户状态'],
@@ -228,6 +232,8 @@ let currentUser = null;
 let usersCache = [];
 let devicesCache = [];
 let wirelessActiveView = 'aps';
+let activeModalId = null;
+let previousFocusedElement = null;
 const OSDWAN_METRICS_REFRESH_MS = 60 * 1000;
 let osdwanMetricsAutoRefreshing = false;
 let trafficAnalysisRequestId = 0;
@@ -262,12 +268,160 @@ function showView(viewId, navId, titleKey) {
         view.hidden = view.id !== viewId;
     });
     document.querySelectorAll('.nav-item').forEach((item) => {
-        item.classList.toggle('active', item.id === navId);
+        const active = item.id === navId;
+        item.classList.toggle('active', active);
+        if (active) {
+            item.setAttribute('aria-current', 'page');
+        } else {
+            item.removeAttribute('aria-current');
+        }
     });
 
     const title = viewTitles[titleKey] || viewTitles.dashboard;
     document.getElementById('page-title').textContent = title[0];
     document.getElementById('page-subtitle').textContent = title[1];
+    const navItem = document.getElementById(navId);
+    const hash = navItem?.getAttribute('href');
+    if (hash && hash.startsWith('#') && window.location.hash !== hash) {
+        history.replaceState(null, '', hash);
+    }
+    closeSidebar();
+}
+
+function openSidebar() {
+    document.body.classList.add('sidebar-open');
+    const toggle = document.getElementById('mobile-nav-toggle');
+    if (toggle) {
+        toggle.setAttribute('aria-expanded', 'true');
+        toggle.setAttribute('aria-label', '关闭导航');
+    }
+}
+
+function closeSidebar() {
+    document.body.classList.remove('sidebar-open');
+    const toggle = document.getElementById('mobile-nav-toggle');
+    if (toggle) {
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.setAttribute('aria-label', '打开导航');
+    }
+}
+
+function toggleSidebar() {
+    if (document.body.classList.contains('sidebar-open')) {
+        closeSidebar();
+    } else {
+        openSidebar();
+    }
+}
+
+function setButtonBusy(button, busy) {
+    if (!button) {
+        return;
+    }
+    button.disabled = busy;
+    button.classList.toggle('is-loading', busy);
+    button.setAttribute('aria-busy', String(busy));
+}
+
+function runButtonTask(button, taskFactory) {
+    setButtonBusy(button, true);
+    Promise.resolve()
+        .then(taskFactory)
+        .catch((error) => showToast(error.message || '操作失败', 'error'))
+        .finally(() => setButtonBusy(button, false));
+}
+
+const MODAL_FOCUS_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function getModalFocusableElements(modal) {
+    return Array.from(modal.querySelectorAll(MODAL_FOCUS_SELECTOR))
+        .filter((element) => element.getClientRects().length > 0);
+}
+
+function focusFirstModalControl(modal) {
+    const focusable = getModalFocusableElements(modal)[0];
+    if (focusable) {
+        focusable.focus();
+    } else {
+        modal.focus();
+    }
+}
+
+function trapModalFocus(event) {
+    if (!activeModalId || event.key !== 'Tab') {
+        return false;
+    }
+
+    const modal = document.getElementById(activeModalId);
+    if (!modal || modal.hidden) {
+        return false;
+    }
+
+    const focusable = getModalFocusableElements(modal);
+    if (!focusable.length) {
+        event.preventDefault();
+        modal.focus();
+        return true;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!modal.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+        return true;
+    }
+    if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+        return true;
+    }
+    if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+        return true;
+    }
+    return false;
+}
+
+function isVisibleView(viewId) {
+    const view = document.getElementById(viewId);
+    return Boolean(view && !view.hidden);
+}
+
+function refreshCurrentView() {
+    if (isVisibleView('firewall-bandwidth-panel')) {
+        return loadFirewallBandwidth({toast: false});
+    }
+    if (isVisibleView('traffic-analysis-panel')) {
+        return loadTrafficAnalysis({page: trafficAnalysisState.page, refresh: true});
+    }
+    if (isVisibleView('osdwan-panel')) {
+        return loadOsdwanMetrics({charts: false});
+    }
+    if (isVisibleView('switches-panel')) {
+        const switchDetail = document.getElementById('switch-detail-section');
+        if (switchDetail && !switchDetail.hidden && switchState.selectedInstance) {
+            return loadSwitchDetailData({page: switchState.portPage});
+        }
+        return loadSwitches({page: switchState.page});
+    }
+    if (isVisibleView('wireless-panel')) {
+        if (wirelessActiveView === 'users') {
+            return loadWirelessUsers({page: wirelessUserState.page});
+        }
+        return loadWireless({page: wirelessApState.page});
+    }
+    if (isVisibleView('devices-panel')) {
+        return loadDevices({page: deviceState.page});
+    }
+    if (isVisibleView('clients-panel')) {
+        return loadClients({page: clientState.page});
+    }
+    if (isVisibleView('users-panel')) {
+        return loadUsers();
+    }
+    return loadSummary();
 }
 
 async function loadProfile() {
@@ -276,7 +430,11 @@ async function loadProfile() {
     document.getElementById('current-user-name').textContent = user.full_name || user.username;
     document.getElementById('current-user-role').textContent = user.role;
     if (user.role !== 'admin' && !user.is_superuser) {
-        document.getElementById('users-nav').classList.add('disabled');
+        const usersNav = document.getElementById('users-nav');
+        if (usersNav) {
+            usersNav.classList.add('disabled');
+            usersNav.setAttribute('aria-disabled', 'true');
+        }
     }
 }
 
@@ -293,6 +451,7 @@ async function loadSummary(options = {}) {
     renderFirewallDashboard(data.firewall || {});
     renderDashboardOsdwan(osdwan);
     renderDashboardHealth(data);
+    renderDashboardActions(data);
     renderDashboardAppRank(data.traffic_apps || {});
     renderTrafficTopList('wireless-user-upload-top', data.tops?.wireless_users?.upload || []);
     renderTrafficTopList('wireless-user-download-top', data.tops?.wireless_users?.download || []);
@@ -349,6 +508,164 @@ function renderDashboardHealth(data) {
     renderHealthItem('health-firewall-cpu', firewall.configured, firewall.ok, firewall.configured ? `${formatNumber(firewall.cpu_usage, 1)}%` : '未配置');
     renderHealthItem('health-firewall-memory', firewall.configured, firewall.ok, firewall.configured ? `${formatNumber(firewall.memory_usage, 1)}%` : '未配置');
     renderHealthItem('health-firewall-bandwidth', firewall.configured, firewall.ok, firewall.configured ? formatMbps(firewall.total_bandwidth) : '未配置');
+}
+
+function renderDashboardActions(data) {
+    const list = document.getElementById('dashboard-action-list');
+    const count = document.getElementById('workbench-todos-count');
+    const subtitle = document.getElementById('workbench-todos-subtitle');
+    if (!list || !count || !subtitle) {
+        return;
+    }
+
+    const actions = buildDashboardActions(data || {});
+    count.textContent = actions.length ? `${actions.length} 项` : '正常';
+    count.classList.toggle('ok', actions.length === 0);
+    count.classList.toggle('bad', actions.some((item) => item.level === 'critical'));
+    subtitle.textContent = actions.length
+        ? '优先处理会影响监控可信度或用户访问的事项'
+        : '核心系统暂无需要立即处理的事项';
+
+    if (!actions.length) {
+        list.innerHTML = `
+            <div class="workbench-action ok" role="listitem">
+                <span class="workbench-action-severity">OK</span>
+                <span class="workbench-action-copy">
+                    <strong>核心状态正常</strong>
+                    <small>继续关注实时带宽、离线资产和外部接口状态。</small>
+                </span>
+            </div>
+        `;
+        return;
+    }
+
+    list.innerHTML = actions.map((item) => {
+        const statusAttr = item.status ? ` data-workbench-status="${escapeHtml(item.status)}"` : '';
+        const detailTitle = item.detailTitle || item.detail;
+        return `
+            <div class="workbench-action-item" role="listitem">
+                <button class="workbench-action ${escapeHtml(item.level)}" type="button" data-workbench-nav="${escapeHtml(item.navId)}"${statusAttr}>
+                    <span class="workbench-action-severity">${escapeHtml(renderDashboardActionLevelLabel(item.level))}</span>
+                    <span class="workbench-action-copy">
+                        <strong>${escapeHtml(item.title)}</strong>
+                        <small title="${escapeHtml(detailTitle)}">${escapeHtml(item.detail)}</small>
+                    </span>
+                    <em>${escapeHtml(item.action)}</em>
+                </button>
+            </div>
+        `;
+    }).join('');
+}
+
+function buildDashboardActions(data) {
+    const actions = [];
+    const summary = data.summary || {};
+    const devices = summary.devices || {};
+    const freshness = devices.status_freshness || {};
+    const offlineDevices = Number(devices.offline || 0);
+    const expiredDevices = Number(freshness.expired_count || 0);
+    const uncheckedDevices = Number(freshness.unchecked_count || 0);
+
+    if (expiredDevices || uncheckedDevices) {
+        actions.push({
+            level: 'warning',
+            icon: 'bi-hourglass-split',
+            title: '设备状态需要刷新',
+            detail: `过期 ${expiredDevices} 台，未检查 ${uncheckedDevices} 台`,
+            action: '查看设备',
+            navId: 'devices-nav',
+        });
+    }
+    if (offlineDevices) {
+        actions.push({
+            level: 'critical',
+            icon: 'bi-hdd-network',
+            title: '存在离线设备',
+            detail: `${offlineDevices} 台设备当前离线`,
+            action: '筛选离线',
+            navId: 'devices-nav',
+            status: 'offline',
+        });
+    }
+
+    addIntegrationAction(actions, data.firewall, '防火墙接口异常', '防火墙未配置或状态异常', '防火墙带宽', 'firewall-bandwidth-nav');
+    addIntegrationAction(actions, data.switches, '交换机监控异常', 'Prometheus targets 未配置或状态异常', '交换机监控', 'switches-nav');
+    addIntegrationAction(actions, data.wireless, '无线控制器异常', '无线 Prometheus 查询未配置或状态异常', '无线控制器', 'wireless-nav');
+    addIntegrationAction(actions, data.traffic_apps, '流量分析异常', '深信服 AC 应用排行未配置或读取失败', '流量分析', 'traffic-analysis-nav');
+
+    const osdwan = data.osdwan || {};
+    const proxyStatus = osdwan.proxy_status || {};
+    if (!osdwan.configured || !osdwan.ok || Number(proxyStatus.offline || 0) > 0) {
+        actions.push({
+            level: osdwan.configured ? 'warning' : 'info',
+            icon: 'bi-cloud-arrow-up',
+            title: osdwan.configured ? 'OSDWAN 需要关注' : 'OSDWAN 未配置',
+            detail: osdwan.configured ? `出口 ${proxyStatus.online || 0}/${proxyStatus.total || 0} 正常` : '缺少 Token 或节点配置',
+            action: '查看 OSDWAN',
+            navId: 'osdwan-nav',
+        });
+    }
+
+    return actions.slice(0, 6);
+}
+
+function renderDashboardActionLevelLabel(level) {
+    const labels = {
+        critical: '高',
+        warning: '中',
+        info: '配置',
+        ok: 'OK',
+    };
+    return labels[level] || '待办';
+}
+
+function addIntegrationAction(actions, payload, title, detail, action, navId) {
+    const status = payload || {};
+    if (status.configured && status.ok) {
+        return;
+    }
+    const detailText = status.configured
+        ? summarizeIntegrationError(status.error, detail)
+        : detail;
+    actions.push({
+        level: status.configured ? 'warning' : 'info',
+        icon: status.configured ? 'bi-exclamation-triangle' : 'bi-slash-circle',
+        title,
+        detail: detailText,
+        action,
+        navId,
+    });
+}
+
+function summarizeIntegrationError(error, fallback) {
+    const rawText = String(error || '').trim();
+    const fallbackText = String(fallback || '接口读取失败')
+        .replace('未配置或', '')
+        .replace('或状态异常', '状态异常');
+    if (!rawText) {
+        return fallbackText;
+    }
+
+    const lowerText = rawText.toLowerCase();
+    if (rawText.includes('ConnectionResetError') || lowerText.includes('connection reset')) {
+        return '接口连接被对端重置';
+    }
+    if (lowerText.includes('timeout') || lowerText.includes('timed out') || rawText.includes('超时')) {
+        return '接口请求超时';
+    }
+    if (lowerText.includes('connection aborted') || rawText.includes('Connection aborted')) {
+        return '接口连接中断';
+    }
+    if (lowerText.includes('connection refused') || rawText.includes('Connection refused')) {
+        return '接口连接被拒绝';
+    }
+    if (lowerText.includes('name or service not known') || lowerText.includes('failed to resolve') || lowerText.includes('nodename nor servname')) {
+        return '接口地址无法解析';
+    }
+    if (lowerText.includes('unauthorized') || lowerText.includes('forbidden') || rawText.includes('401') || rawText.includes('403')) {
+        return '接口鉴权失败';
+    }
+    return '接口返回异常，进入对应页面查看详情';
 }
 
 function scheduleDashboardFirewallWarmup(firewall) {
@@ -1296,6 +1613,7 @@ async function loadDevices(options = {}) {
         renderDeviceCategoryOptions();
         renderDeviceStatusFilters();
         renderDevicePager();
+        renderDeviceFreshnessBanner(deviceState.statusFreshness);
 
         summary.textContent = `${renderDeviceSummaryPrefix()}共 ${deviceState.total} 台，当前显示 ${result.returned || devices.length} 台${renderDeviceFreshnessSummary(deviceState.statusFreshness)}`;
         if (!devices.length) {
@@ -2373,6 +2691,31 @@ function renderDeviceFreshnessSummary(freshness) {
         : `，${latest}，${expired}`;
 }
 
+function renderDeviceFreshnessBanner(freshness) {
+    const banner = document.getElementById('device-freshness-banner');
+    if (!banner) {
+        return;
+    }
+    if (!freshness || !freshness.needs_refresh) {
+        banner.hidden = true;
+        banner.innerHTML = '';
+        return;
+    }
+    const expired = Number(freshness.expired_count || 0);
+    const unchecked = Number(freshness.unchecked_count || 0);
+    banner.hidden = false;
+    banner.innerHTML = `
+        <span>
+            <strong>设备状态需要刷新</strong>
+            <small>过期 ${escapeHtml(expired)} 台，未检查 ${escapeHtml(unchecked)} 台；刷新后列表状态更可信。</small>
+        </span>
+        <button class="small-button" type="button" data-device-refresh-inline>
+            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+            <span>刷新状态</span>
+        </button>
+    `;
+}
+
 function maybeAutoRefreshDeviceStatus(freshness, options = {}) {
     if (
         options.skipAutoRefresh
@@ -2832,23 +3175,35 @@ function renderTrafficAnalysisRealName(item) {
 }
 
 function renderTrafficAnalysisApps(apps) {
-    const visibleApps = (apps || []).filter((app) => app && app.app).slice(0, 3);
+    const normalizedApps = (apps || []).filter((app) => app && app.app);
+    const visibleApps = normalizedApps.slice(0, 2);
+    const hiddenApps = normalizedApps.slice(2);
     if (!visibleApps.length) {
         return '-';
     }
     return `
         <div class="traffic-app-stack">
-            ${visibleApps.map((app) => `
-                <div class="traffic-app-item">
-                    <div class="traffic-app-meta">
-                        <strong title="${escapeHtml(app.app || '-')}">${escapeHtml(app.app || '-')}</strong>
-                        <span>${escapeHtml(renderTrafficAppValue(app))}</span>
-                    </div>
-                    <div class="traffic-app-bar">
-                        <i style="width: ${clampPercent(app.percent)}%"></i>
-                    </div>
-                </div>
-            `).join('')}
+            ${visibleApps.map(renderTrafficAppItem).join('')}
+            ${hiddenApps.length ? `
+                <details class="traffic-app-more">
+                    <summary>展开 ${hiddenApps.length} 个应用</summary>
+                    ${hiddenApps.map(renderTrafficAppItem).join('')}
+                </details>
+            ` : ''}
+        </div>
+    `;
+}
+
+function renderTrafficAppItem(app) {
+    return `
+        <div class="traffic-app-item">
+            <div class="traffic-app-meta">
+                <strong title="${escapeHtml(app.app || '-')}">${escapeHtml(app.app || '-')}</strong>
+                <span>${escapeHtml(renderTrafficAppValue(app))}</span>
+            </div>
+            <div class="traffic-app-bar">
+                <i style="width: ${clampPercent(app.percent)}%"></i>
+            </div>
         </div>
     `;
 }
@@ -3112,7 +3467,12 @@ function findUser(userId) {
 function openModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
+        previousFocusedElement = document.activeElement;
+        activeModalId = modalId;
+        modal.setAttribute('tabindex', '-1');
         modal.hidden = false;
+        document.body.classList.add('modal-open');
+        window.setTimeout(() => focusFirstModalControl(modal), 0);
     }
 }
 
@@ -3120,6 +3480,15 @@ function closeModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
         modal.hidden = true;
+        if (activeModalId === modalId) {
+            activeModalId = null;
+        }
+        if (!activeModalId) {
+            document.body.classList.remove('modal-open');
+        }
+        if (previousFocusedElement && typeof previousFocusedElement.focus === 'function') {
+            previousFocusedElement.focus();
+        }
     }
 }
 
@@ -3275,11 +3644,51 @@ async function logout() {
     }
 }
 
+async function loadRouteFromHash(hash = window.location.hash) {
+    const route = (hash || '#dashboard').replace('#', '') || 'dashboard';
+    if (route === 'firewall-bandwidth') {
+        await loadFirewallBandwidth();
+        return;
+    }
+    if (route === 'traffic-analysis') {
+        await loadTrafficAnalysis({page: 1});
+        return;
+    }
+    if (route === 'osdwan') {
+        await loadOsdwan();
+        return;
+    }
+    if (route === 'switches') {
+        await loadSwitches({page: 1});
+        return;
+    }
+    if (route === 'wireless') {
+        await loadWireless();
+        return;
+    }
+    if (route === 'devices') {
+        await loadDevices();
+        return;
+    }
+    if (route === 'clients') {
+        await loadClients({page: 1});
+        return;
+    }
+    if (route === 'users') {
+        const usersNav = document.getElementById('users-nav');
+        if (!usersNav?.classList.contains('disabled')) {
+            await loadUsers();
+            return;
+        }
+    }
+    showView('dashboard-panel', 'dashboard-nav', 'dashboard');
+    await loadSummary();
+}
+
 async function boot() {
     try {
         await loadProfile();
-        showView('dashboard-panel', 'dashboard-nav', 'dashboard');
-        await loadSummary();
+        await loadRouteFromHash();
     } catch (error) {
         if (error.message.includes('未授权')) {
             window.location.href = '/login';
@@ -3290,6 +3699,16 @@ async function boot() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    const mobileNavToggle = document.getElementById('mobile-nav-toggle');
+    if (mobileNavToggle) {
+        mobileNavToggle.addEventListener('click', toggleSidebar);
+    }
+
+    const sidebarScrim = document.getElementById('sidebar-scrim');
+    if (sidebarScrim) {
+        sidebarScrim.addEventListener('click', closeSidebar);
+    }
+
     const logoutButton = document.getElementById('logout-button');
     if (logoutButton) {
         logoutButton.addEventListener('click', logout);
@@ -3298,22 +3717,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshSummary = document.getElementById('refresh-summary');
     if (refreshSummary) {
         refreshSummary.addEventListener('click', () => {
-            const firewallPanel = document.getElementById('firewall-bandwidth-panel');
-            const trafficAnalysisPanel = document.getElementById('traffic-analysis-panel');
-            const osdwanPanel = document.getElementById('osdwan-panel');
-            const switchesPanel = document.getElementById('switches-panel');
-            const task = firewallPanel && !firewallPanel.hidden
-                ? loadFirewallBandwidth({toast: false})
-                : trafficAnalysisPanel && !trafficAnalysisPanel.hidden
-                    ? loadTrafficAnalysis({page: trafficAnalysisState.page})
-                    : osdwanPanel && !osdwanPanel.hidden
-                        ? loadOsdwanMetrics({charts: false})
-                        : switchesPanel && !switchesPanel.hidden
-                            ? loadSwitches()
-                            : loadSummary();
-            task
+            setButtonBusy(refreshSummary, true);
+            refreshCurrentView()
                 .then(() => showToast('已刷新'))
-                .catch((error) => showToast(error.message, 'error'));
+                .catch((error) => showToast(error.message, 'error'))
+                .finally(() => setButtonBusy(refreshSummary, false));
         });
     }
 
@@ -3396,22 +3804,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const reloadUsers = document.getElementById('reload-users');
     if (reloadUsers) {
-        reloadUsers.addEventListener('click', loadUsers);
+        reloadUsers.addEventListener('click', () => runButtonTask(reloadUsers, () => loadUsers()));
     }
 
     const reloadFirewallBandwidth = document.getElementById('reload-firewall-bandwidth');
     if (reloadFirewallBandwidth) {
-        reloadFirewallBandwidth.addEventListener('click', () => loadFirewallBandwidth({toast: true}));
+        reloadFirewallBandwidth.addEventListener('click', () => runButtonTask(reloadFirewallBandwidth, () => loadFirewallBandwidth({toast: true})));
     }
 
     const reloadTrafficAnalysis = document.getElementById('reload-traffic-analysis');
     if (reloadTrafficAnalysis) {
-        reloadTrafficAnalysis.addEventListener('click', () => loadTrafficAnalysis({page: trafficAnalysisState.page, toast: true, refresh: true}));
+        reloadTrafficAnalysis.addEventListener('click', () => runButtonTask(reloadTrafficAnalysis, () => loadTrafficAnalysis({page: trafficAnalysisState.page, toast: true, refresh: true})));
     }
 
     const reloadOsdwan = document.getElementById('reload-osdwan');
     if (reloadOsdwan) {
-        reloadOsdwan.addEventListener('click', () => loadOsdwanMetrics({toast: true, charts: false}));
+        reloadOsdwan.addEventListener('click', () => runButtonTask(reloadOsdwan, () => loadOsdwanMetrics({toast: true, charts: false})));
     }
 
     const trafficAnalysisSearch = document.getElementById('traffic-analysis-search');
@@ -3494,7 +3902,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const reloadSwitches = document.getElementById('reload-switches');
     if (reloadSwitches) {
-        reloadSwitches.addEventListener('click', () => loadSwitches({page: switchState.page}));
+        reloadSwitches.addEventListener('click', () => runButtonTask(reloadSwitches, () => loadSwitches({page: switchState.page})));
     }
 
     const switchTraceForm = document.getElementById('switch-trace-form');
@@ -3525,13 +3933,39 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.addEventListener('click', (event) => {
+        const workbenchButton = event.target.closest('[data-workbench-nav]');
+        if (workbenchButton) {
+            if (workbenchButton.dataset.workbenchNav === 'devices-nav' && workbenchButton.dataset.workbenchStatus) {
+                loadDevices({page: 1, status: workbenchButton.dataset.workbenchStatus});
+                return;
+            }
+            const nav = document.getElementById(workbenchButton.dataset.workbenchNav);
+            if (nav) {
+                nav.click();
+            }
+            return;
+        }
+
+        if (event.target.closest('[data-device-refresh-inline]')) {
+            refreshDeviceStatus();
+            return;
+        }
+
         if (!event.target.closest('[data-range-dropdown]')) {
             closeRangeDropdowns();
         }
     });
 
     document.addEventListener('keydown', (event) => {
+        if (trapModalFocus(event)) {
+            return;
+        }
         if (event.key === 'Escape') {
+            if (activeModalId) {
+                closeModal(activeModalId);
+                return;
+            }
+            closeSidebar();
             closeRangeDropdowns();
         }
     });
@@ -3560,6 +3994,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 150));
 
+    window.addEventListener('hashchange', () => {
+        loadRouteFromHash()
+            .catch((error) => showToast(error.message, 'error'));
+    });
+
     const createUserButton = document.getElementById('create-user-button');
     if (createUserButton) {
         createUserButton.addEventListener('click', openCreateUserModal);
@@ -3587,7 +4026,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const reloadDevices = document.getElementById('reload-devices');
     if (reloadDevices) {
-        reloadDevices.addEventListener('click', () => loadDevices());
+        reloadDevices.addEventListener('click', () => runButtonTask(reloadDevices, () => loadDevices()));
     }
 
     const createDeviceButton = document.getElementById('create-device-button');
@@ -3674,13 +4113,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const reloadWireless = document.getElementById('reload-wireless');
     if (reloadWireless) {
-        reloadWireless.addEventListener('click', () => {
+        reloadWireless.addEventListener('click', () => runButtonTask(reloadWireless, () => {
             if (wirelessActiveView === 'users') {
-                loadWirelessUsers();
-            } else {
-                loadWireless();
+                return loadWirelessUsers();
             }
-        });
+            return loadWireless();
+        }));
     }
 
     const switchSearch = document.getElementById('switch-search');
@@ -3744,10 +4182,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const reloadSwitchDetail = document.getElementById('reload-switch-detail');
     if (reloadSwitchDetail) {
-        reloadSwitchDetail.addEventListener('click', () => {
-            loadSwitchDetailData({toast: true})
-                .catch((error) => showToast(error.message, 'error'));
-        });
+        reloadSwitchDetail.addEventListener('click', () => runButtonTask(reloadSwitchDetail, () => loadSwitchDetailData({toast: true})));
     }
 
     const closeSwitchDetailButton = document.getElementById('close-switch-detail');
@@ -3905,7 +4340,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const reloadClients = document.getElementById('reload-clients');
     if (reloadClients) {
-        reloadClients.addEventListener('click', () => loadClients({page: clientState.page}));
+        reloadClients.addEventListener('click', () => runButtonTask(reloadClients, () => loadClients({page: clientState.page})));
     }
 
     const clientSearch = document.getElementById('client-search');
@@ -3963,7 +4398,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const refreshDeviceStatusButton = document.getElementById('refresh-device-status');
     if (refreshDeviceStatusButton) {
-        refreshDeviceStatusButton.addEventListener('click', refreshDeviceStatus);
+        refreshDeviceStatusButton.addEventListener('click', () => runButtonTask(refreshDeviceStatusButton, refreshDeviceStatus));
     }
 
     document.querySelectorAll('[data-close-modal]').forEach((button) => {

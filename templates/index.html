@@ -8,48 +8,51 @@
         <h1 id="page-title">仪表盘</h1>
         <p id="page-subtitle">系统运行概览</p>
     </div>
-    <button class="refresh-button" id="refresh-summary" type="button" title="刷新">
-        <i class="bi bi-arrow-clockwise"></i>
+    <button class="refresh-button" id="refresh-summary" type="button" title="刷新" aria-label="刷新当前视图">
+        <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
     </button>
 </header>
 
 <section class="dashboard-view app-view" id="dashboard-panel">
-    <section class="metric-grid dashboard-metrics" id="metric-grid">
-        <article class="metric">
-            <div class="metric-icon devices"><i class="bi bi-laptop"></i></div>
-            <div>
-                <div class="metric-label">设备</div>
-                <div class="metric-value" id="metric-devices">-</div>
-            </div>
+    <section class="dashboard-status-strip dashboard-metrics" id="metric-grid" aria-label="关键运行状态">
+        <article class="status-metric">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span class="status-metric-label">设备</span>
+            <strong class="status-metric-value" id="metric-devices">-</strong>
         </article>
-        <article class="metric">
-            <div class="metric-icon wireless"><i class="bi bi-wifi"></i></div>
-            <div>
-                <div class="metric-label">无线用户</div>
-                <div class="metric-value" id="metric-wireless-users">-</div>
-            </div>
+        <article class="status-metric">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span class="status-metric-label">无线用户</span>
+            <strong class="status-metric-value" id="metric-wireless-users">-</strong>
         </article>
-        <article class="metric">
-            <div class="metric-icon ap"><i class="bi bi-router"></i></div>
-            <div>
-                <div class="metric-label">在线 AP</div>
-                <div class="metric-value" id="metric-wireless-ap">-</div>
-            </div>
+        <article class="status-metric">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span class="status-metric-label">在线 AP</span>
+            <strong class="status-metric-value" id="metric-wireless-ap">-</strong>
         </article>
-        <article class="metric">
-            <div class="metric-icon users"><i class="bi bi-people"></i></div>
-            <div>
-                <div class="metric-label">OSDWAN 用户</div>
-                <div class="metric-value" id="metric-osdwan-users">-</div>
-            </div>
+        <article class="status-metric">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span class="status-metric-label">OSDWAN 用户</span>
+            <strong class="status-metric-value" id="metric-osdwan-users">-</strong>
         </article>
-        <article class="metric">
-            <div class="metric-icon exit"><i class="bi bi-hdd-network"></i></div>
-            <div>
-                <div class="metric-label">OSDWAN 出口</div>
-                <div class="metric-value" id="metric-osdwan-exits">-</div>
-            </div>
+        <article class="status-metric">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span class="status-metric-label">OSDWAN 出口</span>
+            <strong class="status-metric-value" id="metric-osdwan-exits">-</strong>
         </article>
+    </section>
+
+    <section class="panel workbench-todos" aria-labelledby="workbench-todos-title">
+        <div class="panel-header">
+            <div>
+                <h2 id="workbench-todos-title">运维待处理</h2>
+                <p class="panel-subtitle" id="workbench-todos-subtitle">正在汇总核心系统状态</p>
+            </div>
+            <span class="status-pill" id="workbench-todos-count">检查中</span>
+        </div>
+        <div class="workbench-action-list" id="dashboard-action-list" role="list">
+            <div class="workbench-action empty" role="listitem">加载中</div>
+        </div>
     </section>
 
     <section class="dashboard-grid">
@@ -350,7 +353,7 @@
     </section>
 
     <div class="toolbar-row traffic-analysis-toolbar">
-        <input id="traffic-analysis-search" placeholder="搜索用户、姓名、IP、应用">
+        <input id="traffic-analysis-search" name="traffic_analysis_search" placeholder="搜索用户、姓名、IP、应用" aria-label="搜索流量分析用户、姓名、IP 或应用" autocomplete="off">
         <select id="traffic-line-filter" aria-label="线路">
             <option value="0" selected>全部线路</option>
             <option value="1">线路 1</option>
@@ -480,7 +483,7 @@
         </section>
     </section>
     <div class="toolbar-row osdwan-users-toolbar">
-        <input id="osdwan-user-search" placeholder="搜索用户、人员、出口 IP">
+        <input id="osdwan-user-search" name="osdwan_user_search" placeholder="搜索用户、人员、出口 IP" aria-label="搜索 OSDWAN 用户、人员或出口 IP" autocomplete="off">
         <select id="osdwan-department-filter" aria-label="OSDWAN 部门筛选">
             <option value="">全部部门</option>
         </select>
@@ -571,7 +574,7 @@
             <span class="status-badge" id="switch-trace-core">核心 172.16.100.5</span>
         </div>
         <form class="toolbar-row switch-trace-toolbar" id="switch-trace-form">
-            <input id="switch-trace-ip" name="ip" placeholder="输入终端 IP，例如 172.16.70.17" autocomplete="off">
+            <input id="switch-trace-ip" name="ip" placeholder="输入终端 IP，例如 172.16.70.17" aria-label="输入终端 IP" autocomplete="off" inputmode="decimal">
             <button class="small-button primary" id="switch-trace-button" type="submit">
                 <i class="bi bi-search"></i>
                 <span>开始追踪</span>
@@ -581,7 +584,7 @@
         <div class="switch-trace-result" id="switch-trace-result" hidden></div>
     </section>
     <div class="toolbar-row switch-toolbar">
-        <input id="switch-search" placeholder="搜索 IP、厂商、模块、状态、错误">
+        <input id="switch-search" name="switch_search" placeholder="搜索 IP、厂商、模块、状态、错误" aria-label="搜索交换机 IP、厂商、模块、状态或错误" autocomplete="off">
         <select id="switch-vendor-filter" aria-label="厂商筛选">
             <option value="">全部厂商</option>
         </select>
@@ -706,7 +709,7 @@
             <canvas id="switch-traffic-chart" class="bandwidth-chart switch-traffic-chart"></canvas>
         </div>
         <div class="toolbar-row switch-port-toolbar">
-            <input id="switch-port-search" placeholder="搜索端口、描述、速率、状态">
+            <input id="switch-port-search" name="switch_port_search" placeholder="搜索端口、描述、速率、状态" aria-label="搜索交换机端口、描述、速率或状态" autocomplete="off">
             <select id="switch-port-scope" aria-label="端口范围">
                 <option value="business" selected>业务端口</option>
                 <option value="all">全部端口</option>
@@ -824,7 +827,7 @@
 
     <input id="device-import-file" type="file" accept=".csv,text/csv" hidden>
     <div class="toolbar-row device-toolbar">
-        <input id="device-search" placeholder="搜索名称、IP、MAC、接入交换机、接口、分类、备注">
+        <input id="device-search" name="device_search" placeholder="搜索名称、IP、MAC、接入交换机、接口、分类、备注" aria-label="搜索设备名称、IP、MAC、接入交换机、接口、分类或备注" autocomplete="off">
         <select id="device-category-filter" aria-label="设备分类">
             <option value="">全部分类</option>
         </select>
@@ -837,6 +840,7 @@
         </select>
     </div>
     <div class="list-summary" id="devices-summary">-</div>
+    <div class="freshness-banner" id="device-freshness-banner" role="status" aria-live="polite" hidden></div>
     <div class="quick-filter-row" id="device-status-filter" aria-label="设备状态筛选">
         <button class="filter-chip active" type="button" data-device-status="">
             <span>全部</span>
@@ -929,7 +933,7 @@
     </section>
     <div id="wireless-ap-view">
         <div class="toolbar-row wireless-ap-toolbar">
-            <input id="wireless-ap-search" placeholder="搜索 AP、IP、MAC、状态">
+            <input id="wireless-ap-search" name="wireless_ap_search" placeholder="搜索 AP、IP、MAC、状态" aria-label="搜索 AP、IP、MAC 或状态" autocomplete="off">
             <select id="wireless-ap-page-size" aria-label="每页数量">
                 <option value="10" selected>10 / 页</option>
                 <option value="20">20 / 页</option>
@@ -988,7 +992,7 @@
 
     <div id="wireless-user-view" hidden>
         <div class="toolbar-row wireless-user-toolbar">
-            <input id="wireless-user-search" placeholder="搜索用户数据、姓名、IP">
+            <input id="wireless-user-search" name="wireless_user_search" placeholder="搜索用户数据、姓名、IP" aria-label="搜索无线用户、姓名或 IP" autocomplete="off">
             <select id="wireless-user-page-size" aria-label="每页数量">
                 <option value="10" selected>10 / 页</option>
                 <option value="20">20 / 页</option>
@@ -1041,7 +1045,7 @@
         </div>
     </div>
     <div class="toolbar-row">
-        <input id="client-search" placeholder="搜索 IP、用户、姓名、设备名、MAC、系统">
+        <input id="client-search" name="client_search" placeholder="搜索 IP、用户、姓名、设备名、MAC、系统" aria-label="搜索客户端 IP、用户、姓名、设备名、MAC 或系统" autocomplete="off">
         <select id="client-page-size" aria-label="每页数量">
             <option value="10" selected>10 / 页</option>
             <option value="20">20 / 页</option>
@@ -1099,12 +1103,12 @@
     </div>
 </section>
 
-<div class="modal-backdrop" id="device-modal" hidden>
-    <form class="modal-card device-modal-card" id="device-form">
+<div class="modal-backdrop" id="device-modal" role="dialog" aria-modal="true" aria-labelledby="device-modal-title" hidden>
+    <form class="modal-card device-modal-card" id="device-form" data-modal-card>
         <div class="modal-header">
             <h2 id="device-modal-title">新增设备</h2>
-            <button class="icon-button" type="button" data-close-modal="device-modal" title="关闭">
-                <i class="bi bi-x-lg"></i>
+            <button class="icon-button" type="button" data-close-modal="device-modal" title="关闭" aria-label="关闭设备弹窗">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
             </button>
         </div>
         <input type="hidden" id="device-id">
@@ -1139,7 +1143,7 @@
                 <span>接入接口</span>
                 <input id="device-access-interface" name="access_interface" autocomplete="off" placeholder="智能查询后自动填充">
             </label>
-            <div class="device-lookup-status full-field" id="device-port-preview-status" hidden></div>
+            <div class="device-lookup-status full-field" id="device-port-preview-status" role="status" aria-live="polite" hidden></div>
             <label class="full-field">
                 <span>备注</span>
                 <textarea id="device-details" name="details" rows="4"></textarea>
@@ -1153,12 +1157,12 @@
     </form>
 </div>
 
-<div class="modal-backdrop" id="user-modal" hidden>
-    <form class="modal-card" id="user-form">
+<div class="modal-backdrop" id="user-modal" role="dialog" aria-modal="true" aria-labelledby="user-modal-title" hidden>
+    <form class="modal-card" id="user-form" data-modal-card>
         <div class="modal-header">
             <h2 id="user-modal-title">新增用户</h2>
-            <button class="icon-button" type="button" data-close-modal="user-modal" title="关闭">
-                <i class="bi bi-x-lg"></i>
+            <button class="icon-button" type="button" data-close-modal="user-modal" title="关闭" aria-label="关闭用户弹窗">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
             </button>
         </div>
         <input type="hidden" id="user-id">
@@ -1200,12 +1204,12 @@
     </form>
 </div>
 
-<div class="modal-backdrop" id="password-modal" hidden>
-    <form class="modal-card compact-modal" id="password-form">
+<div class="modal-backdrop" id="password-modal" role="dialog" aria-modal="true" aria-labelledby="password-modal-title" hidden>
+    <form class="modal-card compact-modal" id="password-form" data-modal-card>
         <div class="modal-header">
-            <h2>重置密码</h2>
-            <button class="icon-button" type="button" data-close-modal="password-modal" title="关闭">
-                <i class="bi bi-x-lg"></i>
+            <h2 id="password-modal-title">重置密码</h2>
+            <button class="icon-button" type="button" data-close-modal="password-modal" title="关闭" aria-label="关闭重置密码弹窗">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
             </button>
         </div>
         <input type="hidden" id="password-user-id">
@@ -1221,18 +1225,18 @@
     </form>
 </div>
 
-<div class="modal-backdrop" id="lock-modal" hidden>
-    <form class="modal-card compact-modal" id="lock-form">
+<div class="modal-backdrop" id="lock-modal" role="dialog" aria-modal="true" aria-labelledby="lock-modal-title" hidden>
+    <form class="modal-card compact-modal" id="lock-form" data-modal-card>
         <div class="modal-header">
-            <h2>锁定用户</h2>
-            <button class="icon-button" type="button" data-close-modal="lock-modal" title="关闭">
-                <i class="bi bi-x-lg"></i>
+            <h2 id="lock-modal-title">锁定用户</h2>
+            <button class="icon-button" type="button" data-close-modal="lock-modal" title="关闭" aria-label="关闭锁定用户弹窗">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
             </button>
         </div>
         <input type="hidden" id="lock-user-id">
         <label class="single-field">
             <span>锁定时长（分钟）</span>
-            <input id="lock-minutes" type="number" min="1" max="1440" value="30" required>
+            <input id="lock-minutes" name="lock_minutes" type="number" min="1" max="1440" value="30" required inputmode="numeric">
         </label>
         <div class="form-message" id="lock-form-message" role="alert"></div>
         <div class="modal-actions">

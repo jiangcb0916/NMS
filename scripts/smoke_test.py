@@ -1074,6 +1074,8 @@ def main():
         assert overview_response.status_code == 200, overview_response.get_data(as_text=True)
         overview_data = overview_response.get_json()["data"]
         assert overview_data["access_clients"]["total"] == 2
+        assert overview_data["summary"]["devices"]["offline"] == 0
+        assert overview_data["summary"]["devices"]["status_freshness"]["needs_refresh"] is False
         assert overview_data["firewall"]["configured"] is True
         assert overview_data["firewall"]["cpu_usage"] == 11
         assert overview_data["firewall"]["total_upload"] > 0

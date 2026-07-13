@@ -10,6 +10,7 @@ from app.modules.firewall import routes as firewall_routes
 from app.modules.firewall.routes import default_payload as default_firewall_payload
 from app.modules.firewall.routes import fetch_huawei_firewall_status
 from app.modules.integrations.access_control import AccessControlClient
+from app.modules.devices.routes import device_status_freshness
 from app.modules.osdwan import routes as osdwan_routes
 from app.modules.sangfor_ac import routes as sangfor_ac_routes
 from app.modules.switches import routes as switch_routes
@@ -57,14 +58,18 @@ def overview():
 
 
 def summary_payload():
+    device_total = Device.query.count()
+    device_online = Device.query.filter_by(is_online=True).count()
     return {
         "users": {
             "total": User.query.count(),
             "active": User.query.filter_by(is_active=True).count(),
         },
         "devices": {
-            "total": Device.query.count(),
-            "online": Device.query.filter_by(is_online=True).count(),
+            "total": device_total,
+            "online": device_online,
+            "offline": max(device_total - device_online, 0),
+            "status_freshness": device_status_freshness(),
         },
         "cache": {
             "user_names": UserNameCache.query.count(),
