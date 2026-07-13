@@ -1,223 +1,235 @@
 {% extends "base.html" %}
 
-{% block title %}仪表盘 - 网络管理系统{% endblock %}
+{% block title %}网络运行总览 - 网络管理系统{% endblock %}
 
 {% block content %}
 <header class="page-header">
     <div>
-        <h1 id="page-title">仪表盘</h1>
-        <p id="page-subtitle">系统运行概览</p>
+        <h1 id="page-title">网络运行总览</h1>
+        <p id="page-subtitle">核心网络与接入资产运行状态</p>
     </div>
     <button class="refresh-button" id="refresh-summary" type="button" title="刷新" aria-label="刷新当前视图">
         <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
     </button>
 </header>
 
-<section class="dashboard-view app-view" id="dashboard-panel">
-    <section class="dashboard-status-strip dashboard-metrics" id="metric-grid" aria-label="关键运行状态">
-        <article class="status-metric">
-            <span class="status-dot" aria-hidden="true"></span>
-            <span class="status-metric-label">设备</span>
-            <strong class="status-metric-value" id="metric-devices">-</strong>
-        </article>
-        <article class="status-metric">
-            <span class="status-dot" aria-hidden="true"></span>
-            <span class="status-metric-label">无线用户</span>
-            <strong class="status-metric-value" id="metric-wireless-users">-</strong>
-        </article>
-        <article class="status-metric">
-            <span class="status-dot" aria-hidden="true"></span>
-            <span class="status-metric-label">在线 AP</span>
-            <strong class="status-metric-value" id="metric-wireless-ap">-</strong>
-        </article>
-        <article class="status-metric">
-            <span class="status-dot" aria-hidden="true"></span>
-            <span class="status-metric-label">OSDWAN 用户</span>
-            <strong class="status-metric-value" id="metric-osdwan-users">-</strong>
-        </article>
-        <article class="status-metric">
-            <span class="status-dot" aria-hidden="true"></span>
-            <span class="status-metric-label">OSDWAN 出口</span>
-            <strong class="status-metric-value" id="metric-osdwan-exits">-</strong>
-        </article>
-    </section>
-
-    <section class="panel workbench-todos" aria-labelledby="workbench-todos-title">
-        <div class="panel-header">
+<section class="dashboard-view situation-dashboard app-view" id="dashboard-panel">
+    <div class="situation-screen" aria-label="网络运行值守看板">
+        <section class="situation-hero">
             <div>
-                <h2 id="workbench-todos-title">运维待处理</h2>
-                <p class="panel-subtitle" id="workbench-todos-subtitle">正在汇总核心系统状态</p>
+                <h2>网络运行总览</h2>
+                <p>核心链路、网络设备与接入资产</p>
             </div>
-            <span class="status-pill" id="workbench-todos-count">检查中</span>
-        </div>
-        <div class="workbench-action-list" id="dashboard-action-list" role="list">
-            <div class="workbench-action empty" role="listitem">加载中</div>
-        </div>
-    </section>
-
-    <section class="dashboard-grid">
-        <section class="dashboard-main-stack">
-        <section class="panel firewall-dashboard-panel">
-            <div class="panel-header">
-                <div>
-                    <h2>华为防火墙带宽</h2>
-                </div>
-                <span class="status-pill" id="firewall-status">检查中</span>
-            </div>
-            <div class="bandwidth-main">
-                <div class="bandwidth-total-card">
-                    <div class="bandwidth-card-head">
-                        <span class="metric-label">总上行</span>
-                        <strong id="firewall-upload-utilization">-</strong>
-                    </div>
-                    <div class="bandwidth-value" id="firewall-total-upload">-</div>
-                    <div class="bandwidth-bar" aria-hidden="true">
-                        <span id="firewall-upload-util-bar"></span>
-                    </div>
-                </div>
-                <div class="bandwidth-total-card">
-                    <div class="bandwidth-card-head">
-                        <span class="metric-label">总下行</span>
-                        <strong id="firewall-download-utilization">-</strong>
-                    </div>
-                    <div class="bandwidth-value" id="firewall-total-download">-</div>
-                    <div class="bandwidth-bar download" aria-hidden="true">
-                        <span id="firewall-download-util-bar"></span>
-                    </div>
-                </div>
-            </div>
-            <div class="bandwidth-grid">
-                <div class="bandwidth-item">
-                    <span>电信上行</span>
-                    <strong id="firewall-telecom-upload">-</strong>
-                </div>
-                <div class="bandwidth-item">
-                    <span>电信下行</span>
-                    <strong id="firewall-telecom-download">-</strong>
-                </div>
-                <div class="bandwidth-item">
-                    <span>联通上行</span>
-                    <strong id="firewall-unicom-upload">-</strong>
-                </div>
-                <div class="bandwidth-item">
-                    <span>联通下行</span>
-                    <strong id="firewall-unicom-download">-</strong>
-                </div>
+            <div class="situation-hero-meta">
+                <span id="situation-updated-at">等待同步</span>
+                <strong id="situation-health-level">评估中</strong>
             </div>
         </section>
 
-        <section class="panel dashboard-osdwan-panel">
-            <div class="panel-header">
-                <div>
-                    <h2>OSDWAN 带宽</h2>
-                </div>
-                <span class="status-pill" id="dashboard-osdwan-status">检查中</span>
-            </div>
-            <div class="dashboard-flow-list">
-                <div class="dashboard-flow-item">
-                    <div class="dashboard-flow-title">带宽统计</div>
-                    <div class="dashboard-flow-values">
-                        <span id="dashboard-osdwan-bandwidth-down">↓ -</span>
-                        <span id="dashboard-osdwan-bandwidth-up">↑ -</span>
-                    </div>
-                </div>
-                <div class="dashboard-flow-item">
-                    <div class="dashboard-flow-title">SaaS 流量</div>
-                    <div class="dashboard-flow-values">
-                        <span id="dashboard-osdwan-saas-down">↓ -</span>
-                        <span id="dashboard-osdwan-saas-up">↑ -</span>
-                    </div>
-                </div>
-            </div>
-        </section>
+        <section class="situation-kpi-grid dashboard-metrics" id="metric-grid" aria-label="关键运行状态">
+            <article class="situation-kpi">
+                <span class="situation-kpi-label">设备在线</span>
+                <strong id="metric-devices">-</strong>
+                <small id="situation-device-risk">状态同步中</small>
+            </article>
+            <article class="situation-kpi">
+                <span class="situation-kpi-label">无线用户</span>
+                <strong id="metric-wireless-users">-</strong>
+                <small>实时在线终端</small>
+            </article>
+            <article class="situation-kpi">
+                <span class="situation-kpi-label">在线 AP</span>
+                <strong id="metric-wireless-ap">-</strong>
+                <small>无线覆盖节点</small>
+            </article>
+            <article class="situation-kpi">
+                <span class="situation-kpi-label">OSDWAN 用户</span>
+                <strong id="metric-osdwan-users">-</strong>
+                <small>当前在线容量</small>
+            </article>
+            <article class="situation-kpi">
+                <span class="situation-kpi-label">OSDWAN 出口</span>
+                <strong id="metric-osdwan-exits">-</strong>
+                <small>出口连通性</small>
+            </article>
         </section>
 
-        <section class="panel dashboard-side-panel">
-            <div class="panel-header">
-                <div>
-                    <h2>健康检查</h2>
-                    <p class="panel-subtitle">核心接口状态</p>
-                </div>
-            </div>
-            <div class="dashboard-health">
-                <div class="health-group">
-                    <div class="health-section-label">状态</div>
-                    <div class="health-row">
-                        <span>防火墙</span>
-                        <strong id="health-firewall">-</strong>
-                    </div>
-                    <div class="health-row">
-                        <span>交换机</span>
-                        <strong id="health-switches">-</strong>
-                    </div>
-                    <div class="health-row">
-                        <span>无线控制器</span>
-                        <strong id="health-wireless">-</strong>
-                    </div>
-                    <div class="health-row">
-                        <span>OSDWAN</span>
-                        <strong id="health-osdwan">-</strong>
-                    </div>
-                </div>
-                <div class="health-subgrid">
-                    <div class="health-group">
-                        <div class="health-section-label">防火墙资源</div>
-                        <div class="health-row">
-                            <span>CPU</span>
-                            <strong id="health-firewall-cpu">-</strong>
+        <section class="situation-main-grid">
+            <div class="situation-side-stack">
+                <section class="situation-panel firewall-dashboard-panel">
+                    <div class="situation-panel-header">
+                        <div>
+                            <h3>华为防火墙带宽</h3>
+                            <p>实时链路速率与利用率</p>
                         </div>
-                        <div class="health-row">
-                            <span>内存</span>
-                            <strong id="health-firewall-memory">-</strong>
+                        <span class="status-pill" id="firewall-status">检查中</span>
+                    </div>
+                    <div class="situation-bandwidth-pair">
+                        <div class="situation-bandwidth-card">
+                            <span>总上行</span>
+                            <strong id="firewall-total-upload">-</strong>
+                            <em id="firewall-upload-utilization">-</em>
+                            <div class="bandwidth-bar" aria-hidden="true">
+                                <span id="firewall-upload-util-bar"></span>
+                            </div>
                         </div>
-                        <div class="health-row">
-                            <span>总带宽</span>
-                            <strong id="health-firewall-bandwidth">-</strong>
+                        <div class="situation-bandwidth-card">
+                            <span>总下行</span>
+                            <strong id="firewall-total-download">-</strong>
+                            <em id="firewall-download-utilization">-</em>
+                            <div class="bandwidth-bar download" aria-hidden="true">
+                                <span id="firewall-download-util-bar"></span>
+                            </div>
                         </div>
                     </div>
+                    <div class="situation-mini-grid">
+                        <div><span>电信上行</span><strong id="firewall-telecom-upload">-</strong></div>
+                        <div><span>电信下行</span><strong id="firewall-telecom-download">-</strong></div>
+                        <div><span>联通上行</span><strong id="firewall-unicom-upload">-</strong></div>
+                        <div><span>联通下行</span><strong id="firewall-unicom-download">-</strong></div>
+                    </div>
+                </section>
+
+                <section class="situation-panel dashboard-osdwan-panel">
+                    <div class="situation-panel-header">
+                        <div>
+                            <h3>OSDWAN 流量</h3>
+                            <p>带宽统计近 1 天，SaaS 流量近 6 小时</p>
+                        </div>
+                        <span class="status-pill" id="dashboard-osdwan-status">检查中</span>
+                    </div>
+                    <div class="situation-flow-grid">
+                        <div>
+                            <span>带宽统计</span>
+                            <strong id="dashboard-osdwan-bandwidth-down">↓ -</strong>
+                            <strong id="dashboard-osdwan-bandwidth-up">↑ -</strong>
+                        </div>
+                        <div>
+                            <span>SaaS 流量</span>
+                            <strong id="dashboard-osdwan-saas-down">↓ -</strong>
+                            <strong id="dashboard-osdwan-saas-up">↑ -</strong>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <section class="situation-panel situation-core-panel">
+                <div class="situation-panel-header">
+                    <div>
+                        <h3>核心系统</h3>
+                        <p>接口、采集与资产状态</p>
+                    </div>
+                    <span class="situation-alert-badge" id="situation-alert-total">同步中</span>
                 </div>
+                <div class="situation-core-map">
+                    <div class="situation-score-ring" aria-label="综合健康评分">
+                        <span>综合健康</span>
+                        <strong id="situation-health-score">--</strong>
+                    </div>
+                    <div class="situation-node-list" role="list" aria-label="核心系统状态">
+                        <button class="situation-node node-firewall" id="situation-node-firewall" type="button" role="listitem" data-workbench-nav="firewall-bandwidth-nav">
+                            <span>防火墙</span>
+                            <strong>检查中</strong>
+                        </button>
+                        <button class="situation-node node-switches" id="situation-node-switches" type="button" role="listitem" data-workbench-nav="switches-nav">
+                            <span>交换机</span>
+                            <strong>检查中</strong>
+                        </button>
+                        <button class="situation-node node-wireless" id="situation-node-wireless" type="button" role="listitem" data-workbench-nav="wireless-nav">
+                            <span>无线控制器</span>
+                            <strong>检查中</strong>
+                        </button>
+                        <button class="situation-node node-osdwan" id="situation-node-osdwan" type="button" role="listitem" data-workbench-nav="osdwan-nav">
+                            <span>OSDWAN</span>
+                            <strong>检查中</strong>
+                        </button>
+                        <button class="situation-node node-devices" id="situation-node-devices" type="button" role="listitem" data-workbench-nav="devices-nav">
+                            <span>终端资产</span>
+                            <strong>检查中</strong>
+                        </button>
+                    </div>
+                </div>
+                <p class="situation-summary" id="situation-health-summary">正在汇总核心链路、资产和外部接口状态。</p>
+                <div class="situation-micro-grid">
+                    <div><span>接口正常</span><strong id="situation-ok-systems">-</strong></div>
+                    <div><span>离线资产</span><strong id="situation-offline-devices">-</strong></div>
+                    <div><span>状态过期</span><strong id="situation-stale-devices">-</strong></div>
+                    <div><span>出口异常</span><strong id="situation-proxy-risk">-</strong></div>
+                </div>
+            </section>
+
+            <div class="situation-side-stack">
+                <section class="situation-panel workbench-todos" aria-labelledby="workbench-todos-title">
+                    <div class="situation-panel-header">
+                        <div>
+                            <h3 id="workbench-todos-title">待处理事件</h3>
+                            <p id="workbench-todos-subtitle">正在汇总核心系统状态</p>
+                        </div>
+                        <span class="status-pill" id="workbench-todos-count">检查中</span>
+                    </div>
+                    <div class="workbench-action-list situation-alert-list" id="dashboard-action-list" role="list">
+                        <div class="workbench-action empty" role="listitem">加载中</div>
+                    </div>
+                </section>
+
+                <section class="situation-panel dashboard-side-panel">
+                    <div class="situation-panel-header">
+                        <div>
+                            <h3>系统与资源</h3>
+                            <p>核心服务和防火墙资源</p>
+                        </div>
+                    </div>
+                    <div class="dashboard-health situation-health">
+                        <div class="health-row"><span>防火墙</span><strong id="health-firewall">-</strong></div>
+                        <div class="health-row"><span>交换机</span><strong id="health-switches">-</strong></div>
+                        <div class="health-row"><span>无线控制器</span><strong id="health-wireless">-</strong></div>
+                        <div class="health-row"><span>OSDWAN</span><strong id="health-osdwan">-</strong></div>
+                        <div class="situation-divider"></div>
+                        <div class="health-row"><span>CPU</span><strong id="health-firewall-cpu">-</strong></div>
+                        <div class="health-row"><span>内存</span><strong id="health-firewall-memory">-</strong></div>
+                        <div class="health-row"><span>总带宽</span><strong id="health-firewall-bandwidth">-</strong></div>
+                    </div>
+                </section>
             </div>
         </section>
 
-    </section>
+        <section class="situation-bottom-grid">
+            <section class="situation-panel top-panel">
+                <div class="situation-panel-header">
+                    <div>
+                        <h3>无线用户流量</h3>
+                        <p>按实时速率排序</p>
+                    </div>
+                </div>
+                <div class="top-columns">
+                    <div>
+                        <div class="top-column-title">上行</div>
+                        <ol class="traffic-list" id="wireless-user-upload-top">
+                            <li class="empty-state">加载中</li>
+                        </ol>
+                    </div>
+                    <div>
+                        <div class="top-column-title">下行</div>
+                        <ol class="traffic-list" id="wireless-user-download-top">
+                            <li class="empty-state">加载中</li>
+                        </ol>
+                    </div>
+                </div>
+            </section>
 
-    <section class="traffic-top-grid">
-        <section class="panel top-panel">
-            <div class="panel-header">
-                <div>
-                    <h2>无线用户上下行 Top</h2>
-                    <p class="panel-subtitle">按实时速率排序</p>
+            <section class="situation-panel top-panel">
+                <div class="situation-panel-header">
+                    <div>
+                        <h3>应用流量排行</h3>
+                        <p id="dashboard-app-rank-subtitle">来自流量分析应用明细</p>
+                    </div>
                 </div>
-            </div>
-            <div class="top-columns">
-                <div>
-                    <div class="top-column-title">上行</div>
-                    <ol class="traffic-list" id="wireless-user-upload-top">
-                        <li class="empty-state">加载中</li>
-                    </ol>
-                </div>
-                <div>
-                    <div class="top-column-title">下行</div>
-                    <ol class="traffic-list" id="wireless-user-download-top">
-                        <li class="empty-state">加载中</li>
-                    </ol>
-                </div>
-            </div>
+                <ol class="traffic-list app-rank-list" id="dashboard-app-rank">
+                    <li class="empty-state">加载中</li>
+                </ol>
+            </section>
         </section>
-
-        <section class="panel top-panel">
-            <div class="panel-header">
-                <div>
-                    <h2>应用排行</h2>
-                    <p class="panel-subtitle" id="dashboard-app-rank-subtitle">来自流量分析应用明细</p>
-                </div>
-            </div>
-            <ol class="traffic-list app-rank-list" id="dashboard-app-rank">
-                <li class="empty-state">加载中</li>
-            </ol>
-        </section>
-    </section>
-
+    </div>
 </section>
 
 <section class="panel firewall-bandwidth-panel app-view" id="firewall-bandwidth-panel" hidden>

@@ -111,7 +111,7 @@ function showToast(message, type = 'info') {
 }
 
 const viewTitles = {
-    dashboard: ['仪表盘', '系统运行概览'],
+    dashboard: ['网络运行总览', '核心网络与接入资产运行状态'],
     firewallBandwidth: ['防火墙带宽', '华为防火墙上下行趋势'],
     trafficAnalysis: ['流量分析', 'AC 用户速率与应用明细'],
     osdwan: ['OSDWAN 监控', '用户与带宽趋势'],
@@ -267,6 +267,7 @@ function showView(viewId, navId, titleKey) {
     document.querySelectorAll('.app-view').forEach((view) => {
         view.hidden = view.id !== viewId;
     });
+    document.body.classList.toggle('dashboard-screen-active', viewId === 'dashboard-panel');
     document.querySelectorAll('.nav-item').forEach((item) => {
         const active = item.id === navId;
         item.classList.toggle('active', active);
@@ -448,6 +449,7 @@ async function loadSummary(options = {}) {
     document.getElementById('metric-wireless-ap').textContent = wireless.ap_online ?? 0;
     document.getElementById('metric-osdwan-users').textContent = renderUserCapacity(osdwan.user_count, osdwan.user_capacity);
     document.getElementById('metric-osdwan-exits').textContent = renderProxyStatus(osdwan.proxy_status);
+    renderSituationOverview(data);
     renderFirewallDashboard(data.firewall || {});
     renderDashboardOsdwan(osdwan);
     renderDashboardHealth(data);
@@ -510,6 +512,213 @@ function renderDashboardHealth(data) {
     renderHealthItem('health-firewall-bandwidth', firewall.configured, firewall.ok, firewall.configured ? formatMbps(firewall.total_bandwidth) : '未配置');
 }
 
+function renderSituationOverview(data) {
+    const actions = buildDashboardActions(data || {});
+    const scoreInfo = calculateSituationScore(data || {}, actions);
+    const summary = data.summary || {};
+    const devices = summary.devices || {};
+    const freshness = devices.status_freshness || {};
+    const osdwan = data.osdwan || {};
+    const proxyStatus = osdwan.proxy_status || {};
+    const systems = [
+        data.firewall,
+        data.switches,
+        data.wireless,
+        osdwan,
+        data.traffic_apps,
+    ];
+    const okSystems = systems.filter((item) => item?.configured && item?.ok).length;
+
+    setText('situation-updated-at', `最近同步 ${formatDashboardTime(new Date())}`);
+    setText('situation-health-score', scoreInfo.score);
+    setText('situation-health-level', scoreInfo.label);
+    setText('situation-alert-total', actions.length ? `${actions.length} 项事件` : '无待处理');
+    setText('situation-ok-systems', `${okSystems}/${systems.length}`);
+    setText('situation-offline-devices', devices.offline ?? 0);
+    setText('situation-stale-devices', Number(freshness.expired_count || 0) + Number(freshness.unchecked_count || 0));
+    setText('situation-proxy-risk', renderOsdwanProxyRisk(osdwan));
+    setText('situation-device-risk', renderDeviceSituationText(devices));
+    setText('situation-health-summary', scoreInfo.summary);
+
+    const panel = document.getElementById('dashboard-panel');
+    if (panel) {
+        panel.dataset.situationLevel = scoreInfo.state;
+    }
+
+    renderSituationNode('situation-node-firewall', classifyIntegrationNode(data.firewall, '链路正常', '接口异常'));
+    renderSituationNode('situation-node-switches', classifySwitchNode(data.switches));
+    renderSituationNode('situation-node-wireless', classifyIntegrationNode(data.wireless, '控制器正常', '查询异常'));
+    renderSituationNode('situation-node-osdwan', classifyOsdwanNode(osdwan));
+    renderSituationNode('situation-node-devices', classifyDeviceNode(devices));
+}
+
+function calculateSituationScore(data, actions) {
+    const summary = data.summary || {};
+    const devices = summary.devices || {};
+    const freshness = devices.status_freshness || {};
+    const proxyStatus = data.osdwan?.proxy_status || {};
+    const totalDevices = Number(devices.total || 0);
+    const offlineDevices = Number(devices.offline || 0);
+    const staleDevices = Number(freshness.expired_count || 0) + Number(freshness.unchecked_count || 0);
+    const unconfiguredCount = [data.firewall, data.switches, data.wireless, data.osdwan, data.traffic_apps]
+        .filter((item) => item && !item.configured).length;
+    let score = 100;
+
+    actions.forEach((item) => {
+        if (item.level === 'critical') {
+            score -= 16;
+        } else if (item.level === 'warning') {
+            score -= 8;
+        } else if (item.level === 'info') {
+            score -= 5;
+        }
+    });
+    if (totalDevices > 0 && offlineDevices > 0) {
+        score -= Math.min(24, Math.round((offlineDevices / totalDevices) * 30));
+    }
+    if (staleDevices > 0) {
+        score -= Math.min(14, 6 + Math.round(staleDevices / 20));
+    }
+    if (Number(proxyStatus.offline || 0) > 0) {
+        score -= 10;
+    }
+    score -= unconfiguredCount * 4;
+    score = Math.max(42, Math.min(100, score));
+
+    if (score >= 85 && actions.length === 0) {
+        return {
+            score,
+            state: 'normal',
+            label: '运行平稳',
+            summary: '核心链路、资产和外部接口处于可观测状态，保持巡检即可。',
+        };
+    }
+    if (score >= 68) {
+        return {
+            score,
+            state: 'warning',
+            label: '需要关注',
+            summary: `发现 ${actions.length} 项待关注事件，建议优先核查离线资产、状态新鲜度和外部接口。`,
+        };
+    }
+    return {
+        score,
+        state: 'critical',
+        label: '存在告警',
+        summary: `当前存在 ${actions.length} 项风险事件，优先处理高优先级告警和关键接口异常。`,
+    };
+}
+
+function renderSituationNode(elementId, node) {
+    const element = document.getElementById(elementId);
+    if (!element) {
+        return;
+    }
+    element.dataset.state = node.state;
+    const value = element.querySelector('strong');
+    if (value) {
+        value.textContent = node.text;
+    }
+    element.title = node.detail || node.text;
+}
+
+function classifyIntegrationNode(payload, okText, badText) {
+    const item = payload || {};
+    if (!item.configured) {
+        return {state: 'unconfigured', text: '未配置', detail: '缺少接口配置'};
+    }
+    if (!item.ok) {
+        return {state: 'critical', text: badText, detail: item.error || badText};
+    }
+    return {state: 'normal', text: okText, detail: okText};
+}
+
+function classifySwitchNode(payload) {
+    const item = payload || {};
+    if (!item.configured) {
+        return {state: 'unconfigured', text: '未配置', detail: 'Prometheus targets 未配置'};
+    }
+    if (!item.ok) {
+        return {state: 'critical', text: '采集异常', detail: item.error || '交换机监控异常'};
+    }
+    if (Number(item.offline || 0) > 0) {
+        return {state: 'warning', text: `${item.online || 0}/${item.total || 0} UP`, detail: `${item.offline} 台交换机离线`};
+    }
+    return {state: 'normal', text: `${item.online || 0}/${item.total || 0} UP`, detail: '交换机目标正常'};
+}
+
+function classifyOsdwanNode(payload) {
+    const item = payload || {};
+    const proxyStatus = item.proxy_status || {};
+    if (!item.configured) {
+        return {state: 'unconfigured', text: '未配置', detail: 'OSDWAN Token 或节点未配置'};
+    }
+    if (!item.ok) {
+        return {state: 'critical', text: '接口异常', detail: item.error || 'OSDWAN 接口异常'};
+    }
+    if (Number(proxyStatus.offline || 0) > 0) {
+        return {state: 'warning', text: `${proxyStatus.online || 0}/${proxyStatus.total || 0} 正常`, detail: `${proxyStatus.offline} 个出口异常`};
+    }
+    return {state: 'normal', text: `${proxyStatus.online || 0}/${proxyStatus.total || 0} 正常`, detail: 'OSDWAN 出口正常'};
+}
+
+function classifyDeviceNode(devices) {
+    const item = devices || {};
+    const freshness = item.status_freshness || {};
+    const offline = Number(item.offline || 0);
+    const stale = Number(freshness.expired_count || 0) + Number(freshness.unchecked_count || 0);
+    if (offline > 0) {
+        return {state: 'critical', text: `${offline} 离线`, detail: `${offline} 台设备当前离线`};
+    }
+    if (stale > 0) {
+        return {state: 'warning', text: `${stale} 过期`, detail: `${stale} 台设备状态需要刷新`};
+    }
+    return {state: 'normal', text: `${item.online || 0}/${item.total || 0} 在线`, detail: '设备状态正常'};
+}
+
+function renderDeviceSituationText(devices) {
+    const item = devices || {};
+    const freshness = item.status_freshness || {};
+    const offline = Number(item.offline || 0);
+    const stale = Number(freshness.expired_count || 0) + Number(freshness.unchecked_count || 0);
+    if (offline > 0) {
+        return `${offline} 台离线`;
+    }
+    if (stale > 0) {
+        return `${stale} 台需刷新`;
+    }
+    return '资产状态正常';
+}
+
+function renderOsdwanProxyRisk(osdwan) {
+    const item = osdwan || {};
+    const proxyStatus = item.proxy_status || {};
+    if (!item.configured) {
+        return '未配置';
+    }
+    if (!item.ok) {
+        return '接口异常';
+    }
+    const offline = Number(proxyStatus.offline || 0);
+    return offline > 0 ? `${offline} 异常` : '正常';
+}
+
+function setText(elementId, value) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.textContent = value ?? '-';
+    }
+}
+
+function formatDashboardTime(date) {
+    return date.toLocaleTimeString('zh-CN', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+    });
+}
+
 function renderDashboardActions(data) {
     const list = document.getElementById('dashboard-action-list');
     const count = document.getElementById('workbench-todos-count');
@@ -528,12 +737,13 @@ function renderDashboardActions(data) {
 
     if (!actions.length) {
         list.innerHTML = `
-            <div class="workbench-action ok" role="listitem">
-                <span class="workbench-action-severity">OK</span>
+            <div class="workbench-action situation-alert-row ok" role="listitem">
+                    <span class="workbench-action-severity">正常</span>
                 <span class="workbench-action-copy">
                     <strong>核心状态正常</strong>
                     <small>继续关注实时带宽、离线资产和外部接口状态。</small>
                 </span>
+                <em>持续监控</em>
             </div>
         `;
         return;
@@ -544,7 +754,7 @@ function renderDashboardActions(data) {
         const detailTitle = item.detailTitle || item.detail;
         return `
             <div class="workbench-action-item" role="listitem">
-                <button class="workbench-action ${escapeHtml(item.level)}" type="button" data-workbench-nav="${escapeHtml(item.navId)}"${statusAttr}>
+                <button class="workbench-action situation-alert-row ${escapeHtml(item.level)}" type="button" data-workbench-nav="${escapeHtml(item.navId)}"${statusAttr}>
                     <span class="workbench-action-severity">${escapeHtml(renderDashboardActionLevelLabel(item.level))}</span>
                     <span class="workbench-action-copy">
                         <strong>${escapeHtml(item.title)}</strong>
