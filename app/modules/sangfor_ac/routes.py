@@ -1,6 +1,12 @@
+import hashlib
+import json
+import os
 import re
+import tempfile
 import threading
 import time
+from datetime import datetime
+from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, request
 from flask_login import login_required
@@ -17,8 +23,7 @@ from app.modules.sangfor_ac.client import SangforACClient
 
 sangfor_ac_bp = Blueprint("sangfor_ac_api", __name__, url_prefix="/api/sangfor")
 legacy_status_bp = Blueprint("legacy_status_api", __name__)
-USER_RANK_CACHE = {}
-USER_RANK_CACHE_LOCK = threading.Lock()
+USER_RANK_SNAPSHOT_WRITE_LOCK = threading.Lock()
 
 
 @sangfor_ac_bp.route("/status/version", methods=["GET"])
@@ -39,9 +44,11 @@ def user_rank():
     refresh = request.args.get("refresh") in {"1", "true", "yes"}
 
     client = SangforACClient()
-    result = get_cached_user_rank(client, top, line, refresh=refresh)
+    result, snapshot = get_cached_user_rank(client, top, line, refresh=refresh)
     if result.get("code") != 0:
-        return success(empty_user_rank_payload(page, per_page, line, top), message=result.get("message", "获取用户流量排行失败"), code=1)
+        payload = empty_user_rank_payload(page, per_page, line, top)
+        payload["snapshot"] = snapshot
+        return success(payload, message=result.get("message", "获取用户流量排行失败"), code=1)
 
     raw_rows = result.get("data") or []
     mobiles = extract_user_rank_mobiles(raw_rows)
@@ -71,6 +78,7 @@ def user_rank():
         "line": line,
         "top": top,
         "source": ac_source(client),
+        "snapshot": snapshot,
         "name_cache_refresh": name_cache_refresh,
     })
 
@@ -228,28 +236,104 @@ def ac_source(client):
 
 
 def get_cached_user_rank(client, top, line, refresh=False):
-    cache_key = (client.host, client.port, top, line)
-    now = time.time()
+    cached = read_user_rank_snapshot(client, top, line)
+    if cached and not refresh:
+        return cached["result"], user_rank_snapshot_meta(cached["created_at"], cached=True)
+
+    result = client.get_user_rank(top=top, line=line)
+    if result.get("code") == 0:
+        created_at = time.time()
+        write_user_rank_snapshot(client, top, line, result, created_at)
+        return result, user_rank_snapshot_meta(created_at, cached=False)
+
+    cached_at = cached.get("created_at") if cached else None
+    return result, user_rank_snapshot_meta(cached_at, cached=bool(cached))
+
+
+def user_rank_snapshot_path(client, top, line):
+    identity = json.dumps({
+        "host": client.host or "",
+        "port": client.port,
+        "top": top,
+        "line": line,
+    }, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    return Path(current_app.config["INSTANCE_DIR"]) / "cache" / "sangfor_user_rank" / f"{digest}.json"
+
+
+def read_user_rank_snapshot(client, top, line):
+    path = user_rank_snapshot_path(client, top, line)
+    try:
+        snapshot = json.loads(path.read_text(encoding="utf-8"))
+        created_at = float(snapshot.get("created_at"))
+        result = snapshot.get("result")
+        if not isinstance(result, dict) or result.get("code") != 0 or not isinstance(result.get("data"), list):
+            return None
+        return {
+            "created_at": created_at,
+            "result": result,
+        }
+    except FileNotFoundError:
+        return None
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        current_app.logger.warning("读取用户流量快照失败: %s", exc)
+        return None
+
+
+def write_user_rank_snapshot(client, top, line, result, created_at):
+    path = user_rank_snapshot_path(client, top, line)
+    temporary_path = None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        payload = json.dumps({
+            "created_at": created_at,
+            "result": result,
+        }, ensure_ascii=False, separators=(",", ":"))
+        with USER_RANK_SNAPSHOT_WRITE_LOCK:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=str(path.parent),
+                prefix=".user-rank-",
+                suffix=".tmp",
+                delete=False,
+            ) as temporary_file:
+                temporary_path = Path(temporary_file.name)
+                temporary_file.write(payload)
+            os.chmod(temporary_path, 0o600)
+            os.replace(temporary_path, path)
+            temporary_path = None
+    except (OSError, TypeError, ValueError) as exc:
+        current_app.logger.warning("写入用户流量快照失败: %s", exc)
+    finally:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError as exc:
+                current_app.logger.warning("清理用户流量临时快照失败: %s", exc)
+
+
+def user_rank_snapshot_meta(created_at, cached):
+    if not created_at:
+        return {
+            "cached": False,
+            "updated_at": None,
+            "age_seconds": None,
+            "stale": False,
+        }
+
+    age_seconds = max(0, int(time.time() - created_at))
     ttl = current_app.config.get("SANGFOR_AC_USER_RANK_CACHE_SECONDS", 20)
     try:
         ttl = max(0, int(ttl))
     except (TypeError, ValueError):
         ttl = 20
-
-    if not refresh and ttl:
-        with USER_RANK_CACHE_LOCK:
-            cached = USER_RANK_CACHE.get(cache_key)
-            if cached and now - cached["created_at"] <= ttl:
-                return cached["result"]
-
-    result = client.get_user_rank(top=top, line=line)
-    if result.get("code") == 0 and ttl:
-        with USER_RANK_CACHE_LOCK:
-            USER_RANK_CACHE[cache_key] = {
-                "created_at": now,
-                "result": result,
-            }
-    return result
+    return {
+        "cached": cached,
+        "updated_at": datetime.fromtimestamp(created_at).astimezone().isoformat(timespec="seconds"),
+        "age_seconds": age_seconds,
+        "stale": bool(ttl and age_seconds > ttl),
+    }
 
 
 def extract_user_rank_mobiles(rows):

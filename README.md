@@ -219,7 +219,7 @@ docker compose exec web python scripts/migrate_legacy_data.py
 | `SANGFOR_AC_PORT` | 深信服 AC 端口 | `9999` |
 | `SANGFOR_AC_SHARED_SECRET` | 深信服 AC 共享密钥 | 空 |
 | `SANGFOR_AC_USER_RANK_TOP` | 流量分析默认拉取 TopN，设大一些用于近似全量排行 | `10000` |
-| `SANGFOR_AC_USER_RANK_CACHE_SECONDS` | 流量分析 AC 原始排行短缓存秒数，避免搜索反复打 AC | `20` |
+| `SANGFOR_AC_USER_RANK_CACHE_SECONDS` | 流量分析快照新鲜度阈值；搜索和翻页始终读取共享快照，手动刷新才重新采集 | `20` |
 | `DINGTALK_APPKEY` | 钉钉应用 AppKey | 空 |
 | `DINGTALK_APPSECRET` | 钉钉应用 AppSecret | 空 |
 | `PROMETHEUS_QUERY_URL` | Prometheus 查询接口，无线 AP/SSID/在线用户主数据使用此接口 | `http://172.16.80.125:9090/api/v1/query` |

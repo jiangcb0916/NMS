@@ -1228,8 +1228,11 @@ async function loadTrafficAnalysis(options = {}) {
     showView('traffic-analysis-panel', 'traffic-analysis-nav', 'trafficAnalysis');
     const body = document.getElementById('traffic-analysis-table-body');
     const summary = document.getElementById('traffic-analysis-summary');
-    const preserveCurrent = Boolean(options.refresh && trafficAnalysisState.hasValidData);
-    setTrafficAnalysisPageStatus('loading', preserveCurrent ? '刷新中' : '检查中');
+    const table = body.closest('table');
+    const preserveCurrent = trafficAnalysisState.hasValidData;
+    const loadingLabel = options.refresh ? '刷新中' : (preserveCurrent ? '查询中' : '检查中');
+    setTrafficAnalysisPageStatus('loading', loadingLabel);
+    table?.setAttribute('aria-busy', 'true');
     if (!preserveCurrent) {
         trafficAnalysisState.hasValidData = false;
         body.innerHTML = '<tr><td colspan="9">加载中</td></tr>';
@@ -1276,8 +1279,11 @@ async function loadTrafficAnalysis(options = {}) {
         renderTrafficAnalysisPager();
         trafficAnalysisState.hasValidData = true;
 
-        setTrafficAnalysisPageStatus('ok', '数据正常');
-        setText('traffic-analysis-updated-at', `最近更新 ${formatDashboardTime(new Date())}`);
+        const snapshot = data.snapshot || {};
+        const snapshotDate = snapshot.updated_at ? new Date(snapshot.updated_at) : new Date();
+        const effectiveDate = Number.isNaN(snapshotDate.getTime()) ? new Date() : snapshotDate;
+        setTrafficAnalysisPageStatus('ok', snapshot.cached ? '快照可用' : '数据正常');
+        setText('traffic-analysis-updated-at', `${snapshot.cached ? '快照' : '最近更新'} ${formatDashboardTime(effectiveDate)}`);
         setText('traffic-analysis-source', data.source ? `数据源 ${data.source}` : '深信服 AC · 用户速率与应用明细');
 
         const items = data.items || [];
@@ -1316,6 +1322,10 @@ async function loadTrafficAnalysis(options = {}) {
             summary.textContent = '加载失败';
         }
         showToast(error.message, 'error');
+    } finally {
+        if (requestId === trafficAnalysisRequestId) {
+            table?.removeAttribute('aria-busy');
+        }
     }
 }
 
@@ -4234,7 +4244,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (trafficAnalysisSearch) {
         trafficAnalysisSearch.addEventListener('input', debounce((event) => {
             loadTrafficAnalysis({page: 1, query: event.target.value.trim()});
-        }));
+        }, 180));
     }
 
     const trafficLineFilter = document.getElementById('traffic-line-filter');

@@ -3,6 +3,7 @@ import io
 import logging
 import os
 import sys
+import tempfile
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -137,6 +138,8 @@ def main():
         access_control_routes.DingTalkClient = original_dingtalk_client
         access_control_name_cache.DingTalkClient = original_name_cache_dingtalk_client
 
+    user_rank_requests = []
+
     class FakeSangforACClient:
         host = "172.16.100.4"
         port = 9999
@@ -149,6 +152,7 @@ def main():
         def get_user_rank(self, top=10000, line="0"):
             assert top == 10000
             assert line == "0"
+            user_rank_requests.append((top, line))
             return {
                 "code": 0,
                 "message": "Successfully",
@@ -206,6 +210,9 @@ def main():
             }
 
     original_sangfor_ac_client = sangfor_ac_routes.SangforACClient
+    original_instance_dir = app.config["INSTANCE_DIR"]
+    snapshot_directory = tempfile.TemporaryDirectory()
+    app.config["INSTANCE_DIR"] = snapshot_directory.name
     sangfor_ac_routes.SangforACClient = FakeSangforACClient
     try:
         traffic_response = client.get("/api/sangfor/user-rank?q=张三&page=1&per_page=10&top=10000")
@@ -217,14 +224,30 @@ def main():
         assert traffic_data["items"][0]["total_rate"] == "24 Kbps"
         assert traffic_data["summary"]["user_count"] == 2
         assert traffic_data["summary"]["session_count"] == 13
+        assert traffic_data["snapshot"]["cached"] is False
+        assert len(user_rank_requests) == 1
 
         mac_search_response = client.get("/api/sangfor/user-rank?q=ea-ad-0b&page=1&per_page=10&top=10000")
         assert mac_search_response.status_code == 200, mac_search_response.get_data(as_text=True)
         mac_search_data = mac_search_response.get_json()["data"]
         assert mac_search_data["total"] == 1
         assert mac_search_data["items"][0]["name"] == "ea-ad-0b-ba-e6-09"
+        assert mac_search_data["snapshot"]["cached"] is True
+        assert len(user_rank_requests) == 1
+
+        traffic_page_response = client.get("/api/sangfor/user-rank?page=2&per_page=10&top=10000")
+        assert traffic_page_response.status_code == 200, traffic_page_response.get_data(as_text=True)
+        assert traffic_page_response.get_json()["data"]["snapshot"]["cached"] is True
+        assert len(user_rank_requests) == 1
+
+        traffic_refresh_response = client.get("/api/sangfor/user-rank?page=1&per_page=10&top=10000&refresh=1")
+        assert traffic_refresh_response.status_code == 200, traffic_refresh_response.get_data(as_text=True)
+        assert traffic_refresh_response.get_json()["data"]["snapshot"]["cached"] is False
+        assert len(user_rank_requests) == 2
     finally:
         sangfor_ac_routes.SangforACClient = original_sangfor_ac_client
+        app.config["INSTANCE_DIR"] = original_instance_dir
+        snapshot_directory.cleanup()
 
     class FakePrometheusClient:
         query_configured = True
