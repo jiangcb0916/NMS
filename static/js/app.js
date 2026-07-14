@@ -145,6 +145,7 @@ const trafficAnalysisState = {
     total: 0,
     allTotal: 0,
     top: null,
+    hasValidData: false,
 };
 
 const switchState = {
@@ -239,10 +240,14 @@ let osdwanMetricsAutoRefreshing = false;
 let trafficAnalysisRequestId = 0;
 let dashboardFirewallWarmupTimer = null;
 let dashboardFirewallWarmupRetries = 0;
+let firewallBandwidthRequestId = 0;
 const firewallBandwidthState = {
     range: '6h',
+    committedRange: '6h',
     samples: [],
     latest: null,
+    hasValidData: false,
+    emptyMessage: '暂无带宽历史样本',
 };
 
 const osdwanState = {
@@ -267,7 +272,13 @@ function showView(viewId, navId, titleKey) {
     document.querySelectorAll('.app-view').forEach((view) => {
         view.hidden = view.id !== viewId;
     });
-    document.body.classList.toggle('dashboard-screen-active', viewId === 'dashboard-panel');
+    const dashboardActive = viewId === 'dashboard-panel';
+    const firewallActive = viewId === 'firewall-bandwidth-panel';
+    const trafficActive = viewId === 'traffic-analysis-panel';
+    document.body.classList.toggle('ops-screen-active', dashboardActive || firewallActive || trafficActive);
+    document.body.classList.toggle('dashboard-screen-active', dashboardActive);
+    document.body.classList.toggle('firewall-screen-active', firewallActive);
+    document.body.classList.toggle('traffic-screen-active', trafficActive);
     document.querySelectorAll('.nav-item').forEach((item) => {
         const active = item.id === navId;
         item.classList.toggle('active', active);
@@ -957,8 +968,11 @@ function renderDashboardAppRank(payload) {
 }
 
 async function loadFirewallBandwidth(options = {}) {
+    const requestId = ++firewallBandwidthRequestId;
     firewallBandwidthState.range = options.range || firewallBandwidthState.range;
     showView('firewall-bandwidth-panel', 'firewall-bandwidth-nav', 'firewallBandwidth');
+    setFirewallPageStatus('loading', firewallBandwidthState.latest ? '刷新中' : '检查中');
+    renderFirewallRangeButtons();
     try {
         const params = new URLSearchParams({
             limit: 720,
@@ -966,11 +980,20 @@ async function loadFirewallBandwidth(options = {}) {
             range: firewallBandwidthState.range
         });
         const data = await apiGet(`/api/status/huawei-firewall/bandwidth-history?${params.toString()}`);
+        if (requestId !== firewallBandwidthRequestId) {
+            return;
+        }
         renderFirewallBandwidthPage(data);
         if (options.toast) {
             showToast('带宽数据已刷新');
         }
     } catch (error) {
+        if (requestId !== firewallBandwidthRequestId) {
+            return;
+        }
+        firewallBandwidthState.range = firewallBandwidthState.committedRange;
+        renderFirewallRangeButtons();
+        renderFirewallBandwidthFailure(error.message);
         showToast(error.message, 'error');
     }
 }
@@ -978,30 +1001,153 @@ async function loadFirewallBandwidth(options = {}) {
 function renderFirewallBandwidthPage(data) {
     const latest = data.latest || {};
     const samples = data.samples || [];
-    const configured = Boolean(latest.configured);
+    const configured = Boolean(latest.configured ?? data.configured);
     const ok = Boolean(latest.ok);
+    const hasSamples = samples.length > 0;
+    const hasMetricData = ok || hasSamples;
 
     firewallBandwidthState.latest = latest;
     firewallBandwidthState.samples = samples;
+    firewallBandwidthState.hasValidData = hasMetricData;
     firewallBandwidthState.range = data.range || firewallBandwidthState.range;
+    firewallBandwidthState.committedRange = firewallBandwidthState.range;
 
-    document.getElementById('firewall-bandwidth-source').textContent = latest.snmp_target
-        ? `SNMP 目标 ${latest.snmp_target} · ${renderFirewallRangeLabel(firewallBandwidthState.range)} · 样本 ${data.sample_count ?? samples.length} 个`
+    const rangeLabel = renderFirewallRangeLabel(firewallBandwidthState.range);
+    const sampleCount = data.sample_count ?? samples.length;
+    const sampleTimestamp = hasMetricData
+        ? (samples[samples.length - 1]?.timestamp || latest.timestamp)
+        : null;
+    const source = latest.snmp_target
+        ? `SNMP 目标 ${latest.snmp_target} · ${rangeLabel} · ${sampleCount} 个样本`
         : 'SNMP 目标未配置';
 
+    if (!configured) {
+        setFirewallPageStatus('unconfigured', 'SNMP 未配置');
+        setText('firewall-bandwidth-source', '未配置华为防火墙 SNMP 采集目标');
+    } else if (ok) {
+        setFirewallPageStatus('ok', '采集正常');
+        setText('firewall-bandwidth-source', source);
+    } else {
+        const errorSummary = summarizeIntegrationError(latest.error, '防火墙采集异常');
+        setFirewallPageStatus(hasSamples ? 'warning' : 'bad', '采集异常');
+        setText('firewall-bandwidth-source', hasSamples
+            ? `${errorSummary} · 当前展示历史样本`
+            : errorSummary);
+    }
+
+    setText('firewall-last-sample', sampleTimestamp ? `最后样本 ${formatChartTime(sampleTimestamp)}` : '最后样本 -');
+    renderFirewallMetricSnapshot(latest, configured, hasMetricData, ok, sampleCount, rangeLabel);
+
     renderFirewallRangeButtons();
-    drawBandwidthChart('firewall-unicom-download-chart', samples, [
-        {key: 'unicom_download', label: '联通下行', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.14)'},
-    ]);
-    drawBandwidthChart('firewall-unicom-upload-chart', samples, [
-        {key: 'unicom_upload', label: '联通上行', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.14)'},
-    ]);
-    drawBandwidthChart('firewall-telecom-download-chart', samples, [
-        {key: 'telecom_download', label: '电信下行', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.14)'},
-    ]);
-    drawBandwidthChart('firewall-telecom-upload-chart', samples, [
-        {key: 'telecom_upload', label: '电信上行', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.14)'},
-    ]);
+    firewallBandwidthState.emptyMessage = configured ? '暂无带宽历史样本' : 'SNMP 未配置';
+    renderFirewallBandwidthCharts(samples, firewallBandwidthState.emptyMessage);
+}
+
+function renderFirewallMetricSnapshot(latest, configured, hasMetricData, hasResourceData, sampleCount, rangeLabel) {
+    const telecomDownload = Number(latest.telecom_download || 0);
+    const telecomUpload = Number(latest.telecom_upload || 0);
+    const unicomDownload = Number(latest.unicom_download || 0);
+    const unicomUpload = Number(latest.unicom_upload || 0);
+    const totalDownloadValue = Number(latest.total_download);
+    const totalUploadValue = Number(latest.total_upload);
+    const totalDownload = Number.isFinite(totalDownloadValue)
+        ? totalDownloadValue
+        : telecomDownload + unicomDownload;
+    const totalUpload = Number.isFinite(totalUploadValue)
+        ? totalUploadValue
+        : telecomUpload + unicomUpload;
+    const totalBandwidth = Number(latest.total_bandwidth);
+    const downloadUtilizationValue = Number(latest.download_utilization);
+    const uploadUtilizationValue = Number(latest.upload_utilization);
+    const downloadUtilization = Number.isFinite(downloadUtilizationValue)
+        ? downloadUtilizationValue
+        : (totalBandwidth ? (totalDownload / totalBandwidth) * 100 : 0);
+    const uploadUtilization = Number.isFinite(uploadUtilizationValue)
+        ? uploadUtilizationValue
+        : (totalBandwidth ? (totalUpload / totalBandwidth) * 100 : 0);
+
+    setText('firewall-page-total-download', hasMetricData ? formatMbps(totalDownload) : '-');
+    setText('firewall-page-total-upload', hasMetricData ? formatMbps(totalUpload) : '-');
+    setText('firewall-page-download-utilization', hasMetricData ? `${formatNumber(downloadUtilization, 1)}%` : '-');
+    setText('firewall-page-upload-utilization', hasMetricData ? `${formatNumber(uploadUtilization, 1)}%` : '-');
+    setText('firewall-page-total-bandwidth', configured && Number.isFinite(totalBandwidth) ? formatMbps(totalBandwidth) : '-');
+    setText('firewall-page-cpu', hasResourceData ? `${formatNumber(latest.cpu_usage, 1)}%` : '-');
+    setText('firewall-page-memory', hasResourceData ? `${formatNumber(latest.memory_usage, 1)}%` : '-');
+
+    const downloadBar = document.getElementById('firewall-page-download-bar');
+    const uploadBar = document.getElementById('firewall-page-upload-bar');
+    if (downloadBar) {
+        downloadBar.style.width = `${hasMetricData ? clampPercent(downloadUtilization) : 0}%`;
+    }
+    if (uploadBar) {
+        uploadBar.style.width = `${hasMetricData ? clampPercent(uploadUtilization) : 0}%`;
+    }
+
+    setText('firewall-telecom-download-current', hasMetricData ? formatMbps(telecomDownload) : '-');
+    setText('firewall-telecom-upload-current', hasMetricData ? formatMbps(telecomUpload) : '-');
+    setText('firewall-unicom-download-current', hasMetricData ? formatMbps(unicomDownload) : '-');
+    setText('firewall-unicom-upload-current', hasMetricData ? formatMbps(unicomUpload) : '-');
+    setText('firewall-collection-target', configured ? (latest.snmp_target || '-') : '未配置');
+    setText('firewall-collection-range', rangeLabel);
+    setText('firewall-sample-count', `${sampleCount || 0} 个`);
+}
+
+function renderFirewallBandwidthCharts(samples, emptyMessage = '暂无带宽历史样本') {
+    const options = {theme: 'dark', emptyMessage};
+    const downloadSeries = {label: '下行', color: '#58b88b', fill: 'rgba(88, 184, 139, 0.10)', width: 1.8};
+    const uploadSeries = {label: '上行', color: '#63a7df', fill: 'rgba(99, 167, 223, 0.08)', width: 1.8};
+    drawBandwidthChart('firewall-total-chart', samples, [
+        {...downloadSeries, key: 'total_download'},
+        {...uploadSeries, key: 'total_upload'},
+    ], options);
+    drawBandwidthChart('firewall-telecom-chart', samples, [
+        {...downloadSeries, key: 'telecom_download'},
+        {...uploadSeries, key: 'telecom_upload'},
+    ], options);
+    drawBandwidthChart('firewall-unicom-chart', samples, [
+        {...downloadSeries, key: 'unicom_download'},
+        {...uploadSeries, key: 'unicom_upload'},
+    ], options);
+    updateFirewallChartLabel('firewall-total-chart', '防火墙总带宽趋势', samples, 'total_download', 'total_upload', emptyMessage);
+    updateFirewallChartLabel('firewall-telecom-chart', '电信链路带宽趋势', samples, 'telecom_download', 'telecom_upload', emptyMessage);
+    updateFirewallChartLabel('firewall-unicom-chart', '联通链路带宽趋势', samples, 'unicom_download', 'unicom_upload', emptyMessage);
+}
+
+function updateFirewallChartLabel(canvasId, title, samples, downloadKey, uploadKey, emptyMessage) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) {
+        return;
+    }
+    const latest = samples[samples.length - 1];
+    const label = latest
+        ? `${title}，共 ${samples.length} 个样本，当前下行 ${formatMbps(latest[downloadKey])}，当前上行 ${formatMbps(latest[uploadKey])}`
+        : `${title}，${emptyMessage}`;
+    canvas.setAttribute('aria-label', label);
+}
+
+function renderFirewallBandwidthFailure(message) {
+    const errorSummary = summarizeIntegrationError(message, '防火墙带宽读取失败');
+    if (firewallBandwidthState.hasValidData) {
+        setFirewallPageStatus('bad', '刷新失败');
+        setText('firewall-bandwidth-source', `${errorSummary} · 已保留上次有效数据`);
+        return;
+    }
+
+    setFirewallPageStatus('bad', '读取失败');
+    setText('firewall-bandwidth-source', errorSummary);
+    setText('firewall-last-sample', '最后样本 -');
+    renderFirewallMetricSnapshot({}, false, false, false, 0, renderFirewallRangeLabel(firewallBandwidthState.range));
+    firewallBandwidthState.emptyMessage = '带宽数据读取失败';
+    renderFirewallBandwidthCharts([], firewallBandwidthState.emptyMessage);
+}
+
+function setFirewallPageStatus(state, label) {
+    const status = document.getElementById('firewall-page-status');
+    if (!status) {
+        return;
+    }
+    status.className = `firewall-page-status ${state}`;
+    status.textContent = label;
 }
 
 function renderFirewallRangeButtons() {
@@ -1082,8 +1228,13 @@ async function loadTrafficAnalysis(options = {}) {
     showView('traffic-analysis-panel', 'traffic-analysis-nav', 'trafficAnalysis');
     const body = document.getElementById('traffic-analysis-table-body');
     const summary = document.getElementById('traffic-analysis-summary');
-    body.innerHTML = '<tr><td colspan="9">加载中</td></tr>';
-    summary.textContent = '加载中';
+    const preserveCurrent = Boolean(options.refresh && trafficAnalysisState.hasValidData);
+    setTrafficAnalysisPageStatus('loading', preserveCurrent ? '刷新中' : '检查中');
+    if (!preserveCurrent) {
+        trafficAnalysisState.hasValidData = false;
+        body.innerHTML = '<tr><td colspan="9">加载中</td></tr>';
+        summary.textContent = '正在读取用户流量排行';
+    }
 
     try {
         const params = new URLSearchParams({
@@ -1103,6 +1254,18 @@ async function loadTrafficAnalysis(options = {}) {
             return;
         }
         const data = result.data || {};
+        if (result.code !== 0) {
+            const message = summarizeIntegrationError(result.message, '流量排行读取失败');
+            setTrafficAnalysisPageStatus('bad', '采集异常');
+            setText('traffic-analysis-source', preserveCurrent ? `${message} · 已保留上次有效数据` : message);
+            if (!preserveCurrent) {
+                resetTrafficAnalysisView();
+                body.innerHTML = `<tr><td colspan="9">${escapeHtml(message)}</td></tr>`;
+                summary.textContent = '无法获取流量排行';
+            }
+            return;
+        }
+
         trafficAnalysisState.page = data.page || trafficAnalysisState.page;
         trafficAnalysisState.pages = data.pages || 0;
         trafficAnalysisState.total = data.total || 0;
@@ -1111,17 +1274,11 @@ async function loadTrafficAnalysis(options = {}) {
         trafficAnalysisState.top = data.top || trafficAnalysisState.top;
         renderTrafficAnalysisMetrics(data.summary || {});
         renderTrafficAnalysisPager();
+        trafficAnalysisState.hasValidData = true;
 
-        const source = document.getElementById('traffic-analysis-source');
-        if (source) {
-            source.textContent = '';
-        }
-
-        if (result.code !== 0) {
-            body.innerHTML = `<tr><td colspan="9">${escapeHtml(result.message || '请求失败')}</td></tr>`;
-            summary.textContent = '无法获取流量排行';
-            return;
-        }
+        setTrafficAnalysisPageStatus('ok', '数据正常');
+        setText('traffic-analysis-updated-at', `最近更新 ${formatDashboardTime(new Date())}`);
+        setText('traffic-analysis-source', data.source ? `数据源 ${data.source}` : '深信服 AC · 用户速率与应用明细');
 
         const items = data.items || [];
         summary.textContent = `${renderTrafficAnalysisSummaryPrefix()}共 ${data.total || 0} 条，当前显示 ${data.returned || items.length} 条，接口返回 ${data.all_total || 0} 条，${renderClientNameCacheSummary(data.name_cache_refresh)}`;
@@ -1131,15 +1288,15 @@ async function loadTrafficAnalysis(options = {}) {
         }
         body.innerHTML = items.map((item) => `
             <tr>
-                <td class="rank-cell">${escapeHtml(item.rank || '-')}</td>
-                <td class="user-cell">${escapeHtml(item.name || '-')}</td>
-                <td>${renderTrafficAnalysisRealName(item)}</td>
-                <td>${escapeHtml(item.ip || '-')}</td>
-                <td class="rate-cell">${escapeHtml(item.up_rate || '0 bps')}</td>
-                <td class="rate-cell">${escapeHtml(item.down_rate || '0 bps')}</td>
-                <td>${escapeHtml(item.session ?? 0)}</td>
-                <td>${renderTrafficAnalysisStatus(item)}</td>
-                <td class="traffic-app-cell">${renderTrafficAnalysisApps(item.apps || [])}</td>
+                <td class="rank-cell" data-label="排名">${escapeHtml(item.rank || '-')}</td>
+                <td class="user-cell" data-label="用户">${escapeHtml(item.name || '-')}</td>
+                <td data-label="姓名">${renderTrafficAnalysisRealName(item)}</td>
+                <td data-label="IP">${escapeHtml(item.ip || '-')}</td>
+                <td class="rate-cell" data-label="上行">${escapeHtml(item.up_rate || '0 bps')}</td>
+                <td class="rate-cell" data-label="下行">${escapeHtml(item.down_rate || '0 bps')}</td>
+                <td data-label="会话">${escapeHtml(item.session ?? 0)}</td>
+                <td data-label="状态">${renderTrafficAnalysisStatus(item)}</td>
+                <td class="traffic-app-cell" data-label="应用明细">${renderTrafficAnalysisApps(item.apps || [])}</td>
             </tr>
         `).join('');
 
@@ -1150,8 +1307,14 @@ async function loadTrafficAnalysis(options = {}) {
         if (requestId !== trafficAnalysisRequestId) {
             return;
         }
-        body.innerHTML = `<tr><td colspan="9">${escapeHtml(error.message)}</td></tr>`;
-        summary.textContent = '加载失败';
+        const message = summarizeIntegrationError(error.message, '流量排行读取失败');
+        setTrafficAnalysisPageStatus('bad', '读取失败');
+        setText('traffic-analysis-source', preserveCurrent ? `${message} · 已保留上次有效数据` : message);
+        if (!preserveCurrent) {
+            resetTrafficAnalysisView();
+            body.innerHTML = `<tr><td colspan="9">${escapeHtml(message)}</td></tr>`;
+            summary.textContent = '加载失败';
+        }
         showToast(error.message, 'error');
     }
 }
@@ -1496,12 +1659,24 @@ function renderOsdwanUserPager() {
     next.disabled = osdwanState.userPages === 0 || osdwanState.userPage >= osdwanState.userPages;
 }
 
-function drawBandwidthChart(canvasId, samples, series) {
+function drawBandwidthChart(canvasId, samples, series, options = {}) {
     const canvas = document.getElementById(canvasId);
     if (!canvas) {
         return;
     }
 
+    const darkTheme = options.theme === 'dark';
+    const colors = darkTheme ? {
+        background: '#181e21',
+        grid: '#293135',
+        axis: '#3a4449',
+        text: '#8c989e',
+    } : {
+        background: '#ffffff',
+        grid: '#edf1f3',
+        axis: '#d9e0e4',
+        text: '#66737d',
+    };
     const rect = canvas.getBoundingClientRect();
     const width = Math.max(320, rect.width || canvas.clientWidth || 720);
     const height = Math.max(220, rect.height || canvas.clientHeight || 280);
@@ -1512,7 +1687,7 @@ function drawBandwidthChart(canvasId, samples, series) {
     const ctx = canvas.getContext('2d');
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = colors.background;
     ctx.fillRect(0, 0, width, height);
 
     const plot = {left: 60, top: 18, right: 18, bottom: 34};
@@ -1522,9 +1697,9 @@ function drawBandwidthChart(canvasId, samples, series) {
     const maxValue = Math.max(1, ...values);
     const yMax = Math.ceil(maxValue * 1.15);
 
-    ctx.strokeStyle = '#edf1f3';
+    ctx.strokeStyle = colors.grid;
     ctx.lineWidth = 1;
-    ctx.fillStyle = '#66737d';
+    ctx.fillStyle = colors.text;
     ctx.font = '12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif';
 
     for (let index = 0; index <= 4; index += 1) {
@@ -1537,7 +1712,7 @@ function drawBandwidthChart(canvasId, samples, series) {
         ctx.fillText(formatMbps(value), 8, y + 4);
     }
 
-    ctx.strokeStyle = '#d9e0e4';
+    ctx.strokeStyle = colors.axis;
     ctx.beginPath();
     ctx.moveTo(plot.left, plot.top);
     ctx.lineTo(plot.left, plot.top + plotHeight);
@@ -1545,9 +1720,9 @@ function drawBandwidthChart(canvasId, samples, series) {
     ctx.stroke();
 
     if (!samples.length) {
-        ctx.fillStyle = '#66737d';
+        ctx.fillStyle = colors.text;
         ctx.textAlign = 'center';
-        ctx.fillText('暂无带宽历史样本', width / 2, height / 2);
+        ctx.fillText(options.emptyMessage || '暂无带宽历史样本', width / 2, height / 2);
         ctx.textAlign = 'left';
         return;
     }
@@ -1597,7 +1772,7 @@ function drawBandwidthChart(canvasId, samples, series) {
     const firstTimestamp = Number(samples[0].timestamp || 0);
     const lastTimestamp = Number(samples[samples.length - 1].timestamp || 0);
     const rangeSeconds = Math.max(0, lastTimestamp - firstTimestamp);
-    ctx.fillStyle = '#66737d';
+    ctx.fillStyle = colors.text;
     chartAxisTicks(samples, width).forEach((tick) => {
         const x = xFor(tick.index);
         ctx.textAlign = tick.align;
@@ -3350,6 +3525,29 @@ function renderTrafficAnalysisMetrics(summary) {
     document.getElementById('traffic-session-count').textContent = summary.session_count ?? 0;
 }
 
+function setTrafficAnalysisPageStatus(state, label) {
+    const status = document.getElementById('traffic-analysis-page-status');
+    if (!status) {
+        return;
+    }
+    status.className = `traffic-page-status ${state}`;
+    status.textContent = label;
+}
+
+function resetTrafficAnalysisView() {
+    trafficAnalysisState.hasValidData = false;
+    trafficAnalysisState.page = 1;
+    trafficAnalysisState.pages = 0;
+    trafficAnalysisState.total = 0;
+    trafficAnalysisState.allTotal = 0;
+    setText('traffic-user-count', '-');
+    setText('traffic-status-count', '-');
+    setText('traffic-total-rate', '-');
+    setText('traffic-session-count', '-');
+    setText('traffic-analysis-updated-at', '最近更新 -');
+    renderTrafficAnalysisPager();
+}
+
 function renderTrafficAnalysisPager() {
     const pageText = document.getElementById('traffic-analysis-page');
     const prev = document.getElementById('traffic-analysis-prev');
@@ -4182,13 +4380,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.addEventListener('resize', debounce(() => {
         const firewallPanel = document.getElementById('firewall-bandwidth-panel');
-        if (firewallPanel && !firewallPanel.hidden) {
-            renderFirewallBandwidthPage({
-                latest: firewallBandwidthState.latest || {},
-                samples: firewallBandwidthState.samples || [],
-                sample_count: firewallBandwidthState.samples.length,
-                range: firewallBandwidthState.range,
-            });
+        if (firewallPanel && !firewallPanel.hidden && firewallBandwidthState.latest) {
+            renderFirewallBandwidthCharts(
+                firewallBandwidthState.samples,
+                firewallBandwidthState.emptyMessage,
+            );
         }
         const osdwanPanel = document.getElementById('osdwan-panel');
         if (osdwanPanel && !osdwanPanel.hidden && osdwanState.data) {

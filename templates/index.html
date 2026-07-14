@@ -232,187 +232,259 @@
     </div>
 </section>
 
-<section class="panel firewall-bandwidth-panel app-view" id="firewall-bandwidth-panel" hidden>
-    <div class="panel-header">
-        <div>
-            <h2>华为防火墙带宽</h2>
-            <p class="panel-subtitle" id="firewall-bandwidth-source">-</p>
-        </div>
-        <div class="button-row">
-            <div class="range-dropdown" data-range-dropdown>
-                <button class="small-button range-dropdown-trigger" id="firewall-range-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="firewall-range-menu" data-range-toggle>
-                    <i class="bi bi-clock"></i>
-                    <span id="firewall-range-label">最近 6 小时</span>
-                    <i class="bi bi-chevron-down"></i>
+<section class="firewall-bandwidth-panel firewall-ops-view app-view" id="firewall-bandwidth-panel" hidden>
+    <div class="firewall-ops-screen">
+        <header class="firewall-ops-header">
+            <div class="firewall-ops-heading">
+                <span class="firewall-ops-kicker">边界链路</span>
+                <h1>防火墙链路监控</h1>
+                <p id="firewall-bandwidth-source">正在读取采集状态</p>
+            </div>
+            <div class="firewall-ops-actions">
+                <div class="firewall-status-block">
+                    <span>采集状态</span>
+                    <strong class="firewall-page-status loading" id="firewall-page-status">检查中</strong>
+                    <small id="firewall-last-sample">最后样本 -</small>
+                </div>
+                <div class="range-dropdown" data-range-dropdown>
+                    <button class="small-button range-dropdown-trigger" id="firewall-range-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="firewall-range-menu" data-range-toggle>
+                        <i class="bi bi-clock" aria-hidden="true"></i>
+                        <span id="firewall-range-label">最近 6 小时</span>
+                        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                    </button>
+                    <div class="range-dropdown-menu" id="firewall-range-menu" role="menu" hidden>
+                        <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="5m">5 分钟</button>
+                        <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="15m">15 分钟</button>
+                        <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="30m">30 分钟</button>
+                        <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="1h">1 小时</button>
+                        <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="3h">3 小时</button>
+                        <button class="range-option active" type="button" role="menuitemradio" aria-checked="true" data-firewall-range="6h">6 小时</button>
+                        <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="12h">12 小时</button>
+                        <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="24h">24 小时</button>
+                        <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="2d">2 天</button>
+                    </div>
+                </div>
+                <button class="small-button firewall-refresh-button" id="reload-firewall-bandwidth" type="button">
+                    <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+                    <span>刷新</span>
                 </button>
-                <div class="range-dropdown-menu" id="firewall-range-menu" role="menu" hidden>
-                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="5m">5 分钟</button>
-                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="15m">15 分钟</button>
-                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="30m">30 分钟</button>
-                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="1h">1 小时</button>
-                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="3h">3 小时</button>
-                    <button class="range-option active" type="button" role="menuitemradio" aria-checked="true" data-firewall-range="6h">6 小时</button>
-                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="12h">12 小时</button>
-                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="24h">24 小时</button>
-                    <button class="range-option" type="button" role="menuitemradio" aria-checked="false" data-firewall-range="2d">2 天</button>
-                </div>
             </div>
-            <button class="small-button" id="reload-firewall-bandwidth" type="button">
-                <i class="bi bi-arrow-clockwise"></i>
-                <span>刷新</span>
-            </button>
-        </div>
+        </header>
+
+        <section class="firewall-stat-strip" aria-label="防火墙实时指标">
+            <article class="firewall-stat primary">
+                <span>总下行</span>
+                <strong id="firewall-page-total-download">-</strong>
+                <div class="firewall-stat-detail">
+                    <small id="firewall-page-download-utilization">-</small>
+                    <span class="firewall-stat-bar download"><i id="firewall-page-download-bar"></i></span>
+                </div>
+            </article>
+            <article class="firewall-stat primary">
+                <span>总上行</span>
+                <strong id="firewall-page-total-upload">-</strong>
+                <div class="firewall-stat-detail">
+                    <small id="firewall-page-upload-utilization">-</small>
+                    <span class="firewall-stat-bar upload"><i id="firewall-page-upload-bar"></i></span>
+                </div>
+            </article>
+            <article class="firewall-stat">
+                <span>可用总带宽</span>
+                <strong id="firewall-page-total-bandwidth">-</strong>
+                <small>配置容量</small>
+            </article>
+            <article class="firewall-stat">
+                <span>CPU</span>
+                <strong id="firewall-page-cpu">-</strong>
+                <small>设备资源</small>
+            </article>
+            <article class="firewall-stat">
+                <span>内存</span>
+                <strong id="firewall-page-memory">-</strong>
+                <small>设备资源</small>
+            </article>
+        </section>
+
+        <section class="firewall-main-grid">
+            <section class="firewall-chart-panel firewall-total-panel">
+                <div class="firewall-panel-header">
+                    <div>
+                        <h3>总带宽趋势</h3>
+                        <p>聚合电信与联通链路，单位 Mbps</p>
+                    </div>
+                    <div class="firewall-chart-legend" aria-label="图表图例">
+                        <span><i class="firewall-legend-line download"></i>下行</span>
+                        <span><i class="firewall-legend-line upload"></i>上行</span>
+                    </div>
+                </div>
+                <canvas id="firewall-total-chart" class="bandwidth-chart firewall-main-chart" role="img" aria-label="防火墙总上行和总下行带宽趋势">浏览器不支持带宽趋势图</canvas>
+            </section>
+
+            <aside class="firewall-live-panel" aria-label="运营商实时速率与采集信息">
+                <div class="firewall-panel-header">
+                    <div>
+                        <h3>运营商实时速率</h3>
+                        <p>当前采样值</p>
+                    </div>
+                </div>
+                <div class="firewall-provider-list">
+                    <section class="firewall-provider-row">
+                        <div><span class="provider-marker telecom"></span><strong>电信</strong></div>
+                        <dl>
+                            <div><dt>下行</dt><dd id="firewall-telecom-download-current">-</dd></div>
+                            <div><dt>上行</dt><dd id="firewall-telecom-upload-current">-</dd></div>
+                        </dl>
+                    </section>
+                    <section class="firewall-provider-row">
+                        <div><span class="provider-marker unicom"></span><strong>联通</strong></div>
+                        <dl>
+                            <div><dt>下行</dt><dd id="firewall-unicom-download-current">-</dd></div>
+                            <div><dt>上行</dt><dd id="firewall-unicom-upload-current">-</dd></div>
+                        </dl>
+                    </section>
+                </div>
+                <dl class="firewall-collection-meta">
+                    <div><dt>采集目标</dt><dd id="firewall-collection-target">-</dd></div>
+                    <div><dt>时间范围</dt><dd id="firewall-collection-range">最近 6 小时</dd></div>
+                    <div><dt>有效样本</dt><dd id="firewall-sample-count">-</dd></div>
+                </dl>
+            </aside>
+        </section>
+
+        <section class="firewall-provider-grid">
+            <section class="firewall-chart-panel">
+                <div class="firewall-panel-header">
+                    <div>
+                        <h3>电信链路趋势</h3>
+                        <p>上下行实时速率对比</p>
+                    </div>
+                    <div class="firewall-chart-legend" aria-label="电信图表图例">
+                        <span><i class="firewall-legend-line download"></i>下行</span>
+                        <span><i class="firewall-legend-line upload"></i>上行</span>
+                    </div>
+                </div>
+                <canvas id="firewall-telecom-chart" class="bandwidth-chart firewall-provider-chart" role="img" aria-label="电信链路上行和下行带宽趋势">浏览器不支持带宽趋势图</canvas>
+            </section>
+            <section class="firewall-chart-panel">
+                <div class="firewall-panel-header">
+                    <div>
+                        <h3>联通链路趋势</h3>
+                        <p>上下行实时速率对比</p>
+                    </div>
+                    <div class="firewall-chart-legend" aria-label="联通图表图例">
+                        <span><i class="firewall-legend-line download"></i>下行</span>
+                        <span><i class="firewall-legend-line upload"></i>上行</span>
+                    </div>
+                </div>
+                <canvas id="firewall-unicom-chart" class="bandwidth-chart firewall-provider-chart" role="img" aria-label="联通链路上行和下行带宽趋势">浏览器不支持带宽趋势图</canvas>
+            </section>
+        </section>
     </div>
-
-    <section class="chart-grid">
-        <section class="chart-panel">
-            <div class="panel-header">
-                <div>
-                    <h2>联通下行流量</h2>
-                    <p class="panel-subtitle">单位 Mbps</p>
-                </div>
-                <div class="chart-legend">
-                    <span><i class="legend-dot unicom-download"></i>联通下行</span>
-                </div>
-            </div>
-            <canvas id="firewall-unicom-download-chart" class="bandwidth-chart"></canvas>
-        </section>
-
-        <section class="chart-panel">
-            <div class="panel-header">
-                <div>
-                    <h2>联通上行流量</h2>
-                    <p class="panel-subtitle">单位 Mbps</p>
-                </div>
-                <div class="chart-legend">
-                    <span><i class="legend-dot unicom-upload"></i>联通上行</span>
-                </div>
-            </div>
-            <canvas id="firewall-unicom-upload-chart" class="bandwidth-chart"></canvas>
-        </section>
-
-        <section class="chart-panel">
-            <div class="panel-header">
-                <div>
-                    <h2>电信下行流量</h2>
-                    <p class="panel-subtitle">单位 Mbps</p>
-                </div>
-                <div class="chart-legend">
-                    <span><i class="legend-dot telecom-download"></i>电信下行</span>
-                </div>
-            </div>
-            <canvas id="firewall-telecom-download-chart" class="bandwidth-chart"></canvas>
-        </section>
-
-        <section class="chart-panel">
-            <div class="panel-header">
-                <div>
-                    <h2>电信上行流量</h2>
-                    <p class="panel-subtitle">单位 Mbps</p>
-                </div>
-                <div class="chart-legend">
-                    <span><i class="legend-dot telecom-upload"></i>电信上行</span>
-                </div>
-            </div>
-            <canvas id="firewall-telecom-upload-chart" class="bandwidth-chart"></canvas>
-        </section>
-    </section>
 </section>
 
-<section class="panel traffic-analysis-panel app-view" id="traffic-analysis-panel" hidden>
-    <div class="panel-header">
-        <div>
-            <h2>流量分析</h2>
-            <p class="panel-subtitle" id="traffic-analysis-source"></p>
-        </div>
-        <div class="button-row">
-            <button class="small-button" id="reload-traffic-analysis" type="button">
-                <i class="bi bi-arrow-clockwise"></i>
-                <span>刷新</span>
-            </button>
-        </div>
-    </div>
+<section class="traffic-analysis-panel traffic-ops-view app-view" id="traffic-analysis-panel" hidden>
+    <div class="traffic-ops-screen">
+        <header class="traffic-ops-header">
+            <div class="traffic-ops-heading">
+                <span class="traffic-ops-kicker">用户流量</span>
+                <h1>用户流量分析</h1>
+                <p id="traffic-analysis-source">正在读取深信服 AC 用户速率与应用明细</p>
+            </div>
+            <div class="traffic-ops-actions">
+                <div class="traffic-status-block">
+                    <span>采集状态</span>
+                    <strong class="traffic-page-status loading" id="traffic-analysis-page-status" role="status" aria-live="polite">检查中</strong>
+                    <small id="traffic-analysis-updated-at">最近更新 -</small>
+                </div>
+                <button class="small-button traffic-refresh-button" id="reload-traffic-analysis" type="button">
+                    <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+                    <span>刷新</span>
+                </button>
+            </div>
+        </header>
 
-    <section class="metric-grid compact traffic-analysis-metrics">
-        <article class="metric">
-            <div class="metric-icon traffic"><i class="bi bi-people"></i></div>
-            <div>
-                <div class="metric-label">排行用户</div>
-                <div class="metric-value" id="traffic-user-count">-</div>
-            </div>
-        </article>
-        <article class="metric">
-            <div class="metric-icon online"><i class="bi bi-check2-circle"></i></div>
-            <div>
-                <div class="metric-label">正常 / 冻结</div>
-                <div class="metric-value" id="traffic-status-count">-</div>
-            </div>
-        </article>
-        <article class="metric osdwan-bandwidth-card traffic-rate-card">
-            <div class="metric-icon bandwidth"><i class="bi bi-arrow-down-up"></i></div>
-            <div>
-                <div class="metric-label">上下行</div>
-                <div class="metric-value osdwan-bandwidth-value" id="traffic-total-rate">-</div>
-            </div>
-        </article>
-        <article class="metric">
-            <div class="metric-icon session"><i class="bi bi-diagram-2"></i></div>
-            <div>
-                <div class="metric-label">会话数</div>
-                <div class="metric-value" id="traffic-session-count">-</div>
-            </div>
-        </article>
-    </section>
+        <section class="traffic-stat-strip" aria-label="流量分析实时指标">
+            <article class="traffic-stat primary">
+                <span>排行用户</span>
+                <strong id="traffic-user-count">-</strong>
+                <small>当前采样用户</small>
+            </article>
+            <article class="traffic-stat">
+                <span>正常 / 冻结</span>
+                <strong id="traffic-status-count">-</strong>
+                <small>用户接入状态</small>
+            </article>
+            <article class="traffic-stat traffic-rate-stat">
+                <span>实时上下行</span>
+                <div class="traffic-rate-lines" id="traffic-total-rate">-</div>
+            </article>
+            <article class="traffic-stat">
+                <span>会话数</span>
+                <strong id="traffic-session-count">-</strong>
+                <small>当前并发会话</small>
+            </article>
+        </section>
 
-    <div class="toolbar-row traffic-analysis-toolbar">
-        <input id="traffic-analysis-search" name="traffic_analysis_search" placeholder="搜索用户、姓名、IP、应用" aria-label="搜索流量分析用户、姓名、IP 或应用" autocomplete="off">
-        <select id="traffic-line-filter" aria-label="线路">
-            <option value="0" selected>全部线路</option>
-            <option value="1">线路 1</option>
-            <option value="2">线路 2</option>
-            <option value="3">线路 3</option>
-            <option value="4">线路 4</option>
-        </select>
-        <select id="traffic-analysis-page-size" aria-label="每页数量">
-            <option value="10" selected>10 / 页</option>
-            <option value="20">20 / 页</option>
-            <option value="50">50 / 页</option>
-            <option value="100">100 / 页</option>
-        </select>
-    </div>
-    <div class="list-summary" id="traffic-analysis-summary">-</div>
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>排名</th>
-                    <th>用户</th>
-                    <th>姓名</th>
-                    <th>IP</th>
-                    <th>上行</th>
-                    <th>下行</th>
-                    <th>会话</th>
-                    <th>状态</th>
-                    <th>应用明细</th>
-                </tr>
-            </thead>
-            <tbody id="traffic-analysis-table-body">
-                <tr>
-                    <td colspan="9">暂无数据</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-    <div class="pagination-row">
-        <button class="small-button" id="traffic-analysis-prev" type="button">
-            <i class="bi bi-chevron-left"></i>
-            <span>上一页</span>
-        </button>
-        <span id="traffic-analysis-page">-</span>
-        <button class="small-button" id="traffic-analysis-next" type="button">
-            <span>下一页</span>
-            <i class="bi bi-chevron-right"></i>
-        </button>
+        <section class="traffic-list-panel">
+            <div class="traffic-list-header">
+                <div>
+                    <h2>用户速率排行</h2>
+                    <p class="list-summary" id="traffic-analysis-summary">-</p>
+                </div>
+                <div class="traffic-analysis-toolbar">
+                    <label class="traffic-search-field" for="traffic-analysis-search">
+                        <i class="bi bi-search" aria-hidden="true"></i>
+                        <input id="traffic-analysis-search" name="traffic_analysis_search" placeholder="搜索用户、姓名、IP、应用" aria-label="搜索流量分析用户、姓名、IP 或应用" autocomplete="off">
+                    </label>
+                    <select id="traffic-line-filter" aria-label="线路">
+                        <option value="0" selected>全部线路</option>
+                        <option value="1">线路 1</option>
+                        <option value="2">线路 2</option>
+                        <option value="3">线路 3</option>
+                        <option value="4">线路 4</option>
+                    </select>
+                    <select id="traffic-analysis-page-size" aria-label="每页数量">
+                        <option value="10" selected>10 / 页</option>
+                        <option value="20">20 / 页</option>
+                        <option value="50">50 / 页</option>
+                        <option value="100">100 / 页</option>
+                    </select>
+                </div>
+            </div>
+            <div class="table-wrap traffic-table-wrap">
+                <table class="traffic-ops-table">
+                    <thead>
+                        <tr>
+                            <th>排名</th>
+                            <th>用户</th>
+                            <th>姓名</th>
+                            <th>IP</th>
+                            <th>上行</th>
+                            <th>下行</th>
+                            <th>会话</th>
+                            <th>状态</th>
+                            <th>应用明细</th>
+                        </tr>
+                    </thead>
+                    <tbody id="traffic-analysis-table-body" aria-live="polite">
+                        <tr>
+                            <td colspan="9">暂无数据</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination-row traffic-pagination">
+                <button class="small-button" id="traffic-analysis-prev" type="button">
+                    <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                    <span>上一页</span>
+                </button>
+                <span id="traffic-analysis-page" aria-live="polite">-</span>
+                <button class="small-button" id="traffic-analysis-next" type="button">
+                    <span>下一页</span>
+                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                </button>
+            </div>
+        </section>
     </div>
 </section>
 
