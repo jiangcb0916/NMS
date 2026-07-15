@@ -177,7 +177,10 @@ def switch_trace_terminal():
 
     if target_type == "mac":
         payload, message, code = trace_terminal_mac(target_value)
-        payload["target_name"] = trace_target_name(target_mac=target_value)
+        target_device = trace_target_device(target_mac=target_value)
+        payload["target_name"] = target_device.username if target_device else "无"
+        if not payload.get("target_ip") and target_device:
+            payload["target_ip"] = target_device.ip_address or ""
     else:
         payload, message, code = trace_terminal_ip(target_value)
         payload["target_name"] = trace_target_name(target_ip=target_value)
@@ -202,19 +205,22 @@ def parse_trace_target(data):
 
 
 def trace_target_name(target_ip="", target_mac=""):
+    device = trace_target_device(target_ip=target_ip, target_mac=target_mac)
+    return device.username if device else "无"
+
+
+def trace_target_device(target_ip="", target_mac=""):
     if target_ip:
-        device = Device.query.filter_by(ip_address=target_ip).first()
-        return device.username if device else "无"
+        return Device.query.filter_by(ip_address=target_ip).first()
 
     normalized_target = normalize_mac(target_mac)
     if not normalized_target:
-        return "无"
+        return None
     devices = Device.query.filter(Device.mac_address.isnot(None)).all()
-    device = next(
+    return next(
         (item for item in devices if normalize_mac(item.mac_address) == normalized_target),
         None,
     )
-    return device.username if device else "无"
 
 
 def build_switch_targets(client=None):

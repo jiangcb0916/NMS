@@ -170,6 +170,10 @@ def trace_terminal(target_ip="", target_mac=""):
         try:
             with HuaweiCliSession(current_switch, config, current_platform) as session:
                 if target_mac:
+                    if hop_index == 1 and not payload.get("target_ip"):
+                        resolved_ip = lookup_target_ip_by_mac(session, target_mac, hop)
+                        if resolved_ip:
+                            payload["target_ip"] = resolved_ip
                     lookup_result = lookup_mac_on_switch(session, target_mac, hop)
                     target_mac = lookup_result.get("mac") or target_mac
                 else:
@@ -408,6 +412,24 @@ def lookup_arp_on_switch(session, target_ip, hop):
         "mac": arp_entry["mac"],
         "interface": arp_entry["interface"],
     }
+
+
+def lookup_target_ip_by_mac(session, target_mac, hop):
+    command = session.arp_lookup_command(target_mac)
+    try:
+        output = run_command(session, hop, command)
+    except Exception:
+        hop["commands"][-1]["summary"] = "ARP 反查失败，继续追踪 MAC"
+        return ""
+    entries = parse_arp_by_mac(output, target_mac)
+    if not entries:
+        hop["commands"][-1]["summary"] = "ARP 未找到目标 IP"
+        return ""
+
+    target_ip = entries[0]["ip"]
+    hop["target_ip"] = target_ip
+    hop["commands"][-1]["summary"] = f"ARP 反查到终端 IP {target_ip}"
+    return target_ip
 
 
 def lookup_mac_on_switch(session, target_mac, hop):

@@ -596,6 +596,21 @@ def main():
         assert mac_lookup_result["interface"] == "GE0/0/4"
         assert mac_lookup_hop["lookup"] == "mac"
         assert mac_lookup_hop["commands"][0]["command"] == "display mac-address 9009-d091-478f"
+
+        class FakeFailingArpSession:
+            def arp_lookup_command(self, value):
+                return f"display arp | include {value}"
+
+            def run(self, command):
+                raise TimeoutError("ARP timeout")
+
+        failing_arp_hop = switch_trace.new_hop(1, "172.16.100.5")
+        assert switch_trace.lookup_target_ip_by_mac(
+            FakeFailingArpSession(),
+            "9009-d091-478f",
+            failing_arp_hop,
+        ) == ""
+        assert failing_arp_hop["commands"][0]["summary"] == "ARP 反查失败，继续追踪 MAC"
         lldp_neighbor = switch_trace.parse_lldp_neighbor("\n".join([
             "Management Address : 172.16.100.8",
             "System Name        : Access-SW-01",
@@ -742,8 +757,14 @@ def main():
             def lldp_neighbor_command(self, interface):
                 return f"display lldp neighbor interface {switch_trace.command_interface_name(interface)}"
 
+            def arp_lookup_command(self, value):
+                return f"display arp | include {value}"
+
             def run(self, command):
                 responses = {
+                    ("172.16.100.5", "display arp | include 9009-d091-478f"): (
+                        "172.16.70.17 9009-d091-478f 12 D-0 GE0/0/4"
+                    ),
                     ("172.16.100.5", "display mac-address 9009-d091-478f"): (
                         "9009-d091-478f dynamic 1/- GE0/0/4"
                     ),
@@ -781,6 +802,7 @@ def main():
             assert two_hop_code == 0
             assert two_hop_message == "已定位到普通终端接口"
             assert two_hop_payload["target_type"] == "mac"
+            assert two_hop_payload["target_ip"] == "172.16.70.17"
             assert two_hop_payload["final_switch"] == "172.16.100.8"
             assert two_hop_payload["final_interface"] == "Gi1/0/35"
             assert [hop["platform"] for hop in two_hop_payload["hops"]] == ["huawei", "cisco"]
@@ -813,6 +835,9 @@ def main():
 
                 def run(self, command):
                     responses = {
+                        ("172.16.100.5", "display arp | include 186f-2d0b-8d40"): (
+                            "172.16.101.50 186f-2d0b-8d40 12 D-0 Eth-Trunk14"
+                        ),
                         ("172.16.100.5", "display mac-address 186f-2d0b-8d40"): (
                             "186f-2d0b-8d40 43/-/- Eth-Trunk14 dynamic"
                         ),
@@ -866,6 +891,7 @@ def main():
                 )
             assert variant_code == 0
             assert variant_payload["result_type"] == "downstream"
+            assert variant_payload["target_ip"] == "172.16.101.50"
             assert variant_payload["final_switch"] == "172.16.100.11"
             assert variant_payload["final_interface"] == "Gi1/0/20"
             assert "多个 MAC" in variant_message
@@ -969,7 +995,7 @@ def main():
             assert mac_trace_json["code"] == 0
             assert mac_trace_json["data"]["target_type"] == "mac"
             assert mac_trace_json["data"]["target_name"] == "trace-terminal"
-            assert mac_trace_json["data"]["target_ip"] == ""
+            assert mac_trace_json["data"]["target_ip"] == "172.16.70.17"
             assert mac_trace_json["data"]["target_mac"] == "9009-d091-478f"
 
             preview_response = client.post("/api/access-control/device-port-preview", json={"ip_address": "172.16.70.17"})
