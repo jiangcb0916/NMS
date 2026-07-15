@@ -165,7 +165,7 @@ const switchState = {
     trafficRange: '1h',
     traceLoading: false,
     traceData: null,
-    traceIp: '',
+    traceTarget: '',
     ports: [],
     trafficSamples: [],
     pages: 0,
@@ -2308,9 +2308,9 @@ async function traceSwitchTerminal(event) {
     const button = document.getElementById('switch-trace-button');
     const summary = document.getElementById('switch-trace-summary');
     const resultPanel = document.getElementById('switch-trace-result');
-    const ip = input ? input.value.trim() : '';
-    if (!ip) {
-        showToast('请输入终端 IP', 'error');
+    const target = input ? input.value.trim() : '';
+    if (!target) {
+        showToast('请输入终端 IP 或 MAC', 'error');
         if (input) {
             input.focus();
         }
@@ -2318,13 +2318,13 @@ async function traceSwitchTerminal(event) {
     }
 
     switchState.traceLoading = true;
-    switchState.traceIp = ip;
+    switchState.traceTarget = target;
     if (button) {
         button.disabled = true;
         button.innerHTML = '<i class="bi bi-hourglass-split"></i><span>追踪中</span>';
     }
     if (summary) {
-        summary.textContent = `正在从核心交换机追踪 ${ip}`;
+        summary.textContent = `正在从核心交换机追踪 ${target}`;
     }
     if (resultPanel) {
         resultPanel.hidden = false;
@@ -2332,7 +2332,7 @@ async function traceSwitchTerminal(event) {
     }
 
     try {
-        const result = await apiPostResult('/api/statistics/switches/trace-terminal', {ip});
+        const result = await apiPostResult('/api/statistics/switches/trace-terminal', {target});
         switchState.traceData = result.data || {};
         renderSwitchTraceResult(switchState.traceData, result.message || '', result.code || 0);
         showToast(result.code === 0 ? '终端定位完成' : (result.message || '终端定位异常'), result.code === 0 ? 'info' : 'error');
@@ -2416,7 +2416,7 @@ function renderSwitchTraceFinalText(data, message) {
         return `已定位到下联口 ${switchIp} / ${interfaceName}`;
     }
     if (data.result_type === 'not_found') {
-        return message || '核心 ARP 未找到';
+        return message || (data.target_type === 'mac' ? '核心 MAC 表未找到目标 MAC' : '核心 ARP 未找到');
     }
     return message || '追踪失败';
 }
@@ -2427,16 +2427,20 @@ function buildSwitchTraceKeyInfo(data) {
     const finalHop = hops[hops.length - 1] || {};
     const neighbor = coreHop.neighbor || {};
     const finalSwitch = data.final_switch || finalHop.switch_ip || '';
-    const accessSwitch = finalSwitch && finalSwitch !== data.start_switch
-        ? finalSwitch
-        : neighbor.management_ip || finalSwitch || data.start_switch || '-';
+    const isNotFound = data.result_type === 'not_found';
+    const accessSwitch = isNotFound
+        ? '-'
+        : finalSwitch && finalSwitch !== data.start_switch
+            ? finalSwitch
+            : neighbor.management_ip || finalSwitch || data.start_switch || '-';
     return {
         name: data.target_name || '无',
-        ip: data.target_ip || switchState.traceIp || '-',
-        mac: data.target_mac || coreHop.target_mac || finalHop.target_mac || '-',
+        ip: data.target_ip || (data.target_type === 'ip' ? switchState.traceTarget : '') || '-',
+        mac: data.target_mac || coreHop.target_mac || finalHop.target_mac
+            || (data.target_type === 'mac' ? switchState.traceTarget : '') || '-',
         corePort: coreHop.ingress_interface || '-',
         accessSwitch,
-        accessPort: data.final_interface || finalHop.ingress_interface || '-'
+        accessPort: isNotFound ? '-' : data.final_interface || finalHop.ingress_interface || '-'
     };
 }
 

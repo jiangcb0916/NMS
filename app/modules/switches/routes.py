@@ -6,10 +6,10 @@ from flask import Blueprint, current_app, request
 from flask_login import login_required
 
 from app.common.responses import failure, success
-from app.common.validators import validate_ip
+from app.common.validators import validate_ip, validate_mac
 from app.models.device import Device
 from app.modules.integrations.prometheus import PrometheusClient
-from app.modules.switches.trace import trace_terminal_ip
+from app.modules.switches.trace import normalize_mac, trace_terminal_ip, trace_terminal_mac
 
 
 switch_bp = Blueprint("switch_api", __name__)
@@ -171,17 +171,49 @@ def switch_traffic_history(instance):
 def switch_trace_terminal():
     data = request.get_json(silent=True) or {}
     try:
-        target_ip = validate_ip(data.get("ip"), "终端 IP")
+        target_type, target_value = parse_trace_target(data)
     except ValueError as exc:
         return failure(str(exc), status=400)
 
-    payload, message, code = trace_terminal_ip(target_ip)
-    payload["target_name"] = trace_target_name(target_ip)
+    if target_type == "mac":
+        payload, message, code = trace_terminal_mac(target_value)
+        payload["target_name"] = trace_target_name(target_mac=target_value)
+    else:
+        payload, message, code = trace_terminal_ip(target_value)
+        payload["target_name"] = trace_target_name(target_ip=target_value)
     return success(payload, message=message, code=code)
 
 
-def trace_target_name(target_ip):
-    device = Device.query.filter_by(ip_address=target_ip).first()
+def parse_trace_target(data):
+    raw_target = data.get("target")
+    if raw_target is None or str(raw_target).strip() == "":
+        raw_target = data.get("mac") or data.get("ip")
+    target = str(raw_target or "").strip()
+    if not target:
+        raise ValueError("终端 IP 或 MAC 不能为空")
+
+    try:
+        return "ip", validate_ip(target, "终端 IP")
+    except ValueError:
+        try:
+            return "mac", normalize_mac(validate_mac(target, "终端 MAC"))
+        except ValueError as exc:
+            raise ValueError("终端地址格式不正确，请输入 IPv4 或 MAC 地址") from exc
+
+
+def trace_target_name(target_ip="", target_mac=""):
+    if target_ip:
+        device = Device.query.filter_by(ip_address=target_ip).first()
+        return device.username if device else "无"
+
+    normalized_target = normalize_mac(target_mac)
+    if not normalized_target:
+        return "无"
+    devices = Device.query.filter(Device.mac_address.isnot(None)).all()
+    device = next(
+        (item for item in devices if normalize_mac(item.mac_address) == normalized_target),
+        None,
+    )
     return device.username if device else "无"
 
 

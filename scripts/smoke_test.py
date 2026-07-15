@@ -548,7 +548,9 @@ def main():
         assert switch_trace.command_interface_name("GE0/0/4") == "GigabitEthernet 0/0/4"
         assert switch_trace.command_interface_name("GigabitEthernet0/0/4") == "GigabitEthernet 0/0/4"
         assert switch_trace.command_interface_name("Eth-Trunk16") == "Eth-Trunk 16"
-        assert switch_trace.cisco_mac("186f-2d0b-e080") == "18:6f:2d:0b:e0:80"
+        assert switch_trace.normalize_mac("90:09:D0:91:47:8F") == "9009-d091-478f"
+        assert switch_trace.normalize_mac("9009.D091.478F") == "9009-d091-478f"
+        assert switch_trace.cisco_mac("186f-2d0b-e080") == "186f.2d0b.e080"
         assert switch_trace.cisco_interface_name("GigabitEthernet1/0/36") == "Gi1/0/36"
         for trunk_id in (1, 2, 13, 14, 15, 16, 17, 18, 22):
             assert switch_trace.is_eth_trunk(f"Eth-Trunk{trunk_id}")
@@ -565,6 +567,27 @@ def main():
         ])) == ["GigabitEthernet0/0/47", "GigabitEthernet0/0/48"]
         mac_entries = switch_trace.parse_mac_entries("9009-d091-478f dynamic 1/- GE0/0/4")
         assert mac_entries[0]["interface"] == "GE0/0/4"
+
+        class FakeMacLookupSession:
+            platform = "huawei"
+
+            def mac_lookup_command(self, mac):
+                return f"display mac-address {mac}"
+
+            def run(self, command):
+                assert command == "display mac-address 9009-d091-478f"
+                return "9009-d091-478f dynamic 1/- GE0/0/4"
+
+        mac_lookup_hop = switch_trace.new_hop(1, "172.16.100.5")
+        mac_lookup_result = switch_trace.lookup_mac_on_switch(
+            FakeMacLookupSession(),
+            "9009-d091-478f",
+            mac_lookup_hop,
+        )
+        assert mac_lookup_result["found"] is True
+        assert mac_lookup_result["interface"] == "GE0/0/4"
+        assert mac_lookup_hop["lookup"] == "mac"
+        assert mac_lookup_hop["commands"][0]["command"] == "display mac-address 9009-d091-478f"
         lldp_neighbor = switch_trace.parse_lldp_neighbor("\n".join([
             "Management Address : 172.16.100.8",
             "System Name        : Access-SW-01",
@@ -682,7 +705,87 @@ def main():
         assert switch_trace.ssh_settings_for_platform(cisco_fallback_user_config, "cisco")["username"] == "shared-user"
         assert switch_trace.is_legacy_ssh_host_key_error(ValueError("p must be exactly 1024, 2048, 3072, or 4096 bits long"))
 
+        two_hop_config = switch_trace.SwitchTraceConfig(
+            "172.16.100.5", "huawei", "huawei-pass", 22, 8,
+            "cisco", "cisco-pass", 22, 8, "ssh", 23, 5,
+        )
+
+        class FakeTwoHopMacSession:
+            def __init__(self, host, config, platform="huawei"):
+                self.host = host
+                self.platform = platform
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return None
+
+            def mac_lookup_command(self, mac):
+                if self.platform == "cisco":
+                    return f"show mac address-table address {switch_trace.cisco_mac(mac)}"
+                return f"display mac-address {mac}"
+
+            def interface_macs_command(self, interface):
+                if self.platform == "cisco":
+                    return f"show mac address-table interface {switch_trace.cisco_interface_name(interface)}"
+                return f"display mac-address | include {interface}"
+
+            def lldp_neighbor_command(self, interface):
+                return f"display lldp neighbor interface {switch_trace.command_interface_name(interface)}"
+
+            def run(self, command):
+                responses = {
+                    ("172.16.100.5", "display mac-address 9009-d091-478f"): (
+                        "9009-d091-478f dynamic 1/- GE0/0/4"
+                    ),
+                    ("172.16.100.5", "display mac-address | include GE0/0/4"): "\n".join([
+                        "9009-d091-478f dynamic 1/- GE0/0/4",
+                        "d468-ba01-3672 dynamic 1/- GE0/0/4",
+                    ]),
+                    ("172.16.100.5", "display lldp neighbor interface GigabitEthernet 0/0/4"): "\n".join([
+                        "Management Address : 172.16.100.8",
+                        "System Name        : Cisco-Access-01",
+                        "Port ID            : Gi1/0/48",
+                        "System Description : Cisco IOS Software",
+                    ]),
+                    ("172.16.100.8", "show mac address-table address 9009.d091.478f"): (
+                        "9009.d091.478f 101 DYNAMIC Gi1/0/35"
+                    ),
+                    ("172.16.100.8", "show mac address-table interface Gi1/0/35"): (
+                        "9009.d091.478f 101 DYNAMIC Gi1/0/35"
+                    ),
+                }
+                assert (self.host, command) in responses, (self.host, command)
+                return responses[(self.host, command)]
+
+        original_build_trace_config = switch_trace.build_trace_config
+        original_load_connect_handler = switch_trace.load_connect_handler
+        original_cli_session = switch_trace.HuaweiCliSession
+        switch_trace.build_trace_config = lambda: two_hop_config
+        switch_trace.load_connect_handler = lambda: object()
+        switch_trace.HuaweiCliSession = FakeTwoHopMacSession
+        try:
+            with app.app_context():
+                two_hop_payload, two_hop_message, two_hop_code = switch_trace.trace_terminal_mac(
+                    "9009-d091-478f"
+                )
+            assert two_hop_code == 0
+            assert two_hop_message == "已定位到普通终端接口"
+            assert two_hop_payload["target_type"] == "mac"
+            assert two_hop_payload["final_switch"] == "172.16.100.8"
+            assert two_hop_payload["final_interface"] == "Gi1/0/35"
+            assert [hop["platform"] for hop in two_hop_payload["hops"]] == ["huawei", "cisco"]
+            assert two_hop_payload["hops"][1]["commands"][0]["command"] == (
+                "show mac address-table address 9009.d091.478f"
+            )
+        finally:
+            switch_trace.build_trace_config = original_build_trace_config
+            switch_trace.load_connect_handler = original_load_connect_handler
+            switch_trace.HuaweiCliSession = original_cli_session
+
         original_trace_terminal_ip = switch_routes.trace_terminal_ip
+        original_trace_terminal_mac = switch_routes.trace_terminal_mac
         original_device_trace_terminal_ip = device_routes.trace_terminal_ip
         with app.app_context():
             trace_device = Device(
@@ -700,6 +803,7 @@ def main():
             return {
                 "target_ip": ip,
                 "target_mac": "9009-d091-478f",
+                "target_type": "ip",
                 "start_switch": "172.16.100.5",
                 "final_switch": "172.16.100.8",
                 "final_interface": "GE0/0/12",
@@ -718,7 +822,33 @@ def main():
                 "error": "",
             }, "已定位到普通终端接口", 0
 
+        def fake_trace_terminal_mac(mac):
+            assert mac == "9009-d091-478f"
+            return {
+                "target_ip": "",
+                "target_mac": mac,
+                "target_type": "mac",
+                "start_switch": "172.16.100.5",
+                "final_switch": "172.16.100.8",
+                "final_interface": "GE0/0/12",
+                "result_type": "terminal",
+                "configured": True,
+                "hops": [{
+                    "index": 1,
+                    "switch_ip": "172.16.100.5",
+                    "ingress_interface": "GE0/0/4",
+                    "target_mac": mac,
+                    "mac_count": 2,
+                    "neighbor": {"management_ip": "172.16.100.8", "system_name": "Access-SW-01"},
+                    "commands": [{"command": f"display mac-address {mac}", "summary": "执行成功"}],
+                    "status": "发现下联交换机，继续追踪",
+                    "error": "",
+                }],
+                "error": "",
+            }, "已定位到普通终端接口", 0
+
         switch_routes.trace_terminal_ip = fake_trace_terminal_ip
+        switch_routes.trace_terminal_mac = fake_trace_terminal_mac
         device_routes.trace_terminal_ip = fake_trace_terminal_ip
         try:
             trace_response = client.post("/api/statistics/switches/trace-terminal", json={"ip": "172.16.70.17"})
@@ -729,6 +859,20 @@ def main():
             assert trace_json["data"]["target_mac"] == "9009-d091-478f"
             assert trace_json["data"]["final_interface"] == "GE0/0/12"
 
+            assert switch_routes.parse_trace_target({"target": "9009.D091.478F"}) == ("mac", "9009-d091-478f")
+            assert switch_routes.parse_trace_target({"target": "9009d091478f"}) == ("mac", "9009-d091-478f")
+            mac_trace_response = client.post(
+                "/api/statistics/switches/trace-terminal",
+                json={"target": "90:09:D0:91:47:8F"},
+            )
+            assert mac_trace_response.status_code == 200, mac_trace_response.get_data(as_text=True)
+            mac_trace_json = mac_trace_response.get_json()
+            assert mac_trace_json["code"] == 0
+            assert mac_trace_json["data"]["target_type"] == "mac"
+            assert mac_trace_json["data"]["target_name"] == "trace-terminal"
+            assert mac_trace_json["data"]["target_ip"] == ""
+            assert mac_trace_json["data"]["target_mac"] == "9009-d091-478f"
+
             preview_response = client.post("/api/access-control/device-port-preview", json={"ip_address": "172.16.70.17"})
             assert preview_response.status_code == 200, preview_response.get_data(as_text=True)
             preview_json = preview_response.get_json()
@@ -737,10 +881,12 @@ def main():
             assert preview_json["data"]["access_switch_ip"] == "172.16.100.8"
             assert preview_json["data"]["access_interface"] == "GE0/0/12"
 
-            invalid_trace_response = client.post("/api/statistics/switches/trace-terminal", json={"ip": "bad-ip"})
+            invalid_trace_response = client.post("/api/statistics/switches/trace-terminal", json={"target": "bad-address"})
             assert invalid_trace_response.status_code == 400, invalid_trace_response.get_data(as_text=True)
+            assert "IPv4 或 MAC" in invalid_trace_response.get_json()["message"]
         finally:
             switch_routes.trace_terminal_ip = original_trace_terminal_ip
+            switch_routes.trace_terminal_mac = original_trace_terminal_mac
             device_routes.trace_terminal_ip = original_device_trace_terminal_ip
             with app.app_context():
                 device = Device.query.get(trace_device_id)

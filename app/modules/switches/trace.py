@@ -116,8 +116,17 @@ class HuaweiCliSession:
 
 
 def trace_terminal_ip(target_ip):
+    return trace_terminal(target_ip=target_ip)
+
+
+def trace_terminal_mac(target_mac):
+    return trace_terminal(target_mac=target_mac)
+
+
+def trace_terminal(target_ip="", target_mac=""):
     config = build_trace_config()
-    payload = empty_trace_payload(target_ip, config.core_ip)
+    target_mac = normalize_mac(target_mac)
+    payload = empty_trace_payload(target_ip, config.core_ip, target_mac=target_mac)
 
     if not config.username or not config.password:
         payload["configured"] = False
@@ -140,7 +149,7 @@ def trace_terminal_ip(target_ip):
 
     current_switch = config.core_ip
     current_platform = "huawei"
-    target_mac = None
+    target_mac = target_mac or None
     visited = set()
 
     for hop_index in range(1, config.max_hops + 1):
@@ -170,13 +179,16 @@ def trace_terminal_ip(target_ip):
 
                 if not lookup_result.get("found"):
                     result_type = "not_found" if hop_index == 1 else "failed"
-                    message = "核心 ARP 未找到" if hop_index == 1 else "下联交换机未找到目标 MAC"
+                    if hop_index == 1:
+                        message = "核心 MAC 表未找到目标 MAC" if payload["target_type"] == "mac" else "核心 ARP 未找到"
+                    else:
+                        message = "下联交换机未找到目标 MAC"
                     return finish_trace(
                         payload,
                         result_type,
                         final_switch=current_switch,
                         final_interface=None,
-                        message=lookup_result.get("message") or message,
+                        message=message,
                         code=0 if result_type == "not_found" else 1,
                         hop=hop,
                     )
@@ -788,7 +800,7 @@ def cisco_mac(mac):
     hex_value = re.sub(r"[^0-9A-Fa-f]", "", str(mac or ""))
     if len(hex_value) != 12:
         return str(mac or "").strip().lower()
-    return ":".join(hex_value[i:i + 2] for i in range(0, 12, 2)).lower()
+    return ".".join(hex_value[i:i + 4] for i in range(0, 12, 4)).lower()
 
 
 def same_interface(left, right):
@@ -923,10 +935,11 @@ def command_record(command, output="", error=""):
     }
 
 
-def empty_trace_payload(target_ip, core_ip):
+def empty_trace_payload(target_ip, core_ip, target_mac=""):
     return {
         "target_ip": target_ip,
-        "target_mac": "",
+        "target_mac": target_mac,
+        "target_type": "mac" if target_mac else "ip",
         "start_switch": core_ip,
         "final_switch": "",
         "final_interface": "",
