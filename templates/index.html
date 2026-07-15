@@ -488,8 +488,8 @@
     </div>
 </section>
 
-<section class="panel osdwan-panel app-view" id="osdwan-panel" hidden>
-    <div class="panel-header">
+<section class="panel osdwan-panel ops-workspace-view ops-monitor-view app-view" id="osdwan-panel" hidden>
+    <div class="panel-header ops-module-header">
         <div>
             <h2>OSDWAN 监控</h2>
             <p class="panel-subtitle" id="osdwan-source">-</p>
@@ -501,36 +501,36 @@
             </button>
         </div>
     </div>
-    <section class="metric-grid compact osdwan-metrics">
-        <article class="metric">
+    <section class="metric-grid compact osdwan-metrics ops-stat-strip">
+        <article class="metric ops-stat">
             <div class="metric-icon osdwan"><i class="bi bi-people"></i></div>
             <div>
                 <div class="metric-label">用户数</div>
                 <div class="metric-value" id="osdwan-user-count">-</div>
             </div>
         </article>
-        <article class="metric">
+        <article class="metric ops-stat">
             <div class="metric-icon people"><i class="bi bi-person-lines-fill"></i></div>
             <div>
                 <div class="metric-label">关联人员数</div>
                 <div class="metric-value" id="osdwan-person-count">-</div>
             </div>
         </article>
-        <article class="metric">
+        <article class="metric ops-stat">
             <div class="metric-icon exit"><i class="bi bi-hdd-network"></i></div>
             <div>
                 <div class="metric-label">出口状态</div>
                 <div class="metric-value" id="osdwan-proxy-status">-</div>
             </div>
         </article>
-        <article class="metric osdwan-bandwidth-card">
+        <article class="metric ops-stat osdwan-bandwidth-card">
             <div class="metric-icon wireless"><i class="bi bi-arrow-down-up"></i></div>
             <div>
                 <div class="metric-label">带宽统计</div>
                 <div class="metric-value osdwan-bandwidth-value" id="osdwan-all-latest">-</div>
             </div>
         </article>
-        <article class="metric osdwan-bandwidth-card">
+        <article class="metric ops-stat osdwan-bandwidth-card">
             <div class="metric-icon devices"><i class="bi bi-cloud"></i></div>
             <div>
                 <div class="metric-label">SaaS 流量</div>
@@ -538,8 +538,8 @@
             </div>
         </article>
     </section>
-    <section class="chart-grid osdwan-chart-stack">
-        <section class="chart-panel">
+    <section class="chart-grid osdwan-chart-stack ops-chart-grid">
+        <section class="chart-panel ops-chart-panel">
             <div class="panel-header">
                 <div>
                     <h2>带宽统计</h2>
@@ -552,7 +552,7 @@
             </div>
             <canvas id="osdwan-all-chart" class="bandwidth-chart"></canvas>
         </section>
-        <section class="chart-panel">
+        <section class="chart-panel ops-chart-panel">
             <div class="panel-header">
                 <div>
                     <h2>SaaS 流量</h2>
@@ -566,7 +566,14 @@
             <canvas id="osdwan-node-chart" class="bandwidth-chart"></canvas>
         </section>
     </section>
-    <div class="toolbar-row osdwan-users-toolbar">
+    <section class="ops-list-panel" aria-labelledby="osdwan-users-title">
+    <div class="ops-list-heading">
+        <div>
+            <h3 id="osdwan-users-title">用户与出口</h3>
+            <div class="list-summary" id="osdwan-users-summary">-</div>
+        </div>
+    </div>
+    <div class="toolbar-row osdwan-users-toolbar ops-toolbar">
         <input id="osdwan-user-search" name="osdwan_user_search" placeholder="搜索用户、人员、出口 IP" aria-label="搜索 OSDWAN 用户、人员或出口 IP" autocomplete="off">
         <select id="osdwan-department-filter" aria-label="OSDWAN 部门筛选">
             <option value="">全部部门</option>
@@ -579,9 +586,8 @@
             <option value="200">200 / 页</option>
         </select>
     </div>
-    <div class="list-summary" id="osdwan-users-summary">-</div>
     <div class="table-wrap">
-        <table>
+        <table class="ops-data-table">
             <thead>
                 <tr>
                     <th>用户</th>
@@ -611,10 +617,11 @@
             <i class="bi bi-chevron-right"></i>
         </button>
     </div>
+    </section>
 </section>
 
-<section class="panel switches-panel app-view" id="switches-panel" hidden>
-    <div class="panel-header">
+<section class="panel switches-panel ops-workspace-view ops-monitor-view app-view" id="switches-panel" hidden>
+    <div class="panel-header ops-module-header">
         <div>
             <h2>交换机监控</h2>
             <p class="panel-subtitle" id="switches-source">Prometheus targets</p>
@@ -626,22 +633,22 @@
             </button>
         </div>
     </div>
-    <section class="metric-grid compact">
-        <article class="metric">
+    <section class="metric-grid compact ops-stat-strip">
+        <article class="metric ops-stat">
             <div class="metric-icon switches"><i class="bi bi-diagram-3"></i></div>
             <div>
                 <div class="metric-label">交换机总数</div>
                 <div class="metric-value" id="switch-total">-</div>
             </div>
         </article>
-        <article class="metric">
+        <article class="metric ops-stat">
             <div class="metric-icon wireless"><i class="bi bi-check-circle"></i></div>
             <div>
                 <div class="metric-label">在线</div>
                 <div class="metric-value" id="switch-online">-</div>
             </div>
         </article>
-        <article class="metric">
+        <article class="metric ops-stat">
             <div class="metric-icon devices"><i class="bi bi-clock-history"></i></div>
             <div>
                 <div class="metric-label">平均采集耗时</div>
@@ -667,7 +674,14 @@
         <div class="list-summary" id="switch-trace-summary">输入终端 IP 后开始定位真实接入口</div>
         <div class="switch-trace-result" id="switch-trace-result" hidden></div>
     </section>
-    <div class="toolbar-row switch-toolbar">
+    <section class="ops-list-panel" aria-labelledby="switch-list-title">
+    <div class="ops-list-heading">
+        <div>
+            <h3 id="switch-list-title">交换机列表</h3>
+            <div class="list-summary" id="switches-summary">-</div>
+        </div>
+    </div>
+    <div class="toolbar-row switch-toolbar ops-toolbar">
         <input id="switch-search" name="switch_search" placeholder="搜索 IP、厂商、模块、状态、错误" aria-label="搜索交换机 IP、厂商、模块、状态或错误" autocomplete="off">
         <select id="switch-vendor-filter" aria-label="厂商筛选">
             <option value="">全部厂商</option>
@@ -679,7 +693,6 @@
             <option value="100">100 / 页</option>
         </select>
     </div>
-    <div class="list-summary" id="switches-summary">-</div>
     <div class="quick-filter-row" id="switch-status-filter" aria-label="交换机状态筛选">
         <button class="filter-chip active" type="button" data-switch-status="">
             <span>全部</span>
@@ -695,7 +708,7 @@
         </button>
     </div>
     <div class="table-wrap">
-        <table>
+        <table class="ops-data-table">
             <thead>
                 <tr>
                     <th>IP</th>
@@ -727,6 +740,7 @@
             <i class="bi bi-chevron-right"></i>
         </button>
     </div>
+    </section>
     <section class="switch-detail-section" id="switch-detail-section" hidden>
         <div class="switch-detail-header">
             <div>
@@ -792,7 +806,7 @@
             </div>
             <canvas id="switch-traffic-chart" class="bandwidth-chart switch-traffic-chart"></canvas>
         </div>
-        <div class="toolbar-row switch-port-toolbar">
+        <div class="toolbar-row switch-port-toolbar ops-toolbar">
             <input id="switch-port-search" name="switch_port_search" placeholder="搜索端口、描述、速率、状态" aria-label="搜索交换机端口、描述、速率或状态" autocomplete="off">
             <select id="switch-port-scope" aria-label="端口范围">
                 <option value="business" selected>业务端口</option>
@@ -812,7 +826,7 @@
         </div>
         <div class="list-summary" id="switch-ports-summary">-</div>
         <div class="table-wrap">
-            <table>
+            <table class="ops-data-table">
                 <thead>
                     <tr>
                         <th>端口</th>
@@ -846,9 +860,12 @@
     </section>
 </section>
 
-<section class="panel users-panel app-view" id="users-panel" hidden>
-    <div class="panel-header">
-        <h2>用户列表</h2>
+<section class="panel users-panel ops-workspace-view ops-admin-view app-view" id="users-panel" hidden>
+    <div class="panel-header ops-module-header">
+        <div>
+            <h2>用户管理</h2>
+            <p class="panel-subtitle">系统账号、角色与访问状态</p>
+        </div>
         <div class="button-row">
             <button class="small-button primary" id="create-user-button" type="button">
                 <i class="bi bi-person-plus"></i>
@@ -860,8 +877,21 @@
             </button>
         </div>
     </div>
+    <dl class="ops-summary-strip" aria-label="用户账号摘要">
+        <div><dt>账号总数</dt><dd id="user-stat-total">-</dd></div>
+        <div><dt>已启用</dt><dd id="user-stat-active">-</dd></div>
+        <div><dt>已停用</dt><dd id="user-stat-inactive">-</dd></div>
+        <div><dt>管理员</dt><dd id="user-stat-admin">-</dd></div>
+    </dl>
+    <section class="ops-list-panel" aria-labelledby="user-list-title">
+    <div class="ops-list-heading">
+        <div>
+            <h3 id="user-list-title">账号列表</h3>
+            <div class="list-summary" id="users-summary">-</div>
+        </div>
+    </div>
     <div class="table-wrap">
-        <table>
+        <table class="ops-data-table">
             <thead>
                 <tr>
                     <th>用户名</th>
@@ -880,11 +910,15 @@
             </tbody>
         </table>
     </div>
+    </section>
 </section>
 
-<section class="panel devices-panel app-view" id="devices-panel" hidden>
-    <div class="panel-header">
-        <h2>设备列表</h2>
+<section class="panel devices-panel ops-workspace-view ops-admin-view app-view" id="devices-panel" hidden>
+    <div class="panel-header ops-module-header">
+        <div>
+            <h2>设备列表</h2>
+            <p class="panel-subtitle">本地设备清单、接入位置与在线状态</p>
+        </div>
         <div class="button-row">
             <button class="small-button primary" id="create-device-button" type="button">
                 <i class="bi bi-plus-lg"></i>
@@ -909,8 +943,21 @@
         </div>
     </div>
 
+    <dl class="ops-summary-strip" aria-label="设备状态摘要">
+        <div><dt>设备总数</dt><dd id="device-stat-total">-</dd></div>
+        <div><dt>在线</dt><dd id="device-stat-online">-</dd></div>
+        <div><dt>离线</dt><dd id="device-stat-offline">-</dd></div>
+        <div><dt>状态过期</dt><dd id="device-stat-stale">-</dd></div>
+    </dl>
     <input id="device-import-file" type="file" accept=".csv,text/csv" hidden>
-    <div class="toolbar-row device-toolbar">
+    <section class="ops-list-panel" aria-labelledby="device-list-title">
+    <div class="ops-list-heading">
+        <div>
+            <h3 id="device-list-title">资产明细</h3>
+            <div class="list-summary" id="devices-summary">-</div>
+        </div>
+    </div>
+    <div class="toolbar-row device-toolbar ops-toolbar">
         <input id="device-search" name="device_search" placeholder="搜索名称、IP、MAC、接入交换机、接口、分类、备注" aria-label="搜索设备名称、IP、MAC、接入交换机、接口、分类或备注" autocomplete="off">
         <select id="device-category-filter" aria-label="设备分类">
             <option value="">全部分类</option>
@@ -923,7 +970,6 @@
             <option value="200">200 / 页</option>
         </select>
     </div>
-    <div class="list-summary" id="devices-summary">-</div>
     <div class="freshness-banner" id="device-freshness-banner" role="status" aria-live="polite" hidden></div>
     <div class="quick-filter-row" id="device-status-filter" aria-label="设备状态筛选">
         <button class="filter-chip active" type="button" data-device-status="">
@@ -941,7 +987,7 @@
     </div>
 
     <div class="table-wrap">
-        <table>
+        <table class="ops-data-table">
             <thead>
                 <tr>
                     <th>名称</th>
@@ -972,42 +1018,48 @@
             <i class="bi bi-chevron-right"></i>
         </button>
     </div>
+    </section>
 </section>
 
-<section class="panel wireless-panel app-view" id="wireless-panel" hidden>
-    <div class="panel-header">
-        <h2>无线控制器</h2>
+<section class="panel wireless-panel ops-workspace-view ops-monitor-view app-view" id="wireless-panel" hidden>
+    <div class="panel-header ops-module-header">
+        <div>
+            <h2>无线控制器</h2>
+            <p class="panel-subtitle">AP 运行状态与在线终端流量</p>
+        </div>
         <div class="button-row">
-            <button class="small-button active" id="wireless-ap-view-button" type="button">
+            <div class="ops-segmented" role="group" aria-label="无线数据视图">
+            <button class="small-button active" id="wireless-ap-view-button" type="button" aria-pressed="true">
                 <i class="bi bi-router"></i>
                 <span>AP 列表</span>
             </button>
-            <button class="small-button" id="wireless-user-view-button" type="button">
+            <button class="small-button" id="wireless-user-view-button" type="button" aria-pressed="false">
                 <i class="bi bi-people"></i>
                 <span>在线用户</span>
             </button>
+            </div>
             <button class="small-button" id="reload-wireless" type="button">
                 <i class="bi bi-arrow-clockwise"></i>
                 <span>刷新</span>
             </button>
         </div>
     </div>
-    <section class="metric-grid compact">
-        <article class="metric">
+    <section class="metric-grid compact ops-stat-strip">
+        <article class="metric ops-stat">
             <div class="metric-icon devices"><i class="bi bi-wifi"></i></div>
             <div>
                 <div class="metric-label">无线用户</div>
                 <div class="metric-value" id="wireless-users">-</div>
             </div>
         </article>
-        <article class="metric">
+        <article class="metric ops-stat">
             <div class="metric-icon cache"><i class="bi bi-router"></i></div>
             <div>
                 <div class="metric-label">在线 AP</div>
                 <div class="metric-value" id="wireless-ap-online">-</div>
             </div>
         </article>
-        <article class="metric">
+        <article class="metric ops-stat">
             <div class="metric-icon users"><i class="bi bi-cpu"></i></div>
             <div>
                 <div class="metric-label">CPU</div>
@@ -1015,8 +1067,9 @@
             </div>
         </article>
     </section>
-    <div id="wireless-ap-view">
-        <div class="toolbar-row wireless-ap-toolbar">
+    <div class="ops-list-panel" id="wireless-ap-view">
+        <div class="ops-list-heading"><h3>AP 列表</h3></div>
+        <div class="toolbar-row wireless-ap-toolbar ops-toolbar">
             <input id="wireless-ap-search" name="wireless_ap_search" placeholder="搜索 AP、IP、MAC、状态" aria-label="搜索 AP、IP、MAC 或状态" autocomplete="off">
             <select id="wireless-ap-page-size" aria-label="每页数量">
                 <option value="10" selected>10 / 页</option>
@@ -1042,7 +1095,7 @@
             </button>
         </div>
         <div class="table-wrap">
-            <table>
+            <table class="ops-data-table">
                 <thead>
                     <tr>
                         <th>AP</th>
@@ -1074,8 +1127,9 @@
         </div>
     </div>
 
-    <div id="wireless-user-view" hidden>
-        <div class="toolbar-row wireless-user-toolbar">
+    <div class="ops-list-panel" id="wireless-user-view" hidden>
+        <div class="ops-list-heading"><h3>在线用户</h3></div>
+        <div class="toolbar-row wireless-user-toolbar ops-toolbar">
             <input id="wireless-user-search" name="wireless_user_search" placeholder="搜索用户数据、姓名、IP" aria-label="搜索无线用户、姓名或 IP" autocomplete="off">
             <select id="wireless-user-page-size" aria-label="每页数量">
                 <option value="10" selected>10 / 页</option>
@@ -1087,7 +1141,7 @@
         </div>
         <div class="list-summary" id="wireless-users-summary">-</div>
         <div class="table-wrap">
-            <table>
+            <table class="ops-data-table">
                 <thead>
                     <tr>
                         <th>用户数据</th>
@@ -1118,9 +1172,12 @@
     </div>
 </section>
 
-<section class="panel clients-panel app-view" id="clients-panel" hidden>
-    <div class="panel-header">
-        <h2>客户端列表</h2>
+<section class="panel clients-panel ops-workspace-view ops-admin-view app-view" id="clients-panel" hidden>
+    <div class="panel-header ops-module-header">
+        <div>
+            <h2>客户端列表</h2>
+            <p class="panel-subtitle">联软准入终端与身份识别状态</p>
+        </div>
         <div class="button-row">
             <button class="small-button" id="reload-clients" type="button">
                 <i class="bi bi-arrow-clockwise"></i>
@@ -1128,7 +1185,19 @@
             </button>
         </div>
     </div>
-    <div class="toolbar-row">
+    <dl class="ops-summary-strip ops-summary-strip-three" aria-label="客户端状态摘要">
+        <div><dt>客户端总数</dt><dd id="client-stat-total">-</dd></div>
+        <div><dt>在线</dt><dd id="client-stat-online">-</dd></div>
+        <div><dt>离线</dt><dd id="client-stat-offline">-</dd></div>
+    </dl>
+    <section class="ops-list-panel" aria-labelledby="client-list-title">
+    <div class="ops-list-heading">
+        <div>
+            <h3 id="client-list-title">终端明细</h3>
+            <div class="list-summary" id="clients-summary">-</div>
+        </div>
+    </div>
+    <div class="toolbar-row ops-toolbar">
         <input id="client-search" name="client_search" placeholder="搜索 IP、用户、姓名、设备名、MAC、系统" aria-label="搜索客户端 IP、用户、姓名、设备名、MAC 或系统" autocomplete="off">
         <select id="client-page-size" aria-label="每页数量">
             <option value="10" selected>10 / 页</option>
@@ -1138,7 +1207,6 @@
             <option value="200">200 / 页</option>
         </select>
     </div>
-    <div class="list-summary" id="clients-summary">-</div>
     <div class="quick-filter-row" id="client-status-filter" aria-label="客户端状态筛选">
         <button class="filter-chip active" type="button" data-client-status="">
             <span>全部</span>
@@ -1154,7 +1222,7 @@
         </button>
     </div>
     <div class="table-wrap">
-        <table>
+        <table class="ops-data-table">
             <thead>
                 <tr>
                     <th>IP</th>
@@ -1185,9 +1253,10 @@
             <i class="bi bi-chevron-right"></i>
         </button>
     </div>
+    </section>
 </section>
 
-<div class="modal-backdrop" id="device-modal" role="dialog" aria-modal="true" aria-labelledby="device-modal-title" hidden>
+<div class="modal-backdrop ops-modal-backdrop" id="device-modal" role="dialog" aria-modal="true" aria-labelledby="device-modal-title" hidden>
     <form class="modal-card device-modal-card" id="device-form" data-modal-card>
         <div class="modal-header">
             <h2 id="device-modal-title">新增设备</h2>
@@ -1241,7 +1310,7 @@
     </form>
 </div>
 
-<div class="modal-backdrop" id="user-modal" role="dialog" aria-modal="true" aria-labelledby="user-modal-title" hidden>
+<div class="modal-backdrop ops-modal-backdrop" id="user-modal" role="dialog" aria-modal="true" aria-labelledby="user-modal-title" hidden>
     <form class="modal-card" id="user-form" data-modal-card>
         <div class="modal-header">
             <h2 id="user-modal-title">新增用户</h2>
@@ -1288,7 +1357,7 @@
     </form>
 </div>
 
-<div class="modal-backdrop" id="password-modal" role="dialog" aria-modal="true" aria-labelledby="password-modal-title" hidden>
+<div class="modal-backdrop ops-modal-backdrop" id="password-modal" role="dialog" aria-modal="true" aria-labelledby="password-modal-title" hidden>
     <form class="modal-card compact-modal" id="password-form" data-modal-card>
         <div class="modal-header">
             <h2 id="password-modal-title">重置密码</h2>
@@ -1309,7 +1378,7 @@
     </form>
 </div>
 
-<div class="modal-backdrop" id="lock-modal" role="dialog" aria-modal="true" aria-labelledby="lock-modal-title" hidden>
+<div class="modal-backdrop ops-modal-backdrop" id="lock-modal" role="dialog" aria-modal="true" aria-labelledby="lock-modal-title" hidden>
     <form class="modal-card compact-modal" id="lock-form" data-modal-card>
         <div class="modal-header">
             <h2 id="lock-modal-title">锁定用户</h2>

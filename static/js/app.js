@@ -268,6 +268,26 @@ const osdwanState = {
     proxyStatus: null,
 };
 
+const OPS_VIEW_IDS = new Set([
+    'dashboard-panel',
+    'firewall-bandwidth-panel',
+    'traffic-analysis-panel',
+    'osdwan-panel',
+    'switches-panel',
+    'wireless-panel',
+    'devices-panel',
+    'clients-panel',
+    'users-panel',
+]);
+const WORKSPACE_VIEW_IDS = new Set([
+    'osdwan-panel',
+    'switches-panel',
+    'wireless-panel',
+    'devices-panel',
+    'clients-panel',
+    'users-panel',
+]);
+
 function showView(viewId, navId, titleKey) {
     document.querySelectorAll('.app-view').forEach((view) => {
         view.hidden = view.id !== viewId;
@@ -275,7 +295,8 @@ function showView(viewId, navId, titleKey) {
     const dashboardActive = viewId === 'dashboard-panel';
     const firewallActive = viewId === 'firewall-bandwidth-panel';
     const trafficActive = viewId === 'traffic-analysis-panel';
-    document.body.classList.toggle('ops-screen-active', dashboardActive || firewallActive || trafficActive);
+    document.body.classList.toggle('ops-screen-active', OPS_VIEW_IDS.has(viewId));
+    document.body.classList.toggle('workspace-screen-active', WORKSPACE_VIEW_IDS.has(viewId));
     document.body.classList.toggle('dashboard-screen-active', dashboardActive);
     document.body.classList.toggle('firewall-screen-active', firewallActive);
     document.body.classList.toggle('traffic-screen-active', trafficActive);
@@ -1470,8 +1491,9 @@ function renderOsdwanMetrics(data, options = {}) {
     document.getElementById('osdwan-all-source').textContent = `${renderOsdwanPeriod(data.all_period)} · 样本 ${data.all_stats?.sample_count ?? 0} 个`;
     document.getElementById('osdwan-node-source').textContent = `${data.node?.name || '办公开发'} · ${renderOsdwanPeriod(data.node?.period)} · 样本 ${data.node?.stats?.sample_count ?? 0} 个`;
 
-    drawBandwidthChart('osdwan-all-chart', osdwanState.allSamples, osdwanChartSeries());
-    drawBandwidthChart('osdwan-node-chart', osdwanState.nodeSamples, osdwanChartSeries());
+    const chartOptions = {theme: 'dark', emptyMessage: '暂无流量样本'};
+    drawBandwidthChart('osdwan-all-chart', osdwanState.allSamples, osdwanChartSeries(), chartOptions);
+    drawBandwidthChart('osdwan-node-chart', osdwanState.nodeSamples, osdwanChartSeries(), chartOptions);
 }
 
 function renderOsdwanUserPage(data) {
@@ -1521,8 +1543,9 @@ function renderOsdwanMetricsError(message, data = {}, options = {}) {
     }
     document.getElementById('osdwan-all-source').textContent = message;
     document.getElementById('osdwan-node-source').textContent = message;
-    drawBandwidthChart('osdwan-all-chart', [], osdwanChartSeries());
-    drawBandwidthChart('osdwan-node-chart', [], osdwanChartSeries());
+    const chartOptions = {theme: 'dark', emptyMessage: message || '暂无流量样本'};
+    drawBandwidthChart('osdwan-all-chart', [], osdwanChartSeries(), chartOptions);
+    drawBandwidthChart('osdwan-node-chart', [], osdwanChartSeries(), chartOptions);
     osdwanState.proxyStatus = null;
 }
 
@@ -1558,8 +1581,8 @@ function renderOsdwanLatestMetric(elementId, sample) {
 
 function osdwanChartSeries() {
     return [
-        {key: 'download_mbps', label: '下行', color: '#8b7cf6', fill: 'rgba(139, 124, 246, 0.16)', width: 1.7},
-        {key: 'upload_mbps', label: '上行', color: '#4fc3c7', fill: 'rgba(79, 195, 199, 0.18)', width: 1.7},
+        {key: 'download_mbps', label: '下行', color: '#58b88b', fill: 'rgba(88, 184, 139, 0.10)', width: 1.8},
+        {key: 'upload_mbps', label: '上行', color: '#63a7df', fill: 'rgba(99, 167, 223, 0.08)', width: 1.8},
     ];
 }
 
@@ -1621,13 +1644,13 @@ function renderOsdwanUsers(users, errorMessage = '', pagination = {}) {
     }
     body.innerHTML = users.map((user) => `
         <tr>
-            <td>${escapeHtml(user.username || user.id || '-')}</td>
-            <td>${renderPersonChips(user.people || [])}</td>
-            <td>${escapeHtml(user.departments || '-')}</td>
-            <td>${escapeHtml(user.email || '-')}</td>
-            <td>${escapeHtml(user.role || '-')}</td>
-            <td>${escapeHtml(user.status || '-')}</td>
-            <td>${escapeHtml(user.proxy_ips || '-')}</td>
+            <td data-label="用户">${escapeHtml(user.username || user.id || '-')}</td>
+            <td data-label="关联人员">${renderPersonChips(user.people || [])}</td>
+            <td data-label="部门">${escapeHtml(user.departments || '-')}</td>
+            <td data-label="邮箱">${escapeHtml(user.email || '-')}</td>
+            <td data-label="角色">${escapeHtml(user.role || '-')}</td>
+            <td data-label="状态">${escapeHtml(user.status || '-')}</td>
+            <td data-label="出口 IP">${escapeHtml(user.proxy_ips || '-')}</td>
         </tr>
     `).join('');
 }
@@ -1932,30 +1955,55 @@ async function loadUsers() {
     showView('users-panel', 'users-nav', 'users');
     const usersPanel = document.getElementById('users-panel');
     const body = document.getElementById('users-table-body');
+    const summary = document.getElementById('users-summary');
     usersPanel.hidden = false;
     body.innerHTML = '<tr><td colspan="7">加载中</td></tr>';
+    if (summary) {
+        summary.textContent = '加载中';
+    }
 
     try {
         const result = await apiGet('/api/user/list');
         const users = Array.isArray(result) ? result : (result.users || []);
         usersCache = users;
+        renderUserOpsSummary(users);
         if (!users.length) {
             body.innerHTML = '<tr><td colspan="7">暂无数据</td></tr>';
             return;
         }
         body.innerHTML = users.map((user) => `
             <tr>
-                <td>${escapeHtml(user.username)}</td>
-                <td>${escapeHtml(user.full_name || '-')}</td>
-                <td>${escapeHtml(user.email || '-')}</td>
-                <td>${escapeHtml(user.role)}</td>
-                <td>${renderUserStatus(user)}</td>
-                <td>${escapeHtml(user.last_login || '-')}</td>
-                <td>${renderUserActions(user)}</td>
+                <td data-label="用户名">${escapeHtml(user.username)}</td>
+                <td data-label="姓名">${escapeHtml(user.full_name || '-')}</td>
+                <td data-label="邮箱">${escapeHtml(user.email || '-')}</td>
+                <td data-label="角色">${escapeHtml(user.role)}</td>
+                <td data-label="状态">${renderUserStatus(user)}</td>
+                <td data-label="最后登录">${escapeHtml(user.last_login || '-')}</td>
+                <td data-label="操作">${renderUserActions(user)}</td>
             </tr>
         `).join('');
     } catch (error) {
         body.innerHTML = `<tr><td colspan="7">${escapeHtml(error.message)}</td></tr>`;
+        if (summary) {
+            summary.textContent = '加载失败';
+        }
+        renderUserOpsSummary([]);
+    }
+}
+
+function renderUserOpsSummary(users) {
+    const total = users.length;
+    const active = users.filter((user) => user.is_active).length;
+    const admin = users.filter((user) => user.is_superuser || user.role === 'admin').length;
+    setText('user-stat-total', total);
+    setText('user-stat-active', active);
+    setText('user-stat-inactive', Math.max(0, total - active));
+    setText('user-stat-admin', admin);
+    const summary = document.getElementById('users-summary');
+    if (summary) {
+        summary.textContent = total
+            ? `共 ${total} 个账号，启用 ${active} 个，管理员 ${admin} 个`
+            : '暂无系统账号';
     }
 }
 
@@ -2009,6 +2057,7 @@ async function loadDevices(options = {}) {
         renderDeviceStatusFilters();
         renderDevicePager();
         renderDeviceFreshnessBanner(deviceState.statusFreshness);
+        renderDeviceOpsSummary();
 
         summary.textContent = `${renderDeviceSummaryPrefix()}共 ${deviceState.total} 台，当前显示 ${result.returned || devices.length} 台${renderDeviceFreshnessSummary(deviceState.statusFreshness)}`;
         if (!devices.length) {
@@ -2018,20 +2067,21 @@ async function loadDevices(options = {}) {
         }
         body.innerHTML = devices.map((device) => `
             <tr>
-                <td title="${escapeHtml(device.details || '')}">${escapeHtml(device.username)}</td>
-                <td>${escapeHtml(device.ip_address)}</td>
-                <td class="device-port-cell" data-device-port-cell="${escapeHtml(device.id)}">${renderDevicePortLookup(device)}</td>
-                <td>${escapeHtml(device.mac_address || '-')}</td>
-                <td>${escapeHtml(device.category || '未分类')}</td>
-                <td>${renderDeviceStatus(device)}</td>
-                <td>${escapeHtml(device.last_check_time || '-')}</td>
-                <td>${renderDeviceActions(device)}</td>
+                <td data-label="名称" title="${escapeHtml(device.details || '')}">${escapeHtml(device.username)}</td>
+                <td data-label="IP">${escapeHtml(device.ip_address)}</td>
+                <td data-label="端口" class="device-port-cell" data-device-port-cell="${escapeHtml(device.id)}">${renderDevicePortLookup(device)}</td>
+                <td data-label="MAC">${escapeHtml(device.mac_address || '-')}</td>
+                <td data-label="分类">${escapeHtml(device.category || '未分类')}</td>
+                <td data-label="状态">${renderDeviceStatus(device)}</td>
+                <td data-label="最后检查">${escapeHtml(device.last_check_time || '-')}</td>
+                <td data-label="操作">${renderDeviceActions(device)}</td>
             </tr>
         `).join('');
         maybeAutoRefreshDeviceStatus(deviceState.statusFreshness, options);
     } catch (error) {
         body.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
         summary.textContent = '加载失败';
+        renderDeviceOpsSummary();
     }
 }
 
@@ -2095,13 +2145,13 @@ async function loadWireless(options = {}) {
         }
         body.innerHTML = apList.map((ap) => `
             <tr>
-                <td>${escapeHtml(ap.ap_name || '-')}</td>
-                <td>${escapeHtml(ap.ap_ip || '-')}</td>
-                <td>${escapeHtml(ap.ap_mac_address || '-')}</td>
-                <td>${renderWirelessApStatus(ap)}</td>
-                <td>${escapeHtml(ap.user_count ?? 0)}</td>
-                <td>${escapeHtml(ap.ap_recv_rate || '-')}</td>
-                <td>${escapeHtml(ap.ap_send_rate || '-')}</td>
+                <td data-label="AP">${escapeHtml(ap.ap_name || '-')}</td>
+                <td data-label="IP">${escapeHtml(ap.ap_ip || '-')}</td>
+                <td data-label="MAC">${escapeHtml(ap.ap_mac_address || '-')}</td>
+                <td data-label="状态">${renderWirelessApStatus(ap)}</td>
+                <td data-label="用户数">${escapeHtml(ap.user_count ?? 0)}</td>
+                <td data-label="上行">${escapeHtml(ap.ap_recv_rate || '-')}</td>
+                <td data-label="下行">${escapeHtml(ap.ap_send_rate || '-')}</td>
             </tr>
         `).join('');
     } catch (error) {
@@ -2183,15 +2233,15 @@ async function loadSwitches(options = {}) {
 
         body.innerHTML = switches.map((item) => `
             <tr class="${item.instance === switchState.selectedInstance ? 'selected-row' : ''}">
-                <td>${escapeHtml(item.instance || '-')}</td>
-                <td>${escapeHtml(renderSwitchVendorName(item.vendor))}</td>
-                <td>${escapeHtml(item.module || '-')}</td>
-                <td>${renderSwitchStatus(item)}</td>
-                <td>${escapeHtml(item.last_scrape_at || '-')}</td>
-                <td>${escapeHtml(item.scrape_duration_text || '-')}</td>
-                <td>${escapeHtml(item.scrape_interval || '-')}</td>
-                <td title="${escapeHtml(item.last_error || '')}">${escapeHtml(item.last_error || '-')}</td>
-                <td>
+                <td data-label="IP">${escapeHtml(item.instance || '-')}</td>
+                <td data-label="厂商">${escapeHtml(renderSwitchVendorName(item.vendor))}</td>
+                <td data-label="模块">${escapeHtml(item.module || '-')}</td>
+                <td data-label="状态">${renderSwitchStatus(item)}</td>
+                <td data-label="最近采集">${escapeHtml(item.last_scrape_at || '-')}</td>
+                <td data-label="采集耗时">${escapeHtml(item.scrape_duration_text || '-')}</td>
+                <td data-label="间隔">${escapeHtml(item.scrape_interval || '-')}</td>
+                <td data-label="错误" title="${escapeHtml(item.last_error || '')}">${escapeHtml(item.last_error || '-')}</td>
+                <td data-label="端口">
                     <button class="icon-action" type="button" data-switch-action="ports" data-switch-instance="${escapeHtml(item.instance || '')}" title="端口与流量">
                         <i class="bi bi-activity"></i>
                         <span>端口</span>
@@ -2609,24 +2659,24 @@ function renderSwitchPortData(data) {
         const utilization = Number(port.utilization || 0);
         return `
             <tr>
-                <td>
+                <td data-label="端口">
                     <div class="stacked-cell">
                         <strong>${escapeHtml(port.if_name || '-')}</strong>
                         <small>#${escapeHtml(port.if_index || '-')}</small>
                     </div>
                 </td>
-                <td title="${escapeHtml(port.if_alias || '')}">${escapeHtml(port.if_alias || '-')}</td>
-                <td>${renderSwitchPortStatus(port)}</td>
-                <td>${escapeHtml(port.speed_text || '-')}</td>
-                <td>${escapeHtml(port.in_rate || '0 bps')}</td>
-                <td>${escapeHtml(port.out_rate || '0 bps')}</td>
-                <td>
+                <td data-label="描述" title="${escapeHtml(port.if_alias || '')}">${escapeHtml(port.if_alias || '-')}</td>
+                <td data-label="状态">${renderSwitchPortStatus(port)}</td>
+                <td data-label="速率">${escapeHtml(port.speed_text || '-')}</td>
+                <td data-label="入方向">${escapeHtml(port.in_rate || '0 bps')}</td>
+                <td data-label="出方向">${escapeHtml(port.out_rate || '0 bps')}</td>
+                <td data-label="利用率">
                     <div class="utilization-cell">
                         <span style="width: ${clampPercent(utilization)}%"></span>
                         <strong>${escapeHtml(port.utilization_text || '-')}</strong>
                     </div>
                 </td>
-                <td title="入错误 ${escapeHtml(port.in_errors || 0)}，出错误 ${escapeHtml(port.out_errors || 0)}">${escapeHtml(errorTotal)}</td>
+                <td data-label="错误" title="入错误 ${escapeHtml(port.in_errors || 0)}，出错误 ${escapeHtml(port.out_errors || 0)}">${escapeHtml(errorTotal)}</td>
             </tr>
         `;
     }).join('');
@@ -2675,9 +2725,9 @@ function renderSwitchTrafficData(data) {
     switchState.trafficRange = data.range || switchState.trafficRange;
     renderSwitchTrafficRangeButtons();
     drawBandwidthChart('switch-traffic-chart', samples, [
-        {key: 'total_in_mbps', label: '入方向', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)'},
-        {key: 'total_out_mbps', label: '出方向', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.12)'},
-    ]);
+        {key: 'total_in_mbps', label: '入方向', color: '#63a7df', fill: 'rgba(99, 167, 223, 0.08)'},
+        {key: 'total_out_mbps', label: '出方向', color: '#58b88b', fill: 'rgba(88, 184, 139, 0.10)'},
+    ], {theme: 'dark', emptyMessage: '暂无端口流量样本'});
 }
 
 function renderSwitchTrafficError(message) {
@@ -2687,9 +2737,9 @@ function renderSwitchTrafficError(message) {
         source.textContent = message;
     }
     drawBandwidthChart('switch-traffic-chart', [], [
-        {key: 'total_in_mbps', label: '入方向', color: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)'},
-        {key: 'total_out_mbps', label: '出方向', color: '#0f766e', fill: 'rgba(15, 118, 110, 0.12)'},
-    ]);
+        {key: 'total_in_mbps', label: '入方向', color: '#63a7df', fill: 'rgba(99, 167, 223, 0.08)'},
+        {key: 'total_out_mbps', label: '出方向', color: '#58b88b', fill: 'rgba(88, 184, 139, 0.10)'},
+    ], {theme: 'dark', emptyMessage: message || '暂无端口流量样本'});
 }
 
 function renderSwitchTrafficRangeButtons() {
@@ -2779,11 +2829,11 @@ async function loadWirelessUsers(options = {}) {
         }
         body.innerHTML = users.map((user) => `
             <tr>
-                <td>${escapeHtml(user.phone_number || '-')}</td>
-                <td>${escapeHtml(user.real_name || '无')}</td>
-                <td>${escapeHtml(user.ip_address || '-')}</td>
-                <td>${escapeHtml(user.recv_rate || '-')}</td>
-                <td>${escapeHtml(user.send_rate || '-')}</td>
+                <td data-label="用户数据">${escapeHtml(user.phone_number || '-')}</td>
+                <td data-label="姓名">${escapeHtml(user.real_name || '无')}</td>
+                <td data-label="IP">${escapeHtml(user.ip_address || '-')}</td>
+                <td data-label="上行">${escapeHtml(user.recv_rate || '-')}</td>
+                <td data-label="下行">${escapeHtml(user.send_rate || '-')}</td>
             </tr>
         `).join('');
     } catch (error) {
@@ -2822,6 +2872,7 @@ async function loadClients(options = {}) {
         clientState.statusCounts = data.status_counts || {all: 0, online: 0, offline: 0};
         renderClientPager();
         renderClientStatusFilters();
+        renderClientOpsSummary();
 
         if (result.code !== 0) {
             body.innerHTML = `<tr><td colspan="8">${escapeHtml(result.message || '请求失败')}</td></tr>`;
@@ -2837,19 +2888,20 @@ async function loadClients(options = {}) {
         }
         body.innerHTML = clients.map((client) => `
             <tr>
-                <td>${escapeHtml(client.device_ip || '-')}</td>
-                <td>${escapeHtml(client.username || '-')}</td>
-                <td>${escapeHtml(client.real_name || '-')}</td>
-                <td>${escapeHtml(client.device_name || '-')}</td>
-                <td>${escapeHtml(client.mac_address || '-')}</td>
-                <td>${escapeHtml(client.os || '-')}</td>
-                <td>${escapeHtml(client.os_version || '-')}</td>
-                <td>${renderClientStatus(client)}</td>
+                <td data-label="IP">${escapeHtml(client.device_ip || '-')}</td>
+                <td data-label="用户">${escapeHtml(client.username || '-')}</td>
+                <td data-label="姓名">${escapeHtml(client.real_name || '-')}</td>
+                <td data-label="设备名">${escapeHtml(client.device_name || '-')}</td>
+                <td data-label="MAC">${escapeHtml(client.mac_address || '-')}</td>
+                <td data-label="操作系统">${escapeHtml(client.os || '-')}</td>
+                <td data-label="系统版本">${escapeHtml(client.os_version || '-')}</td>
+                <td data-label="状态">${renderClientStatus(client)}</td>
             </tr>
         `).join('');
     } catch (error) {
         body.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
         summary.textContent = '加载失败';
+        renderClientOpsSummary();
     }
 }
 
@@ -3060,6 +3112,15 @@ function renderDeviceStatusFilters() {
             target.textContent = counts[key] ?? 0;
         }
     });
+}
+
+function renderDeviceOpsSummary() {
+    const counts = deviceState.statusCounts || {};
+    const freshness = deviceState.statusFreshness || {};
+    setText('device-stat-total', counts.all ?? deviceState.total ?? 0);
+    setText('device-stat-online', counts.online ?? 0);
+    setText('device-stat-offline', counts.offline ?? 0);
+    setText('device-stat-stale', Number(freshness.expired_count || 0));
 }
 
 function renderDeviceSummaryPrefix() {
@@ -3486,6 +3547,13 @@ function renderClientStatusFilters() {
     });
 }
 
+function renderClientOpsSummary() {
+    const counts = clientState.statusCounts || {};
+    setText('client-stat-total', counts.all ?? clientState.total ?? 0);
+    setText('client-stat-online', counts.online ?? 0);
+    setText('client-stat-offline', counts.offline ?? 0);
+}
+
 function renderClientSummaryPrefix() {
     if (clientState.status === 'online') {
         return '在线客户端，';
@@ -3649,9 +3717,11 @@ function showWirelessSubview(view) {
     }
     if (apButton) {
         apButton.classList.toggle('active', view === 'aps');
+        apButton.setAttribute('aria-pressed', String(view === 'aps'));
     }
     if (userButton) {
         userButton.classList.toggle('active', view === 'users');
+        userButton.setAttribute('aria-pressed', String(view === 'users'));
     }
 }
 
