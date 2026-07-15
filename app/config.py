@@ -40,7 +40,7 @@ def env_int(name, default):
 
 
 class Config:
-    VERSION = "v5.0.0-alpha.7"
+    VERSION = "v5.0.0-alpha.8"
 
     HOST = os.environ.get("HOST", "127.0.0.1")
     PORT = env_int("PORT", 5001)

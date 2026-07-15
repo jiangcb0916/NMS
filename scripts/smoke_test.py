@@ -551,7 +551,15 @@ def main():
         assert switch_trace.normalize_mac("90:09:D0:91:47:8F") == "9009-d091-478f"
         assert switch_trace.normalize_mac("9009.D091.478F") == "9009-d091-478f"
         assert switch_trace.cisco_mac("186f-2d0b-e080") == "186f.2d0b.e080"
+        assert switch_trace.cisco_colon_mac("186f-2d0b-e080") == "18:6f:2d:0b:e0:80"
         assert switch_trace.cisco_interface_name("GigabitEthernet1/0/36") == "Gi1/0/36"
+        assert switch_trace.cisco_interface_command_name("Gi1/0/20") == "gigabitEthernet 1/0/20"
+        assert switch_trace.cisco_mac_lookup_commands("186f-2d0b-e080")[:2] == [
+            "show mac address-table address 186f.2d0b.e080",
+            "show mac address-table address 18:6f:2d:0b:e0:80",
+        ]
+        assert switch_trace.output_has_cli_error("% Invalid input detected at '^' marker.")
+        assert switch_trace.output_has_cli_error("Error: Invalid parameter.")
         for trunk_id in (1, 2, 13, 14, 15, 16, 17, 18, 22):
             assert switch_trace.is_eth_trunk(f"Eth-Trunk{trunk_id}")
             assert switch_trace.command_interface_name(f"Eth-Trunk{trunk_id}") == f"Eth-Trunk {trunk_id}"
@@ -779,6 +787,97 @@ def main():
             assert two_hop_payload["hops"][1]["commands"][0]["command"] == (
                 "show mac address-table address 9009.d091.478f"
             )
+
+            class FakeCiscoVariantTraceSession:
+                def __init__(self, host, config, platform="huawei"):
+                    self.host = host
+                    self.platform = platform
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, traceback):
+                    return None
+
+                def mac_lookup_command(self, mac):
+                    return f"display mac-address {mac}"
+
+                def interface_macs_command(self, interface):
+                    return f"display mac-address | include {interface}"
+
+                def lldp_neighbor_command(self, interface):
+                    return f"display lldp neighbor interface {switch_trace.command_interface_name(interface)}"
+
+                def arp_lookup_command(self, value):
+                    return f"display arp | include {value}"
+
+                def run(self, command):
+                    responses = {
+                        ("172.16.100.5", "display mac-address 186f-2d0b-8d40"): (
+                            "186f-2d0b-8d40 43/-/- Eth-Trunk14 dynamic"
+                        ),
+                        ("172.16.100.5", "display mac-address | include Eth-Trunk14"): "\n".join([
+                            "186f-2d0b-8d40 43/-/- Eth-Trunk14 dynamic",
+                            "d468-ba01-351d 43/-/- Eth-Trunk14 dynamic",
+                        ]),
+                        ("172.16.100.5", "display interface Eth-Trunk 14"): "\n".join([
+                            "Eth-Trunk14 current state : UP",
+                            "GigabitEthernet0/0/14 UP 1",
+                            "GigabitEthernet1/0/14 UP 1",
+                        ]),
+                        ("172.16.100.5", "display lldp neighbor interface GigabitEthernet 0/0/14"): "\n".join([
+                            "Chassis ID : d468-ba01-351d",
+                            "Management address value : 192.168.0.1",
+                            "System name : F-A1-Ap-POE-switch1",
+                            "Port ID : GigabitEthernet1/0/24",
+                            "System Description : 24-Port Gigabit Managed PoE Switch with 4 SFP Slots",
+                        ]),
+                        ("172.16.100.5", "display arp | include d468-ba01-351d"): (
+                            "172.16.100.11 d468-ba01-351d 12 D-0 Eth-Trunk14"
+                        ),
+                        ("172.16.100.11", "show mac address-table address 186f.2d0b.8d40"): (
+                            "Error: Invalid parameter."
+                        ),
+                        ("172.16.100.11", "show mac address-table address 18:6f:2d:0b:8d:40"): (
+                            "18:6f:2d:0b:8d:40 43 Gi1/0/20 dynamic aging"
+                        ),
+                        ("172.16.100.11", "show mac address-table interface Gi1/0/20"): (
+                            "Error: Invalid parameter."
+                        ),
+                        ("172.16.100.11", "show mac address-table interface gigabitEthernet 1/0/20"): "\n".join([
+                            "18:6f:2d:0b:8d:40 43 Gi1/0/20 dynamic aging",
+                            "00:be:3b:51:a5:65 24 Gi1/0/20 dynamic aging",
+                        ]),
+                        ("172.16.100.11", "show lldp neighbors interface Gi1/0/20 detail"): (
+                            "Error: Too many parameters"
+                        ),
+                        ("172.16.100.11", "show lldp neighbor-information interface gigabitEthernet 1/0/20"): (
+                            "LLDP Neighbor Information:\nNo Neighbor."
+                        ),
+                        ("172.16.100.11", "show ip arp"): "Error: Invalid parameter.",
+                    }
+                    assert (self.host, command) in responses, (self.host, command)
+                    return responses[(self.host, command)]
+
+            switch_trace.HuaweiCliSession = FakeCiscoVariantTraceSession
+            with app.app_context():
+                variant_payload, variant_message, variant_code = switch_trace.trace_terminal_mac(
+                    "186f-2d0b-8d40"
+                )
+            assert variant_code == 0
+            assert variant_payload["result_type"] == "downstream"
+            assert variant_payload["final_switch"] == "172.16.100.11"
+            assert variant_payload["final_interface"] == "Gi1/0/20"
+            assert "多个 MAC" in variant_message
+            variant_commands = [
+                command["command"] for command in variant_payload["hops"][1]["commands"]
+            ]
+            assert variant_commands[:2] == [
+                "show mac address-table address 186f.2d0b.8d40",
+                "show mac address-table address 18:6f:2d:0b:8d:40",
+            ]
+            assert "show mac address-table interface gigabitEthernet 1/0/20" in variant_commands
+            assert "show lldp neighbor-information interface gigabitEthernet 1/0/20" in variant_commands
         finally:
             switch_trace.build_trace_config = original_build_trace_config
             switch_trace.load_connect_handler = original_load_connect_handler

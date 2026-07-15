@@ -411,11 +411,12 @@ def lookup_arp_on_switch(session, target_ip, hop):
 
 
 def lookup_mac_on_switch(session, target_mac, hop):
-    command = session.mac_lookup_command(target_mac)
-    output = run_command(session, hop, command)
-    entries = parse_mac_entries(output, target_mac=target_mac)
-    if not entries and session.platform == "cisco":
+    if session.platform == "cisco":
         entries = lookup_cisco_mac_table(session, hop, target_mac=target_mac)
+    else:
+        command = session.mac_lookup_command(target_mac)
+        output = run_command(session, hop, command)
+        entries = parse_mac_entries(output, target_mac=target_mac)
     if not entries:
         hop["target_mac"] = target_mac
         hop["lookup"] = "mac"
@@ -434,10 +435,21 @@ def lookup_mac_on_switch(session, target_mac, hop):
 
 
 def lookup_interface_macs(session, interface, hop):
-    command = session.interface_macs_command(interface)
-    output = run_command(session, hop, command)
-    if output_has_cli_error(output):
-        if session.platform != "cisco":
+    if session.platform == "cisco":
+        entries = None
+        for command in cisco_interface_macs_commands(interface):
+            output = run_command(session, hop, command)
+            if output_has_cli_error(output):
+                hop["commands"][-1]["summary"] = "接口命令不兼容，尝试下一种格式"
+                continue
+            entries = parse_mac_entries(output)
+            break
+        if entries is None:
+            entries = lookup_cisco_mac_table(session, hop, interface=interface)
+    else:
+        command = session.interface_macs_command(interface)
+        output = run_command(session, hop, command)
+        if output_has_cli_error(output):
             hop["commands"][-1]["summary"] = "命令返回错误"
             return {
                 "command_failed": True,
@@ -445,9 +457,6 @@ def lookup_interface_macs(session, interface, hop):
                 "mac_samples": [],
                 "macs": [],
             }
-        hop["commands"][-1]["summary"] = "接口过滤不支持，改用全表解析"
-        entries = lookup_cisco_mac_table(session, hop, target_mac=hop.get("target_mac"), interface=interface)
-    else:
         entries = parse_mac_entries(output)
     unique_macs = sorted({entry["mac"] for entry in entries if entry.get("mac")})
     if not unique_macs and hop.get("target_mac"):
@@ -463,18 +472,33 @@ def lookup_interface_macs(session, interface, hop):
 
 def lookup_cisco_mac_table(session, hop, target_mac=None, interface=None):
     entries = []
+    used_full_table = False
     if target_mac:
-        output = run_command(session, hop, session.mac_lookup_command(target_mac))
-        entries = parse_mac_entries(output, target_mac=target_mac)
+        for command in cisco_mac_lookup_commands(target_mac):
+            output = run_command(session, hop, command)
+            if output_has_cli_error(output):
+                hop["commands"][-1]["summary"] = "MAC 查询命令不兼容，尝试下一种格式"
+                continue
+            entries = parse_mac_entries(output, target_mac=target_mac)
+            if interface:
+                entries = [entry for entry in entries if same_interface(entry.get("interface"), interface)]
+            if entries:
+                hop["commands"][-1]["summary"] = "按兼容格式匹配目标 MAC 成功"
+                break
+            hop["commands"][-1]["summary"] = "当前格式未匹配目标 MAC"
     if not entries:
-        output = run_command(session, hop, "show mac address-table")
-        entries = parse_mac_entries(output, target_mac=target_mac)
-    if interface:
-        entries = [
-            entry for entry in entries
-            if same_interface(entry.get("interface"), interface)
-        ]
-    if target_mac:
+        used_full_table = True
+        for command in cisco_mac_table_commands():
+            output = run_command(session, hop, command)
+            if output_has_cli_error(output):
+                hop["commands"][-1]["summary"] = "MAC 全表命令不兼容，尝试旧式命令"
+                continue
+            entries = parse_mac_entries(output, target_mac=target_mac)
+            if interface:
+                entries = [entry for entry in entries if same_interface(entry.get("interface"), interface)]
+            if entries or not target_mac:
+                break
+    if target_mac and used_full_table:
         hop["commands"][-1]["summary"] = (
             "全表匹配目标 MAC 成功" if entries else "全表未找到目标 MAC"
         )
@@ -602,16 +626,30 @@ def lookup_arp_by_mac(session, mac, hop, config):
 
 
 def lookup_lldp_neighbor(session, interface, hop):
-    command = session.lldp_neighbor_command(interface)
-    output = run_command(session, hop, command)
-    neighbor = parse_lldp_neighbor(output)
+    commands = (
+        cisco_lldp_neighbor_commands(interface)
+        if session.platform == "cisco"
+        else [session.lldp_neighbor_command(interface)]
+    )
+    neighbor = {}
+    command_supported = False
+    for command in commands:
+        output = run_command(session, hop, command)
+        if output_has_cli_error(output):
+            hop["commands"][-1]["summary"] = "LLDP 命令不兼容，尝试下一种格式"
+            continue
+        neighbor = parse_lldp_neighbor(output)
+        command_supported = True
+        break
     hop["neighbor"] = neighbor
     if neighbor.get("management_ip"):
         hop["switch_name"] = neighbor.get("system_name") or hop.get("switch_name")
         hop["lldp_interface"] = interface
         hop["commands"][-1]["summary"] = f"发现邻居 {neighbor.get('system_name') or neighbor['management_ip']}"
-    else:
+    elif command_supported:
         hop["commands"][-1]["summary"] = "未发现带管理 IP 的 LLDP 邻居"
+    elif hop.get("commands"):
+        hop["commands"][-1]["summary"] = "LLDP 命令均不兼容"
     return {"neighbor": neighbor}
 
 
@@ -803,6 +841,64 @@ def cisco_mac(mac):
     return ".".join(hex_value[i:i + 4] for i in range(0, 12, 4)).lower()
 
 
+def cisco_colon_mac(mac):
+    hex_value = re.sub(r"[^0-9A-Fa-f]", "", str(mac or ""))
+    if len(hex_value) != 12:
+        return str(mac or "").strip().lower()
+    return ":".join(hex_value[i:i + 2] for i in range(0, 12, 2)).lower()
+
+
+def cisco_mac_lookup_commands(mac):
+    commands = []
+    for prefix in ("show mac address-table address", "show mac-address-table address"):
+        for formatted_mac in (cisco_mac(mac), cisco_colon_mac(mac)):
+            commands.append(f"{prefix} {formatted_mac}")
+    return unique_commands(commands)
+
+
+def cisco_mac_table_commands():
+    return ["show mac address-table", "show mac-address-table"]
+
+
+def cisco_interface_command_name(interface):
+    value = compact_interface_name(interface)
+    patterns = [
+        (r"(?i)^(?:GigabitEthernet|Gi)(\d.*)$", r"gigabitEthernet \1"),
+        (r"(?i)^(?:FastEthernet|Fa)(\d.*)$", r"fastEthernet \1"),
+        (r"(?i)^(?:TenGigabitEthernet|Te)(\d.*)$", r"ten-gigabitEthernet \1"),
+        (r"(?i)^(?:Port-channel|Po)(\d.*)$", r"port-channel \1"),
+    ]
+    for pattern, replacement in patterns:
+        if re.match(pattern, value):
+            return re.sub(pattern, replacement, value)
+    return value
+
+
+def cisco_interface_macs_commands(interface):
+    short_name = cisco_interface_name(interface)
+    long_name = cisco_interface_command_name(interface)
+    return unique_commands([
+        f"show mac address-table interface {short_name}",
+        f"show mac address-table interface {long_name}",
+        f"show mac-address-table interface {short_name}",
+        f"show mac-address-table interface {long_name}",
+    ])
+
+
+def cisco_lldp_neighbor_commands(interface):
+    short_name = cisco_interface_name(interface)
+    long_name = cisco_interface_command_name(interface)
+    return unique_commands([
+        f"show lldp neighbors interface {short_name} detail",
+        f"show lldp neighbor-information interface {long_name}",
+        f"show lldp neighbors {short_name} detail",
+    ])
+
+
+def unique_commands(commands):
+    return list(dict.fromkeys(command for command in commands if command))
+
+
 def same_interface(left, right):
     return cisco_interface_name(left).lower() == cisco_interface_name(right).lower()
 
@@ -896,7 +992,9 @@ def is_known_fake_management_ip(ip_value):
 def output_has_cli_error(output):
     text = str(output or "")
     return bool(re.search(
-        r"(?im)^\s*(?:\^|Error:|% ?Error|Wrong parameter|Incomplete command|Unrecognized command|Unknown command)",
+        r"(?im)^\s*(?:\^|Error:|% ?(?:Error|Invalid input|Ambiguous command|Incomplete command)|"
+        r"Wrong parameter|Invalid parameter|Too many parameters|Invalid input|Incomplete command|"
+        r"Unrecognized command|Unknown command)",
         text,
     ))
 
