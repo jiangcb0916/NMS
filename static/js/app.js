@@ -233,6 +233,7 @@ let currentUser = null;
 let usersCache = [];
 let devicesCache = [];
 let wirelessActiveView = 'aps';
+let wirelessApEmptyRetryTimer = null;
 let activeModalId = null;
 let previousFocusedElement = null;
 const OSDWAN_METRICS_REFRESH_MS = 60 * 1000;
@@ -2086,6 +2087,11 @@ async function loadDevices(options = {}) {
 }
 
 async function loadWireless(options = {}) {
+    if (!options.emptyRetry && wirelessApEmptyRetryTimer) {
+        window.clearTimeout(wirelessApEmptyRetryTimer);
+        wirelessApEmptyRetryTimer = null;
+    }
+
     wirelessApState.page = options.page || wirelessApState.page;
     wirelessApState.perPage = options.perPage || wirelessApState.perPage;
     wirelessApState.query = options.query !== undefined ? options.query : wirelessApState.query;
@@ -2139,9 +2145,29 @@ async function loadWireless(options = {}) {
 
         summary.textContent = `${renderWirelessApSummaryPrefix()}共 ${wirelessApState.total} 个 AP，当前显示 ${apData.returned || apList.length} 个，承载 ${apData.total_users || 0} 个用户`;
         if (!apList.length) {
-            body.innerHTML = `<tr><td colspan="7">${escapeHtml(apInfo.message || status.message || '暂无数据')}</td></tr>`;
-            summary.textContent = apInfo.message || status.message || '暂无 AP 数据';
+            const shouldRetry = !options.emptyRetry
+                && apInfo.code === 0
+                && apData.configured !== false
+                && !wirelessApState.query
+                && !wirelessApState.status;
+            const emptyMessage = shouldRetry
+                ? '暂未获取到 AP 数据，正在重试'
+                : renderWirelessApEmptyMessage(apInfo, apData);
+            body.innerHTML = `<tr><td colspan="7">${escapeHtml(emptyMessage)}</td></tr>`;
+            summary.textContent = emptyMessage;
+            if (shouldRetry) {
+                wirelessApEmptyRetryTimer = window.setTimeout(() => {
+                    wirelessApEmptyRetryTimer = null;
+                    if (!panel.hidden) {
+                        loadWireless({emptyRetry: true});
+                    }
+                }, 1200);
+            }
             return;
+        }
+        if (wirelessApEmptyRetryTimer) {
+            window.clearTimeout(wirelessApEmptyRetryTimer);
+            wirelessApEmptyRetryTimer = null;
         }
         body.innerHTML = apList.map((ap) => `
             <tr>
@@ -2158,6 +2184,21 @@ async function loadWireless(options = {}) {
         body.innerHTML = `<tr><td colspan="7">${escapeHtml(error.message)}</td></tr>`;
         summary.textContent = '加载失败';
     }
+}
+
+function renderWirelessApEmptyMessage(apInfo, apData) {
+    const responseMessage = typeof apInfo?.message === 'string' ? apInfo.message.trim() : '';
+    const hasUsefulResponseMessage = responseMessage && responseMessage.toLowerCase() !== 'success';
+    if (apInfo?.code !== 0 || apData?.configured === false) {
+        return hasUsefulResponseMessage ? responseMessage : '无线数据源未配置或暂不可用';
+    }
+    if (wirelessApState.query) {
+        return '未找到匹配的 AP';
+    }
+    if (wirelessApState.status) {
+        return '当前筛选条件下暂无 AP';
+    }
+    return '暂无 AP 数据';
 }
 
 async function loadWirelessMetrics() {
