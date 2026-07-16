@@ -116,6 +116,14 @@ SWITCH_CISCO_SSH_TIMEOUT=8
 SWITCH_CISCO_TRANSPORT=auto
 SWITCH_CISCO_TELNET_PORT=23
 SWITCH_TRACE_MAX_HOPS=5
+SWITCH_TOPOLOGY_CACHE_SECONDS=300
+SWITCH_TOPOLOGY_FORCE_REFRESH_COOLDOWN_SECONDS=60
+SWITCH_TOPOLOGY_CORE_MEMBER_A_NAME=HeXinA
+SWITCH_TOPOLOGY_CORE_MEMBER_B_NAME=HeXinB
+SWITCH_TOPOLOGY_UPLINK_PATTERNS=itn8800,raisecom
+SWITCH_TOPOLOGY_UNICOM_INTERFACE=GE0/0/8
+SWITCH_TOPOLOGY_TELECOM_INTERFACE=GE1/0/6
+SWITCH_MANAGEMENT_IP_OVERRIDES=H3C=172.16.100.12,F-A2-Switch1=172.16.100.13
 OSDWAN_API_BASE_URL=https://api.wanflow.com
 OSDWAN_CONSOLE_ORIGIN=https://console.wanflow.com
 OSDWAN_TOKEN=
@@ -245,10 +253,20 @@ docker compose exec web python scripts/migrate_legacy_data.py
 | `SWITCH_CISCO_TRANSPORT` | Cisco 连接方式，`auto` 遇到旧 SSH HostKey 问题时回退 Telnet，可设 `ssh` 或 `telnet` | `auto` |
 | `SWITCH_CISCO_TELNET_PORT` | Cisco Telnet 回退端口 | `23` |
 | `SWITCH_TRACE_MAX_HOPS` | 终端端口定位最大 LLDP 追踪跳数 | `5` |
+| `SWITCH_TOPOLOGY_CACHE_SECONDS` | 核心交换机 LLDP 拓扑关系缓存秒数；在线状态不受此缓存影响 | `300` |
+| `SWITCH_TOPOLOGY_FORCE_REFRESH_COOLDOWN_SECONDS` | 手动重新发现拓扑的服务端冷却秒数，防止连续 SSH 查询核心交换机 | `60` |
+| `SWITCH_TOPOLOGY_CORE_MEMBER_A_NAME` / `SWITCH_TOPOLOGY_CORE_MEMBER_B_NAME` | 核心堆叠成员名称；分别对应 `0/0/*` 与 `1/0/*` 端口 | `HeXinA` / `HeXinB` |
+| `SWITCH_TOPOLOGY_UPLINK_PATTERNS` | 通过 LLDP 名称或描述识别运营商接入设备的关键字，逗号分隔 | `itn8800,raisecom` |
+| `SWITCH_TOPOLOGY_UNICOM_INTERFACE` / `SWITCH_TOPOLOGY_TELECOM_INTERFACE` | 拓扑中联通、电信线路对应的核心堆叠端口；有 LLDP 时显示已连接，否则仅显示配置关系 | `GE0/0/8` / `GE1/0/6` |
+| `SWITCH_MANAGEMENT_IP_OVERRIDES` | LLDP 未上报管理地址时，按设备名称补充管理 IP；多个映射使用逗号分隔 | `H3C=172.16.100.12,F-A2-Switch1=172.16.100.13` |
 | `HUAWEI_SNMP_URL` | 华为防火墙 SNMP exporter 接口，Dashboard 带宽卡片使用 | `http://172.16.80.125:9116/snmp` |
 | `HUAWEI_SNMP_AUTH` | 华为防火墙 SNMP exporter auth 参数 | `secure_v3` |
 | `HUAWEI_SNMP_MODULE` | 华为防火墙 SNMP exporter module 参数 | `hw_health` |
 | `HUAWEI_FIREWALL_TARGET` | 华为防火墙 SNMP 目标地址 | `172.16.100.3` |
+| `HUAWEI_FIREWALL_HA_MODE` | 防火墙集群展示模式 | `active-active` |
+| `HUAWEI_FIREWALL_MEMBER_A_NAME` / `HUAWEI_FIREWALL_MEMBER_B_NAME` | 防火墙双机成员名称 | `FW1` / `FW2` |
+| `HUAWEI_FIREWALL_MEMBER_A_IP` / `HUAWEI_FIREWALL_MEMBER_B_IP` | 防火墙双机成员地址 | `172.16.100.1` / `172.16.100.2` |
+| `HUAWEI_FIREWALL_MEMBER_A_CORE_LINKS` / `HUAWEI_FIREWALL_MEMBER_B_CORE_LINKS` | 防火墙成员与核心端口关系，格式为 `核心端口=防火墙端口`，逗号分隔 | 见 `.env.example` |
 | `HUAWEI_PROMETHEUS_JOB` | 华为防火墙 Prometheus 查询使用的 `job` label | `USG` |
 | `HUAWEI_TOTAL_BANDWIDTH_MBPS` | 防火墙总带宽容量，Dashboard 计算占用率使用 | `450` |
 | `OSDWAN_API_BASE_URL` | WANFlow OSDWAN API 基础地址 | `https://api.wanflow.com` |

@@ -41,6 +41,7 @@ class SwitchTraceConfig:
     cisco_transport: str
     cisco_telnet_port: int
     max_hops: int
+    management_ip_overrides: str = ""
 
 
 class HuaweiCliSession:
@@ -307,6 +308,7 @@ def build_trace_config():
         cisco_transport=str(current_app.config.get("SWITCH_CISCO_TRANSPORT", "auto") or "auto").strip().lower(),
         cisco_telnet_port=int(current_app.config.get("SWITCH_CISCO_TELNET_PORT", 23)),
         max_hops=max(1, int(current_app.config.get("SWITCH_TRACE_MAX_HOPS", 5))),
+        management_ip_overrides=current_app.config.get("SWITCH_MANAGEMENT_IP_OVERRIDES") or "",
     )
 
 
@@ -568,6 +570,17 @@ def lookup_eth_trunk_lldp_neighbor(session, interface, hop):
 
 def resolve_lldp_neighbor_management_ip(session, neighbor, hop, config):
     neighbor_ip = neighbor.get("management_ip") or ""
+    configured_ip = management_ip_override_for_name(
+        neighbor.get("system_name"),
+        parse_management_ip_overrides(config.management_ip_overrides),
+    )
+    if configured_ip:
+        if neighbor_ip and neighbor_ip != configured_ip:
+            neighbor["lldp_management_ip"] = neighbor_ip
+        neighbor["management_ip"] = configured_ip
+        neighbor["resolved_by"] = "configured_name"
+        hop["neighbor"] = neighbor
+        return configured_ip
     if is_expected_switch_management_ip(neighbor_ip, config):
         return neighbor_ip
 
@@ -590,6 +603,29 @@ def resolve_lldp_neighbor_management_ip(session, neighbor, hop, config):
         hop["neighbor"] = neighbor
         return ""
     return neighbor_ip
+
+
+def parse_management_ip_overrides(value):
+    overrides = {}
+    for item in str(value or "").split(","):
+        name, separator, raw_ip = item.partition("=")
+        if not separator or not name.strip() or not raw_ip.strip():
+            continue
+        try:
+            address = ipaddress.ip_address(raw_ip.strip())
+        except ValueError:
+            continue
+        if address.version == 4:
+            overrides[normalize_management_override_name(name)] = str(address)
+    return overrides
+
+
+def management_ip_override_for_name(system_name, overrides):
+    return (overrides or {}).get(normalize_management_override_name(system_name), "")
+
+
+def normalize_management_override_name(value):
+    return re.sub(r"\s+", " ", str(value or "").strip()).casefold()
 
 
 def infer_downstream_neighbor_from_interface_macs(session, macs, hop, config):

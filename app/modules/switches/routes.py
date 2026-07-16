@@ -8,7 +8,15 @@ from flask_login import login_required
 from app.common.responses import failure, success
 from app.common.validators import validate_ip, validate_mac
 from app.models.device import Device
+from app.modules.devices.status import ping_device
+from app.modules.firewall.routes import default_payload as default_firewall_payload
+from app.modules.firewall.routes import fetch_huawei_firewall_status
 from app.modules.integrations.prometheus import PrometheusClient
+from app.modules.switches.topology import (
+    TopologyDiscoveryError,
+    hydrate_topology,
+    load_topology_snapshot,
+)
 from app.modules.switches.trace import normalize_mac, trace_terminal_ip, trace_terminal_mac
 
 
@@ -128,6 +136,43 @@ def switch_ports(instance):
     })
 
 
+@switch_bp.route("/api/statistics/switches/topology", methods=["GET"])
+@login_required
+def switch_topology():
+    force = (request.args.get("refresh") or "").strip().lower() in {"1", "true", "yes", "on"}
+    try:
+        snapshot, cache_meta = load_topology_snapshot(force=force)
+    except TopologyDiscoveryError as exc:
+        return success(empty_topology_payload(str(exc)), message=str(exc), code=1)
+
+    try:
+        switch_targets = build_switch_targets() if PrometheusClient().targets_configured else []
+    except Exception as exc:
+        current_app.logger.warning("topology switch status query failed: %s", exc.__class__.__name__)
+        switch_targets = []
+
+    firewall = default_firewall_payload(configured=bool(
+        current_app.config.get("HUAWEI_SNMP_URL") and current_app.config.get("HUAWEI_FIREWALL_TARGET")
+    ))
+    try:
+        firewall = fetch_huawei_firewall_status(timeout=5)
+    except Exception as exc:
+        current_app.logger.warning("topology firewall status query failed: %s", exc.__class__.__name__)
+        firewall["error"] = str(exc)
+
+    payload = hydrate_topology(snapshot, switch_targets, firewall, topology_device_index())
+    payload.update(cache_meta)
+    payload["status_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if cache_meta.get("error"):
+        payload["warnings"] = [cache_meta["error"], *(payload.get("warnings") or [])]
+    message = "拓扑关系已重新发现" if force and not cache_meta.get("cached") else "success"
+    if cache_meta.get("rate_limited"):
+        message = f"重新发现冷却中，请在 {cache_meta.get('retry_after', 1)} 秒后再试"
+    if cache_meta.get("stale") and not cache_meta.get("rate_limited"):
+        message = "拓扑重新发现失败，已保留上一份关系快照"
+    return success(payload, message=message, code=1 if cache_meta.get("stale") else 0)
+
+
 @switch_bp.route("/api/statistics/switches/<path:instance>/traffic-history", methods=["GET"])
 @login_required
 def switch_traffic_history(instance):
@@ -171,27 +216,45 @@ def switch_traffic_history(instance):
 def switch_trace_terminal():
     data = request.get_json(silent=True) or {}
     try:
-        target_type, target_value = parse_trace_target(data)
+        target_type, target_value, target_device = resolve_trace_target(data)
     except ValueError as exc:
         return failure(str(exc), status=400)
 
     if target_type == "mac":
         payload, message, code = trace_terminal_mac(target_value)
-        target_device = trace_target_device(target_mac=target_value)
         payload["target_name"] = target_device.username if target_device else "无"
         if not payload.get("target_ip") and target_device:
             payload["target_ip"] = target_device.ip_address or ""
     else:
         payload, message, code = trace_terminal_ip(target_value)
-        payload["target_name"] = trace_target_name(target_ip=target_value)
+        payload["target_name"] = target_device.username if target_device else "无"
+    if request_boolean(data.get("check_connectivity")):
+        payload["connectivity"] = build_trace_connectivity(payload, code)
     return success(payload, message=message, code=code)
 
 
+def resolve_trace_target(data):
+    try:
+        target_type, target_value = parse_trace_target(data)
+        target_device = trace_target_device(
+            target_ip=target_value if target_type == "ip" else "",
+            target_mac=target_value if target_type == "mac" else "",
+        )
+        return target_type, target_value, target_device
+    except ValueError as address_error:
+        target = raw_trace_target(data)
+        if not target:
+            raise
+        devices = Device.query.filter(Device.username == target).limit(2).all()
+        if len(devices) == 1:
+            return "ip", devices[0].ip_address, devices[0]
+        if len(devices) > 1:
+            raise ValueError("存在多个同名设备，请改用 IP 或 MAC 地址") from address_error
+        raise ValueError("未找到该设备，请输入已登记设备名称、IPv4 或 MAC 地址") from address_error
+
+
 def parse_trace_target(data):
-    raw_target = data.get("target")
-    if raw_target is None or str(raw_target).strip() == "":
-        raw_target = data.get("mac") or data.get("ip")
-    target = str(raw_target or "").strip()
+    target = raw_trace_target(data)
     if not target:
         raise ValueError("终端 IP 或 MAC 不能为空")
 
@@ -202,6 +265,13 @@ def parse_trace_target(data):
             return "mac", normalize_mac(validate_mac(target, "终端 MAC"))
         except ValueError as exc:
             raise ValueError("终端地址格式不正确，请输入 IPv4 或 MAC 地址") from exc
+
+
+def raw_trace_target(data):
+    raw_target = data.get("target")
+    if raw_target is None or str(raw_target).strip() == "":
+        raw_target = data.get("mac") or data.get("ip")
+    return str(raw_target or "").strip()
 
 
 def trace_target_name(target_ip="", target_mac=""):
@@ -221,6 +291,145 @@ def trace_target_device(target_ip="", target_mac=""):
         (item for item in devices if normalize_mac(item.mac_address) == normalized_target),
         None,
     )
+
+
+def build_trace_connectivity(payload, trace_code):
+    target_ip = payload.get("target_ip") or ""
+    terminal_status = "unknown"
+    if target_ip:
+        terminal_status = "online" if ping_device(
+            target_ip,
+            timeout_seconds=current_app.config.get("DEVICE_STATUS_PING_TIMEOUT", 1),
+        ) else "offline"
+
+    try:
+        targets = build_switch_targets() if PrometheusClient().targets_configured else []
+    except Exception as exc:
+        current_app.logger.warning("trace connectivity status query failed: %s", exc.__class__.__name__)
+        targets = []
+    target_by_ip = {target_host(item.get("instance")): item for item in targets}
+    switches = []
+    for hop in payload.get("hops") or []:
+        switch_ip = hop.get("switch_ip") or ""
+        target = target_by_ip.get(switch_ip)
+        if target:
+            status = "online" if target.get("is_online") else "offline"
+        else:
+            status = "unknown"
+        hop["monitor_status"] = status
+        switches.append({
+            "ip": switch_ip,
+            "status": status,
+            "last_checked_at": target.get("last_scrape_at") if target else "",
+        })
+
+    result_type = payload.get("result_type") or "failed"
+    trace_status = "online" if trace_code == 0 and result_type == "terminal" else "failed"
+    firewall = trace_firewall_connectivity()
+    path_status = aggregate_trace_path_status(
+        trace_status,
+        terminal_status,
+        switches,
+        firewall,
+    )
+    return {
+        "checked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "terminal": {"ip": target_ip, "status": terminal_status},
+        "switches": switches,
+        "trace": {"status": trace_status, "result_type": result_type},
+        "firewall": firewall,
+        "path_status": path_status,
+    }
+
+
+def trace_firewall_connectivity():
+    configured = bool(
+        current_app.config.get("HUAWEI_SNMP_URL")
+        and current_app.config.get("HUAWEI_FIREWALL_TARGET")
+    )
+    payload = default_firewall_payload(configured=configured)
+    try:
+        payload = fetch_huawei_firewall_status(timeout=5)
+    except Exception as exc:
+        current_app.logger.warning("trace firewall status query failed: %s", exc.__class__.__name__)
+        payload["error"] = str(exc).strip() or exc.__class__.__name__
+    if not payload.get("configured"):
+        status = "unconfigured"
+    else:
+        status = "online" if payload.get("ok") else "offline"
+    return {
+        "ip": payload.get("snmp_target") or current_app.config.get("HUAWEI_FIREWALL_TARGET") or "",
+        "status": status,
+        "error": payload.get("error") or "",
+    }
+
+
+def aggregate_trace_path_status(trace_status, terminal_status, switches, firewall):
+    component_statuses = [
+        terminal_status,
+        *(item.get("status") or "unknown" for item in switches),
+        firewall.get("status") or "unknown",
+    ]
+    if trace_status == "failed" or "offline" in component_statuses:
+        return "failed"
+    if trace_status == "online" and component_statuses and all(
+        status == "online" for status in component_statuses
+    ):
+        return "online"
+    return "degraded"
+
+
+def topology_device_index():
+    return [
+        {
+            "id": device.id,
+            "name": device.username,
+            "ip": device.ip_address,
+            "mac": device.mac_address or "",
+            "category": device.category,
+            "is_online": bool(device.is_online),
+        }
+        for device in Device.query.order_by(Device.username.asc(), Device.ip_address.asc()).all()
+    ]
+
+
+def empty_topology_payload(error=""):
+    return {
+        "configured": False,
+        "cached": False,
+        "stale": False,
+        "source": "LLDP",
+        "generated_at": "",
+        "expires_at": "",
+        "status_updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "nodes": [],
+        "edges": [],
+        "devices": topology_device_index(),
+        "warnings": [error] if error else [],
+        "stats": {
+            "switch_total": 0,
+            "switch_online": 0,
+            "switch_offline": 0,
+            "switch_unknown": 0,
+            "firewall_total": 0,
+            "link_total": 0,
+        },
+    }
+
+
+def request_boolean(value):
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def target_host(value):
+    text = str(value or "").strip()
+    if text.startswith("[") and "]" in text:
+        return text[1:text.index("]")]
+    if text.count(":") == 1:
+        return text.split(":", 1)[0]
+    return text
 
 
 def build_switch_targets(client=None):

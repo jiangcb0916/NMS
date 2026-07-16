@@ -620,6 +620,122 @@
     </section>
 </section>
 
+<section class="panel topology-panel ops-workspace-view ops-monitor-view app-view" id="topology-panel" hidden>
+    <div class="panel-header ops-module-header topology-module-header">
+        <div>
+            <h2>网络拓扑</h2>
+            <p class="panel-subtitle">核心 LLDP 关系与终端接入路径</p>
+        </div>
+        <div class="topology-header-meta">
+            <div>
+                <span>关系快照</span>
+                <strong id="topology-generated-at">等待发现</strong>
+            </div>
+            <div class="button-row">
+                <button class="small-button" id="refresh-topology-status" type="button" title="刷新节点状态">
+                    <i class="bi bi-arrow-clockwise"></i>
+                    <span>刷新状态</span>
+                </button>
+                <button class="small-button primary" id="rediscover-topology" type="button" title="重新读取核心交换机 LLDP">
+                    <i class="bi bi-broadcast-pin"></i>
+                    <span>重新发现</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <dl class="ops-summary-strip topology-summary-strip">
+        <div>
+            <dt>交换节点</dt>
+            <dd id="topology-switch-total">-</dd>
+        </div>
+        <div>
+            <dt>在线节点</dt>
+            <dd id="topology-switch-online">-</dd>
+        </div>
+        <div>
+            <dt>异常 / 未知</dt>
+            <dd id="topology-switch-risk">-</dd>
+        </div>
+        <div>
+            <dt>物理链路</dt>
+            <dd id="topology-link-total">-</dd>
+        </div>
+    </dl>
+
+    <section class="topology-command-panel" aria-labelledby="topology-command-title">
+        <div class="topology-command-heading">
+            <div>
+                <h3 id="topology-command-title">终端路径检测</h3>
+                <p class="panel-subtitle">输入已登记设备名称、IPv4 或 MAC，实时检测终端连通性并高亮接入路径</p>
+            </div>
+            <span class="status-badge" id="topology-path-status">未检测</span>
+        </div>
+        <form class="topology-search-row" id="topology-search-form">
+            <div class="topology-search-control">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input id="topology-search-input" name="target" placeholder="搜索设备名称、IP 或 MAC" aria-label="搜索设备名称、IP 或 MAC" aria-autocomplete="list" aria-controls="topology-device-picker" aria-expanded="false" role="combobox" autocomplete="off">
+                <button class="topology-picker-toggle" id="topology-picker-toggle" type="button" aria-label="展开设备列表" aria-controls="topology-device-picker" aria-expanded="false">
+                    <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                </button>
+                <div class="topology-device-picker" id="topology-device-picker" role="listbox" aria-label="设备匹配结果" hidden></div>
+            </div>
+            <button class="small-button primary" id="topology-trace-button" type="submit">
+                <i class="bi bi-signpost-split"></i>
+                <span>检测路径</span>
+            </button>
+            <button class="small-button" id="topology-clear-path" type="button" disabled>
+                <i class="bi bi-x-lg"></i>
+                <span>清除路径</span>
+            </button>
+        </form>
+        <div class="list-summary" id="topology-trace-summary">选择终端后显示实时路径与分层检测结果</div>
+    </section>
+
+    <div class="topology-warning" id="topology-warning" hidden role="status"></div>
+
+    <div class="topology-workspace">
+        <section class="topology-graph-panel" aria-labelledby="topology-graph-title">
+            <div class="topology-graph-header">
+                <div>
+                    <h3 id="topology-graph-title">骨干关系</h3>
+                    <p class="panel-subtitle" id="topology-source">LLDP 自动发现</p>
+                </div>
+                <div class="topology-legend" aria-label="拓扑状态图例">
+                    <span><i class="topology-dot online"></i>在线</span>
+                    <span><i class="topology-dot offline"></i>异常</span>
+                    <span><i class="topology-dot unknown"></i>未知</span>
+                    <span><i class="topology-line-sample active"></i>检测路径</span>
+                </div>
+            </div>
+            <div class="topology-stage" id="topology-stage" aria-live="polite">
+                <div class="topology-layer-guides" id="topology-layer-guides" aria-hidden="true"></div>
+                <svg class="topology-edges" id="topology-edges" aria-hidden="true"></svg>
+                <div class="topology-nodes" id="topology-nodes"></div>
+                <div class="topology-empty" id="topology-empty">正在读取核心交换机 LLDP 关系</div>
+            </div>
+        </section>
+
+        <aside class="topology-detail-panel" id="topology-detail-panel" aria-labelledby="topology-detail-title">
+            <div class="topology-detail-heading">
+                <div>
+                    <span id="topology-detail-type">节点详情</span>
+                    <h3 id="topology-detail-title">选择拓扑节点</h3>
+                </div>
+                <span class="status-badge" id="topology-detail-status">-</span>
+            </div>
+            <p class="topology-detail-summary" id="topology-detail-summary">点击节点查看管理地址、链路端口和检测状态。</p>
+            <dl class="topology-detail-list" id="topology-detail-list">
+                <div><dt>管理地址</dt><dd>-</dd></div>
+                <div><dt>状态来源</dt><dd>-</dd></div>
+                <div><dt>最近检测</dt><dd>-</dd></div>
+            </dl>
+            <div class="topology-link-list" id="topology-link-list"></div>
+            <div class="button-row topology-detail-actions" id="topology-detail-actions"></div>
+        </aside>
+    </div>
+</section>
+
 <section class="panel switches-panel ops-workspace-view ops-monitor-view app-view" id="switches-panel" hidden>
     <div class="panel-header ops-module-header">
         <div>

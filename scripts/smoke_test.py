@@ -29,6 +29,7 @@ from app.modules.osdwan import routes as osdwan_routes
 from app.modules.sangfor_ac import routes as sangfor_ac_routes
 from app.modules.switches import trace as switch_trace
 from app.modules.switches import routes as switch_routes
+from app.modules.switches import topology as switch_topology
 from app.modules.wireless import routes as wireless_routes
 
 
@@ -466,8 +467,49 @@ def main():
 
     original_prometheus_client = wireless_routes.PrometheusClient
     original_switch_prometheus_client = switch_routes.PrometheusClient
+    original_load_topology_snapshot = switch_routes.load_topology_snapshot
+    original_topology_firewall_status = switch_routes.fetch_huawei_firewall_status
+    original_switch_ping_device = switch_routes.ping_device
     wireless_routes.PrometheusClient = FakePrometheusClient
     switch_routes.PrometheusClient = FakeSwitchPrometheusClient
+    switch_routes.load_topology_snapshot = lambda force=False: ({
+        "version": switch_topology.TOPOLOGY_CACHE_VERSION,
+        "generated_timestamp": time.time(),
+        "generated_at": "2026-07-16 10:00:00",
+        "expires_at": "2026-07-16 10:05:00",
+        "source": "LLDP",
+        "core_ip": "172.16.100.5",
+        "nodes": [
+            {"id": "core:172-16-100-5", "type": "core", "name": "核心交换机", "ip": "172.16.100.5"},
+            {"id": "switch:5cc9-9958-dce4", "type": "switch", "name": "H3C", "ip": "172.16.100.12"},
+            {"id": "firewall:28a6-db28-946b", "type": "firewall", "name": "USG6300", "ip": "172.16.100.3"},
+        ],
+        "edges": [
+            {
+                "id": "core--switch",
+                "source": "core:172-16-100-5",
+                "target": "switch:5cc9-9958-dce4",
+                "link_count": 1,
+                "links": [{"local_interface": "GigabitEthernet0/0/2", "remote_interface": "GigabitEthernet1/0/48"}],
+            },
+            {
+                "id": "core--firewall",
+                "source": "core:172-16-100-5",
+                "target": "firewall:28a6-db28-946b",
+                "link_count": 1,
+                "links": [{"local_interface": "GigabitEthernet0/0/9", "remote_interface": "GigabitEthernet1/0/0"}],
+            },
+        ],
+        "warnings": [],
+    }, {"cached": not force, "stale": False, "error": ""})
+    switch_routes.fetch_huawei_firewall_status = lambda timeout=5: {
+        "configured": True,
+        "ok": True,
+        "cpu_usage": 7.0,
+        "memory_usage": 45.0,
+        "error": "",
+    }
+    switch_routes.ping_device = lambda ip_address, timeout_seconds=1: True
     try:
         ap_response = client.get("/api/statistics/ap-info?page=1&per_page=10&status=online&q=AP-A")
         assert ap_response.status_code == 200, ap_response.get_data(as_text=True)
@@ -496,6 +538,17 @@ def main():
         assert switch_data["vendor_counts"] == {"h3c": 1, "huawei": 1}
         assert switch_data["switch_list"][0]["instance"] == "172.16.100.5"
         assert switch_data["switch_list"][0]["last_scrape_at"] == "2026-05-20 10:15:45"
+
+        topology_response = client.get("/api/statistics/switches/topology")
+        assert topology_response.status_code == 200, topology_response.get_data(as_text=True)
+        topology_data = topology_response.get_json()["data"]
+        assert topology_data["source"] == "LLDP"
+        assert topology_data["stats"]["switch_total"] == 2
+        assert topology_data["stats"]["switch_online"] == 1
+        assert topology_data["stats"]["switch_offline"] == 1
+        assert topology_data["stats"]["firewall_total"] == 1
+        assert topology_data["stats"]["link_total"] == 2
+        assert next(node for node in topology_data["nodes"] if node["type"] == "firewall")["status"] == "online"
 
         switch_ports_response = client.get("/api/statistics/switches/172.16.100.5/ports?page=1&q=uplink&status=online")
         assert switch_ports_response.status_code == 200, switch_ports_response.get_data(as_text=True)
@@ -550,6 +603,382 @@ def main():
         assert switch_trace.command_interface_name("Eth-Trunk16") == "Eth-Trunk 16"
         assert switch_trace.normalize_mac("90:09:D0:91:47:8F") == "9009-d091-478f"
         assert switch_trace.normalize_mac("9009.D091.478F") == "9009-d091-478f"
+
+        lldp_topology_output = "\n".join([
+            "GigabitEthernet0/0/4 has 1 neighbor(s):",
+            "Neighbor index :1",
+            "Chassis ID     :24a5-2c1c-a4e7",
+            "Port ID        :GigabitEthernet0/0/48",
+            "System name         :7F-Office-Switch-01",
+            "System description  :S5720S-52P-LI-AC",
+            "Management address type  :ipv4",
+            "Management address value :172.16.100.37",
+            "System capabilities enabled     :bridge router",
+            "GigabitEthernet1/0/4 has 1 neighbor(s):",
+            "Neighbor index :1",
+            "Chassis ID     :24a5-2c1c-a4e7",
+            "Port ID        :GigabitEthernet1/0/48",
+            "System name         :7F-Office-Switch-01",
+            "System description  :S5720S-52P-LI-AC",
+            "Management address type  :all802",
+            "Management address value :24a5-2c1c-a4e8",
+            "Management address type  :ipv4",
+            "Management address value :172.16.100.37",
+            "GigabitEthernet0/0/9 has 1 neighbor(s):",
+            "Neighbor index :1",
+            "Chassis ID     :28a6-db28-946b",
+            "Port ID        :GigabitEthernet1/0/0",
+            "System name         :USG6300",
+            "System description  :USG6300 Huawei Firewall",
+            "Management address type  :ipv4",
+            "Management address value :172.16.100.3",
+            "System capabilities enabled     :router",
+        ])
+        parsed_neighbors = switch_topology.parse_lldp_neighbors(lldp_topology_output)
+        assert len(parsed_neighbors) == 3
+        assert parsed_neighbors[1]["management_ip"] == "172.16.100.37"
+        topology_nodes, topology_edges, topology_warnings = switch_topology.build_topology_structure(
+            "172.16.100.5",
+            parsed_neighbors,
+            "172.16.100.3",
+        )
+        assert len(topology_nodes) == 3
+        assert len(topology_edges) == 2
+        assert next(edge for edge in topology_edges if "switch:" in edge["target"])["link_count"] == 2
+        assert next(node for node in topology_nodes if node["type"] == "firewall")["ip"] == "172.16.100.3"
+        assert topology_warnings == []
+
+        management_ip_overrides = switch_trace.parse_management_ip_overrides(
+            "H3C=172.16.100.12,F-A2-Switch1=172.16.100.13"
+        )
+        manual_ip_nodes, _, manual_ip_warnings = switch_topology.build_topology_structure(
+            "172.16.100.5",
+            [
+                {
+                    "local_interface": "GigabitEthernet0/0/2",
+                    "remote_interface": "GigabitEthernet1/0/24",
+                    "system_name": "H3C",
+                    "system_description": "H3C Switch",
+                    "chassis_id": "5cc9-9958-dce4",
+                    "chassis_mac": "5cc9-9958-dce4",
+                    "management_ip": "",
+                    "platform": "h3c",
+                },
+                {
+                    "local_interface": "GigabitEthernet0/0/3",
+                    "remote_interface": "GigabitEthernet1/0/24",
+                    "system_name": "F-A2-Switch1",
+                    "system_description": "H3C Switch",
+                    "chassis_id": "5cc9-9958-dce5",
+                    "chassis_mac": "5cc9-9958-dce5",
+                    "management_ip": "",
+                    "platform": "h3c",
+                },
+            ],
+            settings={"management_ip_overrides": management_ip_overrides},
+        )
+        assert {
+            node["name"]: node["ip"]
+            for node in manual_ip_nodes
+            if node["type"] == "switch"
+        } == {
+            "H3C": "172.16.100.12",
+            "F-A2-Switch1": "172.16.100.13",
+        }
+        assert manual_ip_warnings == []
+
+        stack_settings = {
+            "core_members": [
+                {"slot": "0", "name": "HeXinA"},
+                {"slot": "1", "name": "HeXinB"},
+            ],
+            "uplink_patterns": ["itn8800", "raisecom"],
+            "carrier_links": [
+                {"key": "unicom", "name": "联通线路", "local_interface": "GE0/0/8"},
+                {"key": "telecom", "name": "电信线路", "local_interface": "GE1/0/6"},
+            ],
+            "firewall_ha_mode": "active-active",
+            "firewall_members": [
+                {
+                    "key": "fw1",
+                    "name": "FW1",
+                    "ip": "172.16.100.1",
+                    "links": switch_topology.parse_configured_core_links(
+                        "GE0/0/10=GE1/0/0,GE0/0/22=GE1/0/4,GE1/0/8=GE1/0/1"
+                    ),
+                },
+                {
+                    "key": "fw2",
+                    "name": "FW2",
+                    "ip": "172.16.100.2",
+                    "links": switch_topology.parse_configured_core_links(
+                        "GE0/0/9=GE1/0/0,GE1/0/7=GE1/0/1,GE1/0/24=GE1/0/4"
+                    ),
+                },
+            ],
+        }
+        stack_neighbors = [*parsed_neighbors, {
+            "local_interface": "GigabitEthernet0/0/8",
+            "remote_interface": "gigaethernet1/3/3",
+            "system_name": "BJ-ZQ-YongHDS-U-1.MCN.iTN8800",
+            "system_description": "Raisecom Operating System Software,iTN8800-II-NXU",
+            "capabilities": "bridge router",
+            "chassis_id": "9800-7400-949a",
+            "chassis_mac": "9800-7400-949a",
+            "management_ip": "",
+            "platform": "huawei",
+        }]
+        stack_nodes, stack_edges, stack_warnings = switch_topology.build_topology_structure(
+            "172.16.100.5",
+            stack_neighbors,
+            "172.16.100.3",
+            stack_settings,
+        )
+        assert {node["name"] for node in stack_nodes if node["type"] == "core"} == {"HeXinA", "HeXinB"}
+        assert len([node for node in stack_nodes if node["type"] == "firewall"]) == 2
+        uplink_node = next(node for node in stack_nodes if node["name"] == "联通线路")
+        telecom_node = next(node for node in stack_nodes if node["name"] == "电信线路")
+        assert uplink_node["device_name"] == "BJ-ZQ-YongHDS-U-1.MCN.iTN8800"
+        assert uplink_node["configured_local_interface"] == "GigabitEthernet0/0/8"
+        assert telecom_node["configured_local_interface"] == "GigabitEthernet1/0/6"
+        assert not any("iTN8800 未上报" in warning for warning in stack_warnings)
+        uplink_edge = next(
+            edge for edge in stack_edges
+            if edge["target"] == uplink_node["id"]
+        )
+        assert uplink_edge["source"] == next(
+            node["id"] for node in stack_nodes
+            if node["type"] == "core" and node["stack_member"] == "0"
+        )
+        assert uplink_edge["relationship_type"] == "carrier"
+        assert uplink_edge["observed_link_count"] == 1
+        assert uplink_edge["links"][0]["observed_remote_interface"] == "gigaethernet1/3/3"
+        telecom_edge = next(
+            edge for edge in stack_edges
+            if edge["target"] == telecom_node["id"]
+        )
+        assert telecom_edge["source"] == next(
+            node["id"] for node in stack_nodes
+            if node["type"] == "core" and node["stack_member"] == "1"
+        )
+        assert telecom_edge["links"][0]["local_interface"] == "GigabitEthernet1/0/6"
+        assert telecom_edge["observed_link_count"] == 0
+        fw2_node = next(node for node in stack_nodes if node["type"] == "firewall" and node["name"] == "FW2")
+        fw2_core_a_edge = next(
+            edge for edge in stack_edges
+            if edge["target"] == fw2_node["id"]
+            and any(link["local_interface"] == "GigabitEthernet0/0/9" for link in edge["links"])
+        )
+        assert fw2_core_a_edge["observed_link_count"] == 1
+        fw2_core_a_link = next(
+            link for link in fw2_core_a_edge["links"]
+            if link["local_interface"] == "GigabitEthernet0/0/9"
+        )
+        assert fw2_core_a_link["source"] == "configured"
+        assert fw2_core_a_link["observed"] is True
+        assert fw2_core_a_link["remote_interface"] == "GigabitEthernet1/0/0"
+        assert fw2_core_a_link["observed_remote_interface"] == "GigabitEthernet1/0/0"
+        fw2_core_b_edge = next(
+            edge for edge in stack_edges
+            if edge["target"] == fw2_node["id"]
+            and any(link["local_interface"] == "GigabitEthernet1/0/24" for link in edge["links"])
+        )
+        assert fw2_core_b_edge["observed_link_count"] == 0
+        hydrated_stack = switch_topology.hydrate_topology(
+            {"nodes": stack_nodes, "edges": stack_edges},
+            [{"instance": "172.16.100.5", "is_online": True, "last_scrape_at": "2026-07-16 10:00:00"}],
+            {"configured": True, "ok": True, "cpu_usage": 7, "memory_usage": 45},
+            [],
+        )
+        assert next(node for node in hydrated_stack["nodes"] if node["name"] == "联通线路")["status"] == "online"
+        assert next(node for node in hydrated_stack["nodes"] if node["name"] == "电信线路")["status"] == "unknown"
+        assert all(
+            node["status_text"] == "集群可达"
+            for node in hydrated_stack["nodes"]
+            if node["type"] == "firewall"
+        )
+        assert next(
+            edge for edge in hydrated_stack["edges"]
+            if edge["id"] == fw2_core_b_edge["id"]
+        )["status"] == "unknown"
+
+        malformed_link_warnings = []
+        parsed_configured_links = switch_topology.parse_configured_core_links(
+            "bad,=GE1/0/0,GE0/0/9=,GE0/0/9=GE1/0/0,GE0/0/9=GE1/0/1",
+            malformed_link_warnings,
+            "FWX",
+        )
+        assert parsed_configured_links == [{
+            "local_interface": "GigabitEthernet0/0/9",
+            "remote_interface": "GigabitEthernet1/0/0",
+        }]
+        assert len(malformed_link_warnings) == 4
+        assert any("格式错误" in warning for warning in malformed_link_warnings)
+        assert any("重复配置" in warning for warning in malformed_link_warnings)
+
+        firewall_neighbor = next(
+            neighbor for neighbor in parsed_neighbors
+            if neighbor["system_name"] == "USG6300"
+        )
+        evidence_settings = {
+            "core_members": stack_settings["core_members"],
+            "firewall_members": [{
+                "key": "fw1",
+                "name": "FW1",
+                "ip": "172.16.100.1",
+                "links": switch_topology.parse_configured_core_links(
+                    "GE0/0/9=GE9/9/9"
+                ),
+            }],
+        }
+        _, evidence_edges, evidence_warnings = switch_topology.build_topology_structure(
+            "172.16.100.5",
+            [firewall_neighbor],
+            "172.16.100.3",
+            evidence_settings,
+        )
+        assert evidence_warnings == []
+        evidence_link = evidence_edges[0]["links"][0]
+        assert evidence_link["source"] == "configured"
+        assert evidence_link["remote_interface"] == "GigabitEthernet9/9/9"
+        assert evidence_link["observed"] is True
+        assert evidence_link["observed_remote_interface"] == "GigabitEthernet1/0/0"
+
+        conflict_settings = {
+            "core_members": stack_settings["core_members"],
+            "firewall_members": [
+                {
+                    "key": "fw1",
+                    "name": "FW1",
+                    "ip": "172.16.100.1",
+                    "links": switch_topology.parse_configured_core_links(
+                        "GE0/0/9=GE1/0/0"
+                    ),
+                },
+                {
+                    "key": "fw2",
+                    "name": "FW2",
+                    "ip": "172.16.100.2",
+                    "links": switch_topology.parse_configured_core_links(
+                        "GE0/0/9=GE1/0/0"
+                    ),
+                },
+            ],
+        }
+        _, conflict_edges, conflict_warnings = switch_topology.build_topology_structure(
+            "172.16.100.5",
+            [firewall_neighbor],
+            "172.16.100.3",
+            conflict_settings,
+        )
+        assert any("同时配置到 FW1、FW2" in warning for warning in conflict_warnings)
+        assert all(edge["observed_link_count"] == 0 for edge in conflict_edges)
+        assert all(link["observed"] is False for edge in conflict_edges for link in edge["links"])
+
+        trace_config_for_topology = switch_trace.SwitchTraceConfig(
+            "172.16.100.5", "user", "pass", 22, 8, "", "", 22, 8, "auto", 23, 5,
+            "H3C=172.16.100.12,F-A2-Switch1=172.16.100.13",
+        )
+        configured_neighbor = {"system_name": " h3c ", "management_ip": ""}
+        configured_hop = {}
+        assert switch_trace.resolve_lldp_neighbor_management_ip(
+            None,
+            configured_neighbor,
+            configured_hop,
+            trace_config_for_topology,
+        ) == "172.16.100.12"
+        assert configured_neighbor["resolved_by"] == "configured_name"
+        unresolved_neighbors = switch_topology.parse_lldp_neighbors("\n".join([
+            "GigabitEthernet0/0/14 has 1 neighbor(s):",
+            "Neighbor index :1",
+            "Chassis ID     :d468-ba01-3672",
+            "Port ID        :GigabitEthernet1/0/24",
+            "System name         :F-A1-Ap-POE-switch1",
+            "System description  :Cisco IOS Software",
+            "Management address type  :ipv4",
+            "Management address value :192.168.0.1",
+        ]))
+        assert switch_topology.unresolved_neighbor_macs(unresolved_neighbors, trace_config_for_topology) == {"d468-ba01-3672"}
+        switch_topology.resolve_neighbor_management_ips(
+            unresolved_neighbors,
+            "172.16.100.11  d468-ba01-3672  10  D-0  Vlanif41",
+            trace_config_for_topology,
+        )
+        assert unresolved_neighbors[0]["management_ip"] == "172.16.100.11"
+        assert unresolved_neighbors[0]["lldp_management_ip"] == "192.168.0.1"
+
+        original_discover_topology = switch_topology.discover_topology
+        with tempfile.TemporaryDirectory() as topology_cache_dir:
+            cache_path = os.path.join(topology_cache_dir, "topology.json")
+            app.config["SWITCH_TOPOLOGY_CACHE_FILE"] = cache_path
+            app.config["SWITCH_TOPOLOGY_CACHE_SECONDS"] = 300
+            app.config["SWITCH_TOPOLOGY_FORCE_REFRESH_COOLDOWN_SECONDS"] = 60
+            discovery_calls = []
+            switch_topology.discover_topology = lambda: discovery_calls.append(True) or {
+                "version": switch_topology.TOPOLOGY_CACHE_VERSION,
+                "generated_timestamp": time.time(),
+                "generated_at": "2026-07-16 10:00:00",
+                "expires_at": "2026-07-16 10:05:00",
+                "source": "LLDP",
+                "core_ip": "172.16.100.5",
+                "nodes": topology_nodes,
+                "edges": topology_edges,
+                "warnings": [],
+            }
+            with app.app_context():
+                first_snapshot, first_meta = switch_topology.load_topology_snapshot()
+                second_snapshot, second_meta = switch_topology.load_topology_snapshot()
+                forced_snapshot, forced_meta = switch_topology.load_topology_snapshot(force=True)
+            assert first_snapshot["source"] == "LLDP"
+            assert first_meta["cached"] is False
+            assert second_snapshot == first_snapshot
+            assert second_meta["cached"] is True
+            assert forced_snapshot == first_snapshot
+            assert forced_meta["cached"] is True
+            assert forced_meta["rate_limited"] is True
+            assert forced_meta["retry_after"] > 0
+            assert len(discovery_calls) == 1
+        switch_topology.discover_topology = original_discover_topology
+        app.config.pop("SWITCH_TOPOLOGY_CACHE_FILE", None)
+
+        failed_discovery_calls = []
+        with tempfile.TemporaryDirectory() as topology_failure_dir:
+            app.config["SWITCH_TOPOLOGY_CACHE_FILE"] = os.path.join(topology_failure_dir, "topology.json")
+
+            def fail_topology_discovery():
+                failed_discovery_calls.append(True)
+                raise switch_topology.TopologyDiscoveryError("测试发现失败")
+
+            switch_topology.discover_topology = fail_topology_discovery
+            with app.app_context():
+                for expected_message in ("测试发现失败", "冷却中"):
+                    try:
+                        switch_topology.load_topology_snapshot(force=True)
+                    except switch_topology.TopologyDiscoveryError as exc:
+                        assert expected_message in str(exc)
+                    else:
+                        raise AssertionError("拓扑发现失败时应返回明确异常")
+            assert len(failed_discovery_calls) == 1
+        switch_topology.discover_topology = original_discover_topology
+        app.config.pop("SWITCH_TOPOLOGY_CACHE_FILE", None)
+        assert switch_routes.aggregate_trace_path_status(
+            "online",
+            "online",
+            [{"status": "online"}],
+            {"status": "online"},
+        ) == "online"
+        assert switch_routes.aggregate_trace_path_status(
+            "online",
+            "online",
+            [{"status": "offline"}],
+            {"status": "online"},
+        ) == "failed"
+        assert switch_routes.aggregate_trace_path_status(
+            "online",
+            "online",
+            [{"status": "online"}],
+            {"status": "unconfigured"},
+        ) == "degraded"
         assert switch_trace.cisco_mac("186f-2d0b-e080") == "186f.2d0b.e080"
         assert switch_trace.cisco_colon_mac("186f-2d0b-e080") == "18:6f:2d:0b:e0:80"
         assert switch_trace.cisco_interface_name("GigabitEthernet1/0/36") == "Gi1/0/36"
@@ -984,6 +1413,17 @@ def main():
             assert trace_json["data"]["target_mac"] == "9009-d091-478f"
             assert trace_json["data"]["final_interface"] == "GE0/0/12"
 
+            connectivity_response = client.post(
+                "/api/statistics/switches/trace-terminal",
+                json={"ip": "172.16.70.17", "check_connectivity": True},
+            )
+            connectivity = connectivity_response.get_json()["data"]["connectivity"]
+            assert connectivity["terminal"]["status"] == "online"
+            assert connectivity["switches"][0]["status"] == "online"
+            assert connectivity["trace"]["status"] == "online"
+            assert connectivity["firewall"]["status"] == "online"
+            assert connectivity["path_status"] == "online"
+
             assert switch_routes.parse_trace_target({"target": "9009.D091.478F"}) == ("mac", "9009-d091-478f")
             assert switch_routes.parse_trace_target({"target": "9009d091478f"}) == ("mac", "9009-d091-478f")
             mac_trace_response = client.post(
@@ -1021,6 +1461,9 @@ def main():
     finally:
         wireless_routes.PrometheusClient = original_prometheus_client
         switch_routes.PrometheusClient = original_switch_prometheus_client
+        switch_routes.load_topology_snapshot = original_load_topology_snapshot
+        switch_routes.fetch_huawei_firewall_status = original_topology_firewall_status
+        switch_routes.ping_device = original_switch_ping_device
 
     class FakeOsdwanResponse:
         def __init__(self, payload):

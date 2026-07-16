@@ -115,6 +115,7 @@ const viewTitles = {
     firewallBandwidth: ['防火墙带宽', '华为防火墙上下行趋势'],
     trafficAnalysis: ['流量分析', 'AC 用户速率与应用明细'],
     osdwan: ['OSDWAN 监控', '用户与带宽趋势'],
+    topology: ['网络拓扑', '核心 LLDP 关系与终端接入路径'],
     switches: ['交换机监控', 'Prometheus 交换机目标状态'],
     wireless: ['无线控制器', 'AP、SSID 与无线用户状态'],
     devices: ['设备列表', '本地设备清单和在线状态'],
@@ -179,6 +180,21 @@ const switchState = {
     vendorCounts: {}
 };
 
+const topologyState = {
+    data: null,
+    devices: [],
+    trace: null,
+    traceMessage: '',
+    traceCode: 0,
+    selectedNodeId: '',
+    loading: false,
+    autoRefreshing: false,
+    pickerOpen: false,
+    pickerIndex: -1,
+    pickerMatches: [],
+    pickerSelection: null,
+};
+
 const deviceState = {
     page: 1,
     perPage: 10,
@@ -237,6 +253,7 @@ let wirelessApEmptyRetryTimer = null;
 let activeModalId = null;
 let previousFocusedElement = null;
 const OSDWAN_METRICS_REFRESH_MS = 60 * 1000;
+const TOPOLOGY_STATUS_REFRESH_MS = 60 * 1000;
 let osdwanMetricsAutoRefreshing = false;
 let trafficAnalysisRequestId = 0;
 let dashboardFirewallWarmupTimer = null;
@@ -274,6 +291,7 @@ const OPS_VIEW_IDS = new Set([
     'firewall-bandwidth-panel',
     'traffic-analysis-panel',
     'osdwan-panel',
+    'topology-panel',
     'switches-panel',
     'wireless-panel',
     'devices-panel',
@@ -282,6 +300,7 @@ const OPS_VIEW_IDS = new Set([
 ]);
 const WORKSPACE_VIEW_IDS = new Set([
     'osdwan-panel',
+    'topology-panel',
     'switches-panel',
     'wireless-panel',
     'devices-panel',
@@ -432,6 +451,9 @@ function refreshCurrentView() {
     }
     if (isVisibleView('osdwan-panel')) {
         return loadOsdwanMetrics({charts: false});
+    }
+    if (isVisibleView('topology-panel')) {
+        return loadTopology();
     }
     if (isVisibleView('switches-panel')) {
         const switchDetail = document.getElementById('switch-detail-section');
@@ -2208,6 +2230,945 @@ async function loadWirelessMetrics() {
     document.getElementById('wireless-ap-online').textContent = data.ap_online ?? 0;
     document.getElementById('wireless-cpu').textContent = `${data.cpu_usage ?? 0}%`;
     return status;
+}
+
+async function loadTopology(options = {}) {
+    showView('topology-panel', 'topology-nav', 'topology');
+    const empty = document.getElementById('topology-empty');
+    if (!topologyState.data && empty) {
+        empty.hidden = false;
+        empty.classList.remove('error');
+        empty.textContent = options.rediscover ? '正在重新读取核心交换机 LLDP' : '正在读取核心交换机 LLDP 关系';
+    }
+    topologyState.loading = true;
+    try {
+        const params = new URLSearchParams();
+        if (options.rediscover) {
+            params.set('refresh', '1');
+        }
+        const url = `/api/statistics/switches/topology${params.size ? `?${params.toString()}` : ''}`;
+        const result = await apiGetResult(url);
+        const data = result.data || {};
+        if ((data.nodes || []).length) {
+            topologyState.data = data;
+            renderTopology(data);
+        } else if (!topologyState.data) {
+            renderTopologyEmpty(result.message || '暂无可用拓扑数据', true);
+        }
+        if (result.code !== 0) {
+            renderTopologyWarning(data.warnings || [result.message || '拓扑数据加载异常']);
+        }
+        if (options.toast) {
+            showToast(result.message === 'success' ? '拓扑状态已刷新' : result.message, result.code === 0 ? 'info' : 'error');
+        }
+        return data;
+    } catch (error) {
+        if (!topologyState.data) {
+            renderTopologyEmpty(error.message, true);
+        }
+        renderTopologyWarning([error.message]);
+        throw error;
+    } finally {
+        topologyState.loading = false;
+    }
+}
+
+function renderTopology(data) {
+    const stats = data.stats || {};
+    setText('topology-switch-total', stats.switch_total ?? 0);
+    setText('topology-switch-online', stats.switch_online ?? 0);
+    setText('topology-switch-risk', (stats.switch_offline || 0) + (stats.switch_unknown || 0));
+    setText('topology-link-total', stats.link_total ?? 0);
+    setText('topology-generated-at', `${data.generated_at || '-'}${data.cached ? ' · 缓存' : ''}`);
+    setText('topology-source', `${data.source || 'LLDP'} · 状态更新 ${data.status_updated_at || '-'}`);
+    renderTopologyWarning(data.warnings || []);
+    updateTopologyDevicePicker(data.devices || []);
+    renderTopologyGraph();
+}
+
+function updateTopologyDevicePicker(devices) {
+    topologyState.devices = [...devices];
+    if (topologyState.pickerOpen) {
+        renderTopologyDevicePicker();
+    }
+}
+
+function topologyDeviceMatches(query) {
+    const keyword = String(query || '').trim().toLowerCase();
+    return topologyState.devices
+        .map((device) => {
+            const name = String(device.name || '').toLowerCase();
+            const ip = String(device.ip || '').toLowerCase();
+            const mac = String(device.mac || '').toLowerCase();
+            const category = String(device.category || '').toLowerCase();
+            let score = 50;
+            if (keyword) {
+                if (name === keyword || ip === keyword || mac === keyword) {
+                    score = 0;
+                } else if (name.startsWith(keyword)) {
+                    score = 5;
+                } else if (ip.startsWith(keyword) || mac.startsWith(keyword)) {
+                    score = 10;
+                } else if (name.includes(keyword)) {
+                    score = 20;
+                } else if (ip.includes(keyword) || mac.includes(keyword) || category.includes(keyword)) {
+                    score = 30;
+                } else {
+                    return null;
+                }
+            }
+            return {device, score};
+        })
+        .filter(Boolean)
+        .sort((left, right) => left.score - right.score
+            || Number(Boolean(right.device.is_online)) - Number(Boolean(left.device.is_online))
+            || String(left.device.name || left.device.ip || '').localeCompare(
+                String(right.device.name || right.device.ip || ''),
+                'zh-CN',
+            ))
+        .slice(0, 10)
+        .map((item) => item.device);
+}
+
+function renderTopologyDevicePicker() {
+    const picker = document.getElementById('topology-device-picker');
+    const input = document.getElementById('topology-search-input');
+    if (!picker || !input) {
+        return;
+    }
+    const matches = topologyDeviceMatches(input.value);
+    topologyState.pickerMatches = matches;
+    if (topologyState.pickerIndex >= matches.length) {
+        topologyState.pickerIndex = matches.length - 1;
+    }
+    picker.innerHTML = matches.length ? `
+        <div class="topology-picker-caption">${input.value.trim() ? `匹配 ${matches.length} 台设备` : '设备列表'}</div>
+        <div class="topology-picker-options">
+            ${matches.map((device, index) => {
+                const label = device.name || device.ip || device.mac || '未命名设备';
+                const metadata = [device.ip, device.mac, device.category].filter(Boolean).join(' · ');
+                const active = index === topologyState.pickerIndex;
+                return `
+                    <button class="topology-picker-option${active ? ' active' : ''}" id="topology-device-option-${index}" type="button" role="option" data-topology-device-index="${index}" aria-selected="${active}">
+                        <span class="topology-picker-option-main">
+                            <strong>${escapeHtml(label)}</strong>
+                            <span class="topology-picker-status ${device.is_online ? 'online' : 'offline'}"><i></i>${device.is_online ? '在线' : '离线'}</span>
+                        </span>
+                        <small title="${escapeHtml(metadata)}">${escapeHtml(metadata || '暂无地址信息')}</small>
+                    </button>
+                `;
+            }).join('')}
+        </div>
+    ` : `
+        <div class="topology-picker-empty">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <span>没有匹配设备</span>
+        </div>
+    `;
+    input.setAttribute(
+        'aria-activedescendant',
+        topologyState.pickerIndex >= 0 ? `topology-device-option-${topologyState.pickerIndex}` : '',
+    );
+}
+
+function openTopologyDevicePicker() {
+    const picker = document.getElementById('topology-device-picker');
+    const input = document.getElementById('topology-search-input');
+    const toggle = document.getElementById('topology-picker-toggle');
+    if (!picker || !input || !toggle) {
+        return;
+    }
+    topologyState.pickerOpen = true;
+    picker.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+    toggle.setAttribute('aria-expanded', 'true');
+    toggle.setAttribute('aria-label', '收起设备列表');
+    renderTopologyDevicePicker();
+}
+
+function closeTopologyDevicePicker() {
+    const picker = document.getElementById('topology-device-picker');
+    const input = document.getElementById('topology-search-input');
+    const toggle = document.getElementById('topology-picker-toggle');
+    topologyState.pickerOpen = false;
+    topologyState.pickerIndex = -1;
+    if (picker) {
+        picker.hidden = true;
+    }
+    if (input) {
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+    }
+    if (toggle) {
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.setAttribute('aria-label', '展开设备列表');
+    }
+}
+
+function selectTopologyDevice(device) {
+    const input = document.getElementById('topology-search-input');
+    if (!input || !device) {
+        return;
+    }
+    const label = device.name || device.ip || device.mac || '';
+    input.value = label;
+    topologyState.pickerSelection = {
+        label,
+        target: device.ip || device.mac || label,
+    };
+    closeTopologyDevicePicker();
+    input.focus();
+}
+
+function handleTopologyPickerKeydown(event) {
+    if (event.key === 'Escape') {
+        closeTopologyDevicePicker();
+        return;
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
+        return;
+    }
+    if (!topologyState.pickerOpen && event.key !== 'Enter') {
+        openTopologyDevicePicker();
+    }
+    if (!topologyState.pickerOpen) {
+        return;
+    }
+    if (event.key === 'Enter') {
+        if (topologyState.pickerIndex >= 0) {
+            event.preventDefault();
+            selectTopologyDevice(topologyState.pickerMatches[topologyState.pickerIndex]);
+        }
+        return;
+    }
+    event.preventDefault();
+    const count = topologyState.pickerMatches.length;
+    if (!count) {
+        return;
+    }
+    if (event.key === 'ArrowDown') {
+        topologyState.pickerIndex = (topologyState.pickerIndex + 1) % count;
+    } else {
+        topologyState.pickerIndex = topologyState.pickerIndex <= 0
+            ? count - 1
+            : topologyState.pickerIndex - 1;
+    }
+    renderTopologyDevicePicker();
+    document.getElementById(`topology-device-option-${topologyState.pickerIndex}`)?.scrollIntoView({block: 'nearest'});
+}
+
+function renderTopologyWarning(warnings) {
+    const panel = document.getElementById('topology-warning');
+    if (!panel) {
+        return;
+    }
+    const messages = [...new Set((warnings || []).filter(Boolean))];
+    panel.hidden = messages.length === 0;
+    panel.innerHTML = messages.length
+        ? `<i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span>${escapeHtml(messages.slice(0, 3).join('；'))}</span>`
+        : '';
+}
+
+function renderTopologyEmpty(message, isError = false) {
+    const empty = document.getElementById('topology-empty');
+    const nodes = document.getElementById('topology-nodes');
+    const edges = document.getElementById('topology-edges');
+    if (nodes) {
+        nodes.innerHTML = '';
+    }
+    if (edges) {
+        edges.innerHTML = '';
+    }
+    if (empty) {
+        empty.hidden = false;
+        empty.classList.toggle('error', isError);
+        empty.textContent = message || '暂无拓扑数据';
+    }
+}
+
+function buildTopologyGraph() {
+    const base = topologyState.data || {};
+    const nodes = (base.nodes || []).map((node) => ({...node, active: false}));
+    const edges = (base.edges || []).map((edge) => ({...edge, active: false}));
+    const nodeById = new Map(nodes.map((node) => [node.id, node]));
+    const nodeByIp = new Map();
+    nodes.filter((node) => node.ip).forEach((node) => {
+        if (!nodeByIp.has(node.ip)) {
+            nodeByIp.set(node.ip, node);
+        }
+    });
+    const trace = topologyState.trace;
+    if (!trace) {
+        return {nodes, edges};
+    }
+
+    const activeNodeIds = new Set();
+    const hops = trace.hops || [];
+    const pathNodes = [];
+    hops.forEach((hop, index) => {
+        let node = findTopologyTraceNode(nodes, hop, index) || nodeByIp.get(hop.switch_ip);
+        if (!node) {
+            node = {
+                id: `trace-switch:${hop.switch_ip || index}`,
+                type: index === 0 ? 'core' : 'switch',
+                name: hop.switch_name || (index === 0 ? '核心交换机' : '路径交换机'),
+                ip: hop.switch_ip || '',
+                status: hop.monitor_status || 'unknown',
+                status_text: topologyStatusLabel(hop.monitor_status),
+                status_source: '路径检测',
+                active: true,
+            };
+            nodes.push(node);
+            nodeById.set(node.id, node);
+            if (node.ip) {
+                nodeByIp.set(node.ip, node);
+            }
+        } else if (hop.monitor_status) {
+            node.status = hop.monitor_status;
+            node.status_text = topologyStatusLabel(hop.monitor_status);
+            node.status_source = 'Prometheus · 路径检测';
+        }
+        node.active = true;
+        activeNodeIds.add(node.id);
+        pathNodes.push(node);
+    });
+
+    for (let index = 0; index < pathNodes.length - 1; index += 1) {
+        activateOrAddTopologyEdge(edges, pathNodes[index], pathNodes[index + 1], {
+            local_interface: hops[index]?.ingress_interface || '',
+            remote_interface: hops[index]?.neighbor?.port_id || '',
+        });
+    }
+
+    const terminalConnectivity = trace.connectivity?.terminal || {};
+    const terminalId = `terminal:${trace.target_mac || trace.target_ip || 'selected'}`;
+    const terminal = {
+        id: terminalId,
+        type: 'terminal',
+        name: trace.target_name && trace.target_name !== '无' ? trace.target_name : '目标终端',
+        ip: trace.target_ip || '',
+        mac: trace.target_mac || '',
+        status: terminalConnectivity.status || 'unknown',
+        status_text: topologyStatusLabel(terminalConnectivity.status),
+        status_source: '实时 Ping',
+        last_checked_at: trace.connectivity?.checked_at || '',
+        active: true,
+    };
+    nodes.push(terminal);
+    nodeById.set(terminal.id, terminal);
+    activeNodeIds.add(terminal.id);
+    const lastPathNode = pathNodes[pathNodes.length - 1] || nodeByIp.get(trace.final_switch);
+    if (lastPathNode) {
+        activateOrAddTopologyEdge(edges, lastPathNode, terminal, {
+            local_interface: trace.final_interface || '',
+            remote_interface: trace.target_mac || '',
+        });
+    }
+
+    const firewallConnectivity = trace.connectivity?.firewall || {};
+    edges.forEach((edge) => {
+        const source = nodeById.get(edge.source);
+        const target = nodeById.get(edge.target);
+        if (source?.type === 'core' && source.active && target?.type === 'firewall') {
+            if (firewallConnectivity.status) {
+                target.status = firewallConnectivity.status;
+                target.status_text = topologyStatusLabel(firewallConnectivity.status);
+                target.status_source = 'SNMP · 路径检测';
+                target.last_checked_at = trace.connectivity?.checked_at || '';
+                target.last_error = firewallConnectivity.error || '';
+            }
+            edge.status = topologyEdgeStatus(source.status, target.status);
+            edge.active = true;
+            target.active = true;
+            activeNodeIds.add(target.id);
+        }
+    });
+    nodes.forEach((node) => {
+        node.active = activeNodeIds.has(node.id);
+    });
+    return {nodes, edges};
+}
+
+function findTopologyTraceNode(nodes, hop, index) {
+    const candidates = nodes.filter((node) => node.ip && node.ip === hop.switch_ip);
+    if (candidates.length < 2) {
+        return candidates[0] || null;
+    }
+    const interfaceName = hop.ingress_interface || hop.local_interface || '';
+    const slotMatch = String(interfaceName).match(/(?:GigabitEthernet|GE)(\d+)\//i);
+    if (slotMatch) {
+        const member = candidates.find((node) => String(node.stack_member ?? '') === slotMatch[1]);
+        if (member) {
+            return member;
+        }
+    }
+    return candidates.find((node) => node.type === (index === 0 ? 'core' : 'switch')) || candidates[0];
+}
+
+function activateOrAddTopologyEdge(edges, sourceNode, targetNode, link) {
+    let edge = edges.find((item) => (
+        (item.source === sourceNode.id && item.target === targetNode.id)
+        || (item.source === targetNode.id && item.target === sourceNode.id)
+    ));
+    if (!edge) {
+        edge = {
+            id: `trace:${sourceNode.id}--${targetNode.id}`,
+            source: sourceNode.id,
+            target: targetNode.id,
+            status: topologyEdgeStatus(sourceNode.status, targetNode.status),
+            link_count: 1,
+            links: [link],
+        };
+        edges.push(edge);
+    }
+    edge.status = topologyEdgeStatus(sourceNode.status, targetNode.status);
+    edge.active = true;
+}
+
+function topologyEdgeStatus(sourceStatus, targetStatus) {
+    const statuses = [normalizeTopologyStatus(sourceStatus), normalizeTopologyStatus(targetStatus)];
+    if (statuses.includes('offline')) {
+        return 'offline';
+    }
+    if (statuses.every((status) => status === 'online')) {
+        return 'online';
+    }
+    return 'unknown';
+}
+
+function renderTopologyGraph() {
+    const stage = document.getElementById('topology-stage');
+    const nodesLayer = document.getElementById('topology-nodes');
+    const edgeLayer = document.getElementById('topology-edges');
+    const layerGuides = document.getElementById('topology-layer-guides');
+    const empty = document.getElementById('topology-empty');
+    if (!stage || !nodesLayer || !edgeLayer) {
+        return;
+    }
+    const graph = buildTopologyGraph();
+    if (!graph.nodes.length) {
+        renderTopologyEmpty('暂无可用拓扑数据');
+        return;
+    }
+    if (empty) {
+        empty.hidden = true;
+    }
+
+    const layout = calculateTopologyLayout(graph.nodes, graph.edges, stage.clientWidth || 900);
+    stage.style.height = `${layout.height}px`;
+    if (layerGuides) {
+        layerGuides.innerHTML = layout.layers.map((layer) => `
+            <div class="topology-layer-guide" style="top:${layer.y}px"><span>${escapeHtml(layer.label)}</span></div>
+        `).join('');
+    }
+    nodesLayer.innerHTML = [...graph.nodes]
+        .sort(topologyNodeDisplaySort)
+        .map((node) => renderTopologyNode(node, layout.positions.get(node.id)))
+        .join('');
+    edgeLayer.setAttribute('viewBox', `0 0 ${layout.width} ${layout.height}`);
+    edgeLayer.setAttribute('width', String(layout.width));
+    edgeLayer.setAttribute('height', String(layout.height));
+    edgeLayer.innerHTML = graph.edges.map((edge) => renderTopologyEdge(
+        edge,
+        layout.positions,
+        layout.nodeById,
+    )).join('');
+
+    if (topologyState.selectedNodeId) {
+        renderTopologyNodeDetail(topologyState.selectedNodeId, graph);
+    } else {
+        const activeTerminal = graph.nodes.find((node) => node.type === 'terminal');
+        const core = graph.nodes.find((node) => node.type === 'core');
+        renderTopologyNodeDetail((activeTerminal || core || graph.nodes[0]).id, graph);
+    }
+}
+
+function calculateTopologyLayout(nodes, edges, availableWidth) {
+    const width = Math.max(720, availableWidth);
+    const positions = new Map();
+    const nodeById = new Map(nodes.map((node) => [node.id, node]));
+    const externalPeers = nodes
+        .filter((node) => ['uplink', 'firewall'].includes(node.type))
+        .sort(topologyExternalLayoutSort);
+    const cores = nodes
+        .filter((node) => node.type === 'core')
+        .sort((left, right) => Number(left.stack_member ?? 9) - Number(right.stack_member ?? 9));
+    const coreIds = new Set(cores.map((node) => node.id));
+    const switches = nodes
+        .filter((node) => node.type === 'switch')
+        .sort((left, right) => topologySwitchLayoutOrder(left, edges, coreIds, nodeById)
+            - topologySwitchLayoutOrder(right, edges, coreIds, nodeById)
+            || String(left.name || left.ip || '').localeCompare(String(right.name || right.ip || ''), 'zh-CN'));
+    const terminals = nodes.filter((node) => node.type === 'terminal');
+    const externalY = 72;
+    const coreY = 202;
+    const switchStartY = 338;
+    const switchRowGap = 118;
+    placeTopologyRow(positions, externalPeers, width, externalY);
+    placeTopologyRow(positions, cores, width, coreY);
+
+    const nodeWidth = width < 1100 ? 158 : 176;
+    const columns = Math.max(3, Math.min(6, Math.floor((width - 100) / (nodeWidth + 44))));
+    const switchRows = Math.max(1, Math.ceil(switches.length / columns));
+    for (let row = 0; row < switchRows; row += 1) {
+        const rowNodes = switches.slice(row * columns, (row + 1) * columns);
+        placeTopologyGridRow(
+            positions,
+            rowNodes,
+            width,
+            switchStartY + row * switchRowGap,
+            columns,
+            row % 2 === 1,
+            nodeWidth,
+        );
+    }
+
+    const lastSwitchY = switchStartY + (switchRows - 1) * switchRowGap;
+    const terminalY = lastSwitchY + 132;
+    terminals.forEach((node, index) => {
+        const finalSwitchIp = topologyState.trace?.final_switch || '';
+        const finalSwitch = nodes.find((candidate) => (
+            candidate.type === 'switch'
+            && candidate.active
+            && (!finalSwitchIp || candidate.ip === finalSwitchIp)
+        )) || nodes.find((candidate) => candidate.type === 'switch' && candidate.active);
+        const anchor = finalSwitch ? positions.get(finalSwitch.id) : null;
+        positions.set(node.id, {
+            x: terminals.length === 1 && anchor ? anchor.x : ((index + 1) * width) / (terminals.length + 1),
+            y: terminalY,
+        });
+    });
+    const layers = [
+        {label: '运营商与安全边界', y: 18},
+        {label: '核心堆叠', y: 145},
+        {label: '接入层', y: 278},
+    ];
+    if (terminals.length) {
+        layers.push({label: '检测终端', y: terminalY - 63});
+    }
+    return {
+        width,
+        height: terminals.length ? terminalY + 82 : lastSwitchY + 82,
+        positions,
+        layers,
+        nodeById,
+    };
+}
+
+function placeTopologyRow(positions, nodes, width, y) {
+    nodes.forEach((node, index) => {
+        positions.set(node.id, {
+            x: ((index + 1) * width) / (nodes.length + 1),
+            y,
+        });
+    });
+}
+
+function placeTopologyGridRow(positions, nodes, width, y, columns, stagger, nodeWidth) {
+    const sidePadding = (nodeWidth / 2) + 14;
+    nodes.forEach((node, index) => {
+        let x = ((index + 1) * width) / (nodes.length + 1);
+        if (stagger && nodes.length === columns && nodes.length > 1) {
+            x = sidePadding + (index * (width - (sidePadding * 2))) / (nodes.length - 1);
+        }
+        positions.set(node.id, {x, y});
+    });
+}
+
+function topologyExternalLayoutSort(left, right) {
+    const rank = (node) => {
+        const name = String(node.name || '').toLowerCase();
+        if (node.type === 'uplink' && name.includes('联通')) return 0;
+        if (node.type === 'firewall' && /1$/.test(name)) return 1;
+        if (node.type === 'firewall' && /2$/.test(name)) return 2;
+        if (node.type === 'uplink' && name.includes('电信')) return 3;
+        return node.type === 'firewall' ? 5 : 6;
+    };
+    return rank(left) - rank(right)
+        || String(left.name || '').localeCompare(String(right.name || ''), 'zh-CN');
+}
+
+function topologySwitchLayoutOrder(node, edges, coreIds, nodeById) {
+    const orders = [];
+    edges.forEach((edge) => {
+        if (edge.source !== node.id && edge.target !== node.id) {
+            return;
+        }
+        const peerId = edge.source === node.id ? edge.target : edge.source;
+        if (!coreIds.has(peerId)) {
+            return;
+        }
+        const core = nodeById.get(peerId) || {};
+        (edge.links || []).forEach((link) => {
+            const match = String(link.local_interface || '').match(/(?:GigabitEthernet|GE)(\d+)\/\d+\/(\d+)/i);
+            if (match) {
+                orders.push((Number(match[2]) * 10) + Number(core.stack_member || match[1] || 0));
+            }
+        });
+    });
+    return orders.length ? Math.min(...orders) : 9999;
+}
+
+function renderTopologyNode(node, position = {x: 0, y: 0}) {
+    const status = normalizeTopologyStatus(node.status);
+    const selected = node.id === topologyState.selectedNodeId;
+    const secondaryText = node.carrier_line
+        ? (node.device_name || node.configured_local_interface || '运营商线路')
+        : (node.ip || node.mac || topologyTypeLabel(node.type));
+    return `
+        <button class="topology-node ${escapeHtml(node.type || 'switch')} ${status} ${node.active ? 'active-path' : ''} ${selected ? 'selected' : ''}"
+            type="button"
+            data-topology-node="${escapeHtml(node.id)}"
+            style="left:${position.x}px;top:${position.y}px"
+            aria-label="${escapeHtml(`${topologyTypeLabel(node.type)} ${node.name || node.ip || ''} ${node.status_text || topologyStatusLabel(status)}`)}">
+            <span class="topology-node-icon"><i class="bi ${topologyNodeIcon(node.type)}" aria-hidden="true"></i></span>
+            <span class="topology-node-copy">
+                <strong title="${escapeHtml(node.name || node.ip || '')}">${escapeHtml(node.name || node.ip || '未命名节点')}</strong>
+                <small title="${escapeHtml(secondaryText)}">${escapeHtml(secondaryText)}</small>
+            </span>
+            <i class="topology-node-status" aria-hidden="true"></i>
+        </button>
+    `;
+}
+
+function renderTopologyEdge(edge, positions, nodeById) {
+    const source = positions.get(edge.source);
+    const target = positions.get(edge.target);
+    if (!source || !target) {
+        return '';
+    }
+    const geometry = topologyEdgeGeometry(
+        source,
+        target,
+        nodeById.get(edge.source) || {},
+        nodeById.get(edge.target) || {},
+    );
+    const status = normalizeTopologyStatus(edge.status);
+    const label = Number(edge.link_count || 0) > 1 ? `${edge.link_count} 条链路` : '';
+    return `
+        <g class="topology-edge ${status} ${edge.active ? 'active-path' : ''}">
+            <path d="${geometry.path}"></path>
+            ${label ? `<text x="${geometry.labelX}" y="${geometry.labelY}">${escapeHtml(label)}</text>` : ''}
+        </g>
+    `;
+}
+
+function topologyEdgeGeometry(source, target, sourceNode, targetNode) {
+    if (Math.abs(source.y - target.y) < 4) {
+        const archY = Math.max(18, source.y - 58);
+        return {
+            path: `M ${source.x} ${source.y} C ${source.x} ${archY}, ${target.x} ${archY}, ${target.x} ${target.y}`,
+            labelX: (source.x + target.x) / 2,
+            labelY: archY - 5,
+        };
+    }
+    const sourceIsTop = source.y < target.y;
+    const top = sourceIsTop ? source : target;
+    const bottom = sourceIsTop ? target : source;
+    const topNode = sourceIsTop ? sourceNode : targetNode;
+    const bottomNode = sourceIsTop ? targetNode : sourceNode;
+    const startY = top.y + 34;
+    const endY = bottom.y - 34;
+    let curveY = startY + ((endY - startY) / 2);
+    if (topNode.type === 'core' && bottomNode.type === 'switch') {
+        curveY += String(topNode.stack_member ?? '') === '1' ? 8 : -6;
+    }
+    return {
+        path: `M ${top.x} ${startY} C ${top.x} ${curveY}, ${bottom.x} ${curveY}, ${bottom.x} ${endY}`,
+        labelX: top.x + ((bottom.x - top.x) / 2),
+        labelY: curveY - 6,
+    };
+}
+
+function renderTopologyNodeDetail(nodeId, graph = buildTopologyGraph()) {
+    const node = graph.nodes.find((item) => item.id === nodeId);
+    if (!node) {
+        return;
+    }
+    topologyState.selectedNodeId = node.id;
+    document.querySelectorAll('[data-topology-node]').forEach((button) => {
+        button.classList.toggle('selected', button.dataset.topologyNode === node.id);
+    });
+    setText('topology-detail-type', topologyTypeLabel(node.type));
+    setText('topology-detail-title', node.name || node.ip || '未命名节点');
+    const statusBadge = document.getElementById('topology-detail-status');
+    if (statusBadge) {
+        statusBadge.className = `status-badge ${topologyBadgeClass(node.status)}`;
+        statusBadge.textContent = node.status_text || topologyStatusLabel(node.status);
+    }
+    setText('topology-detail-summary', topologyNodeSummary(node));
+    const detailList = document.getElementById('topology-detail-list');
+    if (detailList) {
+        const fields = topologyNodeFields(node);
+        detailList.innerHTML = fields.map(([label, value]) => `
+            <div><dt>${escapeHtml(label)}</dt><dd title="${escapeHtml(value || '-')}">${escapeHtml(value || '-')}</dd></div>
+        `).join('');
+    }
+    const relatedEdges = graph.edges.filter((edge) => edge.source === node.id || edge.target === node.id);
+    const linkList = document.getElementById('topology-link-list');
+    if (linkList) {
+        const visibleEdges = relatedEdges.slice(0, 6);
+        linkList.innerHTML = relatedEdges.length ? `
+            <h4>链路端口</h4>
+            ${visibleEdges.map((edge) => renderTopologyDetailEdge(edge, node.id, graph.nodes)).join('')}
+            ${relatedEdges.length > visibleEdges.length ? `<div class="topology-no-links">另有 ${relatedEdges.length - visibleEdges.length} 个相邻节点，点击对应节点查看端口</div>` : ''}
+        ` : '<div class="topology-no-links">暂无关联链路</div>';
+    }
+    renderTopologyDetailActions(node);
+}
+
+function renderTopologyDetailEdge(edge, nodeId, nodes) {
+    const peerId = edge.source === nodeId ? edge.target : edge.source;
+    const peer = nodes.find((node) => node.id === peerId) || {};
+    const links = edge.links || [];
+    return `
+        <div class="topology-link-detail">
+            <div><strong>${escapeHtml(peer.name || peer.ip || '相邻节点')}</strong><span>${escapeHtml(topologyStatusLabel(edge.status))}</span></div>
+            ${links.map((link) => {
+                const evidence = link.source === 'configured'
+                    ? (edge.relationship_type === 'carrier'
+                        ? (link.observed ? '线路标注 · LLDP 已发现' : '线路标注 · 待确认')
+                        : (link.observed ? '端口表配置 · 核心口已见防火墙 LLDP' : '仅端口表配置'))
+                    : 'LLDP 已发现';
+                const remoteInterface = link.remote_interface || link.observed_remote_interface || '-';
+                return `<small>${escapeHtml(link.local_interface || '-')} ↔ ${escapeHtml(remoteInterface)} · ${evidence}</small>`;
+            }).join('')}
+        </div>
+    `;
+}
+
+function renderTopologyDetailActions(node) {
+    const actions = document.getElementById('topology-detail-actions');
+    if (!actions) {
+        return;
+    }
+    if (node.type === 'firewall') {
+        actions.innerHTML = '<button class="small-button" type="button" data-topology-action="firewall"><i class="bi bi-graph-up"></i><span>查看防火墙</span></button>';
+    } else if (node.type === 'terminal') {
+        actions.innerHTML = '<button class="small-button" type="button" data-topology-action="devices"><i class="bi bi-hdd-network"></i><span>查看设备列表</span></button>';
+    } else if (node.ip) {
+        actions.innerHTML = `<button class="small-button" type="button" data-topology-action="switch" data-switch-instance="${escapeHtml(node.ip)}"><i class="bi bi-activity"></i><span>查看端口</span></button>`;
+    } else {
+        actions.innerHTML = '';
+    }
+}
+
+async function traceTopologyTerminal(event) {
+    if (event) {
+        event.preventDefault();
+    }
+    const input = document.getElementById('topology-search-input');
+    const button = document.getElementById('topology-trace-button');
+    const inputValue = input?.value.trim() || '';
+    const target = topologyState.pickerSelection?.label === inputValue
+        ? topologyState.pickerSelection.target
+        : inputValue;
+    if (!target) {
+        showToast('请输入设备名称、IP 或 MAC', 'error');
+        input?.focus();
+        return;
+    }
+    closeTopologyDevicePicker();
+    setButtonBusy(button, true);
+    setTopologyPathStatus('loading', '检测中');
+    setText('topology-trace-summary', `正在检测 ${target} 的 Ping、MAC 表和 LLDP 路径`);
+    try {
+        const result = await apiPostResult('/api/statistics/switches/trace-terminal', {
+            target,
+            check_connectivity: true,
+        });
+        topologyState.trace = result.data || {};
+        topologyState.traceMessage = result.message || '';
+        topologyState.traceCode = result.code || 0;
+        topologyState.selectedNodeId = '';
+        renderTopologyGraph();
+        renderTopologyTraceSummary(topologyState.trace, result.message || '', result.code || 0);
+        const clearButton = document.getElementById('topology-clear-path');
+        if (clearButton) {
+            clearButton.disabled = false;
+        }
+        showToast(result.code === 0 ? '路径检测完成' : (result.message || '路径检测异常'), result.code === 0 ? 'info' : 'error');
+    } catch (error) {
+        setTopologyPathStatus('failed', '检测失败');
+        setText('topology-trace-summary', error.message);
+        showToast(error.message, 'error');
+    } finally {
+        setButtonBusy(button, false);
+    }
+}
+
+function renderTopologyTraceSummary(trace, message, code) {
+    const connectivity = trace.connectivity || {};
+    const terminalStatus = connectivity.terminal?.status || 'unknown';
+    const pathStatus = connectivity.path_status || (code === 0 ? 'degraded' : 'failed');
+    const finalLocation = trace.final_switch && trace.final_interface
+        ? `${trace.final_switch} / ${trace.final_interface}`
+        : message || '未定位到最终端口';
+    setTopologyPathStatus(pathStatus, topologyPathStatusLabel(pathStatus));
+    setText(
+        'topology-trace-summary',
+        `${trace.target_name && trace.target_name !== '无' ? trace.target_name : trace.target_ip || trace.target_mac || '目标终端'}：${topologyStatusLabel(terminalStatus)} · ${finalLocation}`,
+    );
+}
+
+function clearTopologyPath() {
+    topologyState.trace = null;
+    topologyState.traceMessage = '';
+    topologyState.traceCode = 0;
+    topologyState.selectedNodeId = '';
+    const input = document.getElementById('topology-search-input');
+    if (input) {
+        input.value = '';
+    }
+    topologyState.pickerSelection = null;
+    closeTopologyDevicePicker();
+    const clearButton = document.getElementById('topology-clear-path');
+    if (clearButton) {
+        clearButton.disabled = true;
+    }
+    setTopologyPathStatus('unknown', '未检测');
+    setText('topology-trace-summary', '选择终端后显示实时路径与分层检测结果');
+    renderTopologyGraph();
+}
+
+function setTopologyPathStatus(status, label) {
+    const badge = document.getElementById('topology-path-status');
+    if (!badge) {
+        return;
+    }
+    badge.className = `status-badge ${topologyBadgeClass(status)}`;
+    badge.textContent = label;
+}
+
+function topologyNodeFields(node) {
+    const fields = [
+        ['管理地址', node.ip || '-'],
+        ['状态来源', node.status_source || '-'],
+        ['最近检测', node.last_checked_at || topologyState.data?.status_updated_at || '-'],
+    ];
+    if (node.mac || node.chassis_id) {
+        fields.push(['MAC / Chassis', node.mac || node.chassis_id]);
+    }
+    if (node.stack_member !== undefined) {
+        fields.push(['堆叠成员', `${node.name} · ${node.stack_member}/0/*`]);
+    }
+    if (node.carrier_line) {
+        fields.push(['核心接入口', node.configured_local_interface || '-']);
+        fields.push(['LLDP 对端设备', node.device_name || '暂未发现']);
+    }
+    if (node.ha_member) {
+        fields.push(['高可用模式', node.ha_mode === 'active-active' ? '双机 HA · 业务链路双活' : node.ha_mode]);
+        fields.push(['集群采集地址', node.cluster_target || '-']);
+    }
+    if (node.vendor) {
+        fields.push(['厂商类型', node.vendor]);
+    }
+    if (node.type === 'firewall') {
+        fields.push(['资源使用', `CPU ${node.cpu_usage ?? 0}% · 内存 ${node.memory_usage ?? 0}%`]);
+    }
+    return fields;
+}
+
+function topologyNodeSummary(node) {
+    if (node.type === 'terminal') {
+        return node.status === 'online' ? '终端 Ping 正常，接入路径已完成检测。' : '终端 Ping 未响应，请结合交换机路径状态继续排查。';
+    }
+    if (node.type === 'firewall') {
+        return node.ha_member
+            ? '该节点是防火墙 HA 成员；状态沿用集群 SNMP，物理端口关系来自 LLDP 与端口表。'
+            : '出口防火墙状态来自现有 SNMP 采集，链路关系来自核心 LLDP。';
+    }
+    if (node.type === 'uplink') {
+        return node.status === 'online'
+            ? `${node.name || '运营商线路'}已通过 LLDP 与核心端口建立邻接。`
+            : `${node.name || '运营商线路'}已标注在核心 ${node.configured_local_interface || '指定端口'}，当前未收到 LLDP 邻接。`;
+    }
+    if (node.type === 'core' && node.stack_member !== undefined) {
+        return `${node.name} 是核心堆叠成员，负责 ${node.stack_member}/0/* 端口。`;
+    }
+    return node.status === 'online'
+        ? '交换机采集正常，链路关系来自核心 LLDP 快照。'
+        : '交换机状态异常或尚未纳入 Prometheus 监控。';
+}
+
+function topologyNodeDisplaySort(left, right) {
+    if (['uplink', 'firewall'].includes(left.type) && ['uplink', 'firewall'].includes(right.type)) {
+        return topologyExternalLayoutSort(left, right);
+    }
+    const order = {uplink: 0, firewall: 1, core: 2, switch: 3, terminal: 4};
+    return (order[left.type] ?? 9) - (order[right.type] ?? 9)
+        || String(left.name || left.ip || '').localeCompare(String(right.name || right.ip || ''), 'zh-CN');
+}
+
+function topologyNodeIcon(type) {
+    return {
+        uplink: 'bi-router',
+        firewall: 'bi-shield-lock',
+        core: 'bi-diagram-3',
+        switch: 'bi-hdd-rack',
+        terminal: 'bi-pc-display',
+    }[type] || 'bi-circle';
+}
+
+function topologyTypeLabel(type) {
+    return {
+        uplink: '运营商接入',
+        firewall: '防火墙',
+        core: '核心交换机',
+        switch: '接入交换机',
+        terminal: '终端设备',
+    }[type] || '网络节点';
+}
+
+function normalizeTopologyStatus(status) {
+    return ['online', 'offline'].includes(status) ? status : 'unknown';
+}
+
+function topologyStatusLabel(status) {
+    return {
+        online: '在线',
+        offline: '异常',
+        unknown: '状态未知',
+        unconfigured: '未配置',
+        loading: '检测中',
+        degraded: '部分可达',
+        failed: '检测失败',
+    }[status] || '状态未知';
+}
+
+function topologyPathStatusLabel(status) {
+    return {
+        online: '路径正常',
+        degraded: '部分可达',
+        failed: '路径异常',
+    }[status] || '检测完成';
+}
+
+function topologyBadgeClass(status) {
+    if (status === 'online') {
+        return 'ok';
+    }
+    if (['offline', 'failed'].includes(status)) {
+        return 'bad';
+    }
+    if (status === 'loading') {
+        return '';
+    }
+    return 'warn';
+}
+
+function startTopologyAutoRefresh() {
+    window.setInterval(() => {
+        if (!isVisibleView('topology-panel') || document.visibilityState === 'hidden' || topologyState.loading || topologyState.autoRefreshing) {
+            return;
+        }
+        topologyState.autoRefreshing = true;
+        loadTopology()
+            .catch((error) => console.warn('拓扑状态自动刷新失败', error))
+            .finally(() => {
+                topologyState.autoRefreshing = false;
+            });
+    }, TOPOLOGY_STATUS_REFRESH_MS);
 }
 
 async function loadSwitches(options = {}) {
@@ -4191,6 +5152,10 @@ async function loadRouteFromHash(hash = window.location.hash) {
         await loadOsdwan();
         return;
     }
+    if (route === 'topology') {
+        await loadTopology();
+        return;
+    }
     if (route === 'switches') {
         await loadSwitches({page: 1});
         return;
@@ -4289,6 +5254,15 @@ document.addEventListener('DOMContentLoaded', () => {
         osdwanNav.addEventListener('click', (event) => {
             event.preventDefault();
             loadOsdwan();
+        });
+    }
+
+    const topologyNav = document.getElementById('topology-nav');
+    if (topologyNav) {
+        topologyNav.addEventListener('click', (event) => {
+            event.preventDefault();
+            loadTopology()
+                .catch((error) => showToast(error.message, 'error'));
         });
     }
 
@@ -4438,6 +5412,97 @@ document.addEventListener('DOMContentLoaded', () => {
         reloadSwitches.addEventListener('click', () => runButtonTask(reloadSwitches, () => loadSwitches({page: switchState.page})));
     }
 
+    const refreshTopologyStatus = document.getElementById('refresh-topology-status');
+    if (refreshTopologyStatus) {
+        refreshTopologyStatus.addEventListener('click', () => runButtonTask(
+            refreshTopologyStatus,
+            () => loadTopology({toast: true}),
+        ));
+    }
+
+    const rediscoverTopology = document.getElementById('rediscover-topology');
+    if (rediscoverTopology) {
+        rediscoverTopology.addEventListener('click', () => runButtonTask(
+            rediscoverTopology,
+            () => loadTopology({rediscover: true, toast: true}),
+        ));
+    }
+
+    const topologySearchForm = document.getElementById('topology-search-form');
+    if (topologySearchForm) {
+        topologySearchForm.addEventListener('submit', traceTopologyTerminal);
+    }
+
+    const topologySearchInput = document.getElementById('topology-search-input');
+    if (topologySearchInput) {
+        topologySearchInput.addEventListener('focus', openTopologyDevicePicker);
+        topologySearchInput.addEventListener('input', () => {
+            topologyState.pickerSelection = null;
+            topologyState.pickerIndex = -1;
+            openTopologyDevicePicker();
+        });
+        topologySearchInput.addEventListener('keydown', handleTopologyPickerKeydown);
+    }
+
+    const topologyPickerToggle = document.getElementById('topology-picker-toggle');
+    if (topologyPickerToggle) {
+        topologyPickerToggle.addEventListener('click', (event) => {
+            event.stopPropagation();
+            if (topologyState.pickerOpen) {
+                closeTopologyDevicePicker();
+            } else {
+                openTopologyDevicePicker();
+                topologySearchInput?.focus();
+            }
+        });
+    }
+
+    const topologyDevicePicker = document.getElementById('topology-device-picker');
+    if (topologyDevicePicker) {
+        topologyDevicePicker.addEventListener('click', (event) => {
+            const option = event.target.closest('[data-topology-device-index]');
+            if (!option) {
+                return;
+            }
+            const device = topologyState.pickerMatches[Number(option.dataset.topologyDeviceIndex)];
+            selectTopologyDevice(device);
+        });
+    }
+
+    const topologyClearPath = document.getElementById('topology-clear-path');
+    if (topologyClearPath) {
+        topologyClearPath.addEventListener('click', clearTopologyPath);
+    }
+
+    const topologyNodes = document.getElementById('topology-nodes');
+    if (topologyNodes) {
+        topologyNodes.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-topology-node]');
+            if (button) {
+                renderTopologyNodeDetail(button.dataset.topologyNode);
+            }
+        });
+    }
+
+    const topologyDetailActions = document.getElementById('topology-detail-actions');
+    if (topologyDetailActions) {
+        topologyDetailActions.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-topology-action]');
+            if (!button) {
+                return;
+            }
+            if (button.dataset.topologyAction === 'firewall') {
+                loadFirewallBandwidth();
+            } else if (button.dataset.topologyAction === 'devices') {
+                loadDevices({page: 1});
+            } else if (button.dataset.topologyAction === 'switch') {
+                loadSwitches({page: 1})
+                    .then(() => openSwitchDetail(button.dataset.switchInstance))
+                    .catch((error) => showToast(error.message, 'error'));
+            }
+        });
+    }
+
     const switchTraceForm = document.getElementById('switch-trace-form');
     if (switchTraceForm) {
         switchTraceForm.addEventListener('submit', traceSwitchTerminal);
@@ -4487,6 +5552,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!event.target.closest('[data-range-dropdown]')) {
             closeRangeDropdowns();
         }
+        if (!event.target.closest('.topology-search-control')) {
+            closeTopologyDevicePicker();
+        }
     });
 
     document.addEventListener('keydown', (event) => {
@@ -4500,6 +5568,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             closeSidebar();
             closeRangeDropdowns();
+            closeTopologyDevicePicker();
         }
     });
 
@@ -4522,6 +5591,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 sample_count: switchState.trafficSamples.length,
                 range: switchState.trafficRange,
             });
+        }
+        if (isVisibleView('topology-panel') && topologyState.data) {
+            renderTopologyGraph();
         }
     }, 150));
 
@@ -4953,4 +6025,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
     boot();
     startOsdwanMetricsAutoRefresh();
+    startTopologyAutoRefresh();
 });
