@@ -2663,16 +2663,24 @@ function renderTopologyGraph() {
     }
     nodesLayer.innerHTML = [...graph.nodes]
         .sort(topologyNodeDisplaySort)
-        .map((node) => renderTopologyNode(node, layout.positions.get(node.id)))
+        .map((node) => renderTopologyNode(
+            node,
+            layout.positions.get(node.id),
+            layout.coreLinkCounts,
+        ))
         .join('');
     edgeLayer.setAttribute('viewBox', `0 0 ${layout.width} ${layout.height}`);
     edgeLayer.setAttribute('width', String(layout.width));
     edgeLayer.setAttribute('height', String(layout.height));
-    edgeLayer.innerHTML = graph.edges.map((edge) => renderTopologyEdge(
-        edge,
-        layout.positions,
-        layout.nodeById,
-    )).join('');
+    edgeLayer.innerHTML = [
+        ...graph.edges.map((edge) => renderTopologyEdge(
+            edge,
+            layout.positions,
+            layout.nodeById,
+            layout.edgeRoles,
+        )),
+        renderTopologyStackLink(layout.cores, layout.positions),
+    ].join('');
 
     if (topologyState.selectedNodeId) {
         renderTopologyNodeDetail(topologyState.selectedNodeId, graph);
@@ -2700,27 +2708,68 @@ function calculateTopologyLayout(nodes, edges, availableWidth) {
             - topologySwitchLayoutOrder(right, edges, coreIds, nodeById)
             || String(left.name || left.ip || '').localeCompare(String(right.name || right.ip || ''), 'zh-CN'));
     const terminals = nodes.filter((node) => node.type === 'terminal');
-    const externalY = 72;
-    const coreY = 202;
-    const switchStartY = 338;
-    const switchRowGap = 118;
+    const coreAssignments = assignTopologySwitchCores(switches, edges, cores);
+    const coreLinkCounts = new Map(switches.map((node) => [
+        node.id,
+        topologyConnectedCoreIds(node.id, edges, coreIds).length,
+    ]));
+    const edgeRoles = buildTopologyEdgeRoles(edges, nodeById, coreAssignments);
+    const externalY = 76;
+    const coreY = 210;
+    const switchStartY = 354;
+    const switchRowGap = 112;
     placeTopologyRow(positions, externalPeers, width, externalY);
-    placeTopologyRow(positions, cores, width, coreY);
+    if (cores.length === 2) {
+        positions.set(cores[0].id, {x: width * 0.34, y: coreY});
+        positions.set(cores[1].id, {x: width * 0.66, y: coreY});
+    } else {
+        placeTopologyRow(positions, cores, width, coreY);
+    }
 
     const nodeWidth = width < 1100 ? 158 : 176;
-    const columns = Math.max(3, Math.min(6, Math.floor((width - 100) / (nodeWidth + 44))));
-    const switchRows = Math.max(1, Math.ceil(switches.length / columns));
-    for (let row = 0; row < switchRows; row += 1) {
-        const rowNodes = switches.slice(row * columns, (row + 1) * columns);
-        placeTopologyGridRow(
+    let switchRows = 1;
+    if (cores.length === 2 && width >= 960) {
+        const centerGap = 42;
+        const leftSwitches = switches.filter((node) => coreAssignments.get(node.id) === cores[0].id);
+        const rightSwitches = switches.filter((node) => coreAssignments.get(node.id) === cores[1].id);
+        const groupWidth = (width - centerGap) / 2;
+        const groupColumns = Math.max(1, Math.min(4, Math.floor((groupWidth - 28) / (nodeWidth + 24))));
+        const leftRows = placeTopologyGroupGrid(
             positions,
-            rowNodes,
-            width,
-            switchStartY + row * switchRowGap,
-            columns,
-            row % 2 === 1,
-            nodeWidth,
+            leftSwitches,
+            12,
+            (width / 2) - (centerGap / 2),
+            switchStartY,
+            switchRowGap,
+            groupColumns,
+            18,
         );
+        const rightRows = placeTopologyGroupGrid(
+            positions,
+            rightSwitches,
+            (width / 2) + (centerGap / 2),
+            width - 12,
+            switchStartY,
+            switchRowGap,
+            groupColumns,
+            -18,
+        );
+        switchRows = Math.max(1, leftRows, rightRows);
+    } else {
+        const columns = Math.max(3, Math.min(6, Math.floor((width - 100) / (nodeWidth + 44))));
+        switchRows = Math.max(1, Math.ceil(switches.length / columns));
+        for (let row = 0; row < switchRows; row += 1) {
+            const rowNodes = switches.slice(row * columns, (row + 1) * columns);
+            placeTopologyGridRow(
+                positions,
+                rowNodes,
+                width,
+                switchStartY + row * switchRowGap,
+                columns,
+                row % 2 === 1,
+                nodeWidth,
+            );
+        }
     }
 
     const lastSwitchY = switchStartY + (switchRows - 1) * switchRowGap;
@@ -2752,6 +2801,9 @@ function calculateTopologyLayout(nodes, edges, availableWidth) {
         positions,
         layers,
         nodeById,
+        cores,
+        coreLinkCounts,
+        edgeRoles,
     };
 }
 
@@ -2773,6 +2825,79 @@ function placeTopologyGridRow(positions, nodes, width, y, columns, stagger, node
         }
         positions.set(node.id, {x, y});
     });
+}
+
+function placeTopologyGroupGrid(positions, nodes, startX, endX, startY, rowGap, columns, rowOffset = 0) {
+    const rows = Math.max(1, Math.ceil(nodes.length / columns));
+    for (let row = 0; row < rows; row += 1) {
+        const rowNodes = nodes.slice(row * columns, (row + 1) * columns);
+        const offset = row > 0 && rowNodes.length === columns ? rowOffset : 0;
+        rowNodes.forEach((node, index) => {
+            positions.set(node.id, {
+                x: startX + (((index + 1) * (endX - startX)) / (rowNodes.length + 1)) + offset,
+                y: startY + (row * rowGap),
+            });
+        });
+    }
+    return nodes.length ? rows : 0;
+}
+
+function topologyConnectedCoreIds(nodeId, edges, coreIds) {
+    return edges.reduce((ids, edge) => {
+        if (edge.source !== nodeId && edge.target !== nodeId) {
+            return ids;
+        }
+        const peerId = edge.source === nodeId ? edge.target : edge.source;
+        if (coreIds.has(peerId) && !ids.includes(peerId)) {
+            ids.push(peerId);
+        }
+        return ids;
+    }, []);
+}
+
+function assignTopologySwitchCores(switches, edges, cores) {
+    const assignments = new Map();
+    const coreIds = new Set(cores.map((node) => node.id));
+    const assignedCounts = new Map(cores.map((node) => [node.id, 0]));
+    const redundantSwitches = [];
+
+    switches.forEach((node) => {
+        const connectedCoreIds = topologyConnectedCoreIds(node.id, edges, coreIds);
+        if (connectedCoreIds.length === 1) {
+            assignments.set(node.id, connectedCoreIds[0]);
+            assignedCounts.set(connectedCoreIds[0], (assignedCounts.get(connectedCoreIds[0]) || 0) + 1);
+        } else {
+            redundantSwitches.push({node, connectedCoreIds});
+        }
+    });
+
+    redundantSwitches.forEach(({node, connectedCoreIds}) => {
+        const candidates = connectedCoreIds.length ? connectedCoreIds : cores.map((core) => core.id);
+        const assignedCoreId = [...candidates].sort((left, right) => (
+            (assignedCounts.get(left) || 0) - (assignedCounts.get(right) || 0)
+            || cores.findIndex((core) => core.id === left) - cores.findIndex((core) => core.id === right)
+        ))[0];
+        if (assignedCoreId) {
+            assignments.set(node.id, assignedCoreId);
+            assignedCounts.set(assignedCoreId, (assignedCounts.get(assignedCoreId) || 0) + 1);
+        }
+    });
+    return assignments;
+}
+
+function buildTopologyEdgeRoles(edges, nodeById, coreAssignments) {
+    const roles = new Map();
+    edges.forEach((edge) => {
+        const source = nodeById.get(edge.source) || {};
+        const target = nodeById.get(edge.target) || {};
+        const core = source.type === 'core' ? source : target.type === 'core' ? target : null;
+        const accessSwitch = source.type === 'switch' ? source : target.type === 'switch' ? target : null;
+        if (!core || !accessSwitch) {
+            return;
+        }
+        roles.set(edge.id, coreAssignments.get(accessSwitch.id) === core.id ? 'primary' : 'redundant');
+    });
+    return roles;
 }
 
 function topologyExternalLayoutSort(left, right) {
@@ -2809,12 +2934,17 @@ function topologySwitchLayoutOrder(node, edges, coreIds, nodeById) {
     return orders.length ? Math.min(...orders) : 9999;
 }
 
-function renderTopologyNode(node, position = {x: 0, y: 0}) {
+function renderTopologyNode(node, position = {x: 0, y: 0}, coreLinkCounts = new Map()) {
     const status = normalizeTopologyStatus(node.status);
     const selected = node.id === topologyState.selectedNodeId;
-    const secondaryText = node.carrier_line
+    let secondaryText = node.carrier_line
         ? (node.device_name || node.configured_local_interface || '运营商线路')
         : (node.ip || node.mac || topologyTypeLabel(node.type));
+    if (node.type === 'core' && node.stack_member !== undefined) {
+        secondaryText = `${node.ip || '核心堆叠'} · ${node.stack_member}/0/*`;
+    } else if (node.type === 'switch' && coreLinkCounts.get(node.id) > 1) {
+        secondaryText = `${node.ip || topologyTypeLabel(node.type)} · 双上联`;
+    }
     return `
         <button class="topology-node ${escapeHtml(node.type || 'switch')} ${status} ${node.active ? 'active-path' : ''} ${selected ? 'selected' : ''}"
             type="button"
@@ -2831,7 +2961,7 @@ function renderTopologyNode(node, position = {x: 0, y: 0}) {
     `;
 }
 
-function renderTopologyEdge(edge, positions, nodeById) {
+function renderTopologyEdge(edge, positions, nodeById, edgeRoles = new Map()) {
     const source = positions.get(edge.source);
     const target = positions.get(edge.target);
     if (!source || !target) {
@@ -2844,11 +2974,41 @@ function renderTopologyEdge(edge, positions, nodeById) {
         nodeById.get(edge.target) || {},
     );
     const status = normalizeTopologyStatus(edge.status);
+    const visualRole = edgeRoles.get(edge.id) || '';
     const label = Number(edge.link_count || 0) > 1 ? `${edge.link_count} 条链路` : '';
     return `
-        <g class="topology-edge ${status} ${edge.active ? 'active-path' : ''}">
+        <g class="topology-edge ${status} ${visualRole} ${edge.active ? 'active-path' : ''}">
             <path d="${geometry.path}"></path>
             ${label ? `<text x="${geometry.labelX}" y="${geometry.labelY}">${escapeHtml(label)}</text>` : ''}
+        </g>
+    `;
+}
+
+function renderTopologyStackLink(cores, positions) {
+    if (!cores || cores.length !== 2) {
+        return '';
+    }
+    const positionedCores = cores
+        .map((core) => ({core, position: positions.get(core.id)}))
+        .filter((item) => item.position)
+        .sort((left, right) => left.position.x - right.position.x);
+    if (positionedCores.length !== 2) {
+        return '';
+    }
+    const left = positionedCores[0].position;
+    const right = positionedCores[1].position;
+    const startX = left.x + 94;
+    const endX = right.x - 94;
+    const y = left.y;
+    if (endX <= startX) {
+        return '';
+    }
+    const midpoint = (startX + endX) / 2;
+    const stackStatus = topologyEdgeStatus(positionedCores[0].core.status, positionedCores[1].core.status);
+    return `
+        <g class="topology-edge stack-link ${stackStatus}">
+            <path d="M ${startX} ${y} C ${startX + 36} ${y - 14}, ${endX - 36} ${y - 14}, ${endX} ${y}"></path>
+            <text x="${midpoint}" y="${y - 13}">核心堆叠</text>
         </g>
     `;
 }
