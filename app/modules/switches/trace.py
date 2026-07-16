@@ -103,7 +103,7 @@ class HuaweiCliSession:
     def interface_macs_command(self, interface):
         if self.platform == "cisco":
             return f"show mac address-table interface {cisco_interface_name(interface)}"
-        return f"display mac-address | include {interface}"
+        return f"display mac-address {command_interface_name(interface)}"
 
     def lldp_neighbor_command(self, interface):
         if self.platform == "cisco":

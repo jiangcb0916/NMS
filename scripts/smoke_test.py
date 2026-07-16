@@ -601,6 +601,13 @@ def main():
         assert switch_trace.command_interface_name("GE0/0/4") == "GigabitEthernet 0/0/4"
         assert switch_trace.command_interface_name("GigabitEthernet0/0/4") == "GigabitEthernet 0/0/4"
         assert switch_trace.command_interface_name("Eth-Trunk16") == "Eth-Trunk 16"
+        huawei_session = switch_trace.HuaweiCliSession("172.16.100.35", None)
+        assert huawei_session.interface_macs_command("GE0/0/2") == (
+            "display mac-address GigabitEthernet 0/0/2"
+        )
+        assert huawei_session.interface_macs_command("Eth-Trunk14") == (
+            "display mac-address Eth-Trunk 14"
+        )
         assert switch_trace.normalize_mac("90:09:D0:91:47:8F") == "9009-d091-478f"
         assert switch_trace.normalize_mac("9009.D091.478F") == "9009-d091-478f"
 
@@ -1181,7 +1188,7 @@ def main():
             def interface_macs_command(self, interface):
                 if self.platform == "cisco":
                     return f"show mac address-table interface {switch_trace.cisco_interface_name(interface)}"
-                return f"display mac-address | include {interface}"
+                return f"display mac-address {switch_trace.command_interface_name(interface)}"
 
             def lldp_neighbor_command(self, interface):
                 return f"display lldp neighbor interface {switch_trace.command_interface_name(interface)}"
@@ -1197,7 +1204,7 @@ def main():
                     ("172.16.100.5", "display mac-address 9009-d091-478f"): (
                         "9009-d091-478f dynamic 1/- GE0/0/4"
                     ),
-                    ("172.16.100.5", "display mac-address | include GE0/0/4"): "\n".join([
+                    ("172.16.100.5", "display mac-address GigabitEthernet 0/0/4"): "\n".join([
                         "9009-d091-478f dynamic 1/- GE0/0/4",
                         "d468-ba01-3672 dynamic 1/- GE0/0/4",
                     ]),
@@ -1254,7 +1261,7 @@ def main():
                     return f"display mac-address {mac}"
 
                 def interface_macs_command(self, interface):
-                    return f"display mac-address | include {interface}"
+                    return f"display mac-address {switch_trace.command_interface_name(interface)}"
 
                 def lldp_neighbor_command(self, interface):
                     return f"display lldp neighbor interface {switch_trace.command_interface_name(interface)}"
@@ -1270,7 +1277,7 @@ def main():
                         ("172.16.100.5", "display mac-address 186f-2d0b-8d40"): (
                             "186f-2d0b-8d40 43/-/- Eth-Trunk14 dynamic"
                         ),
-                        ("172.16.100.5", "display mac-address | include Eth-Trunk14"): "\n".join([
+                        ("172.16.100.5", "display mac-address Eth-Trunk 14"): "\n".join([
                             "186f-2d0b-8d40 43/-/- Eth-Trunk14 dynamic",
                             "d468-ba01-351d 43/-/- Eth-Trunk14 dynamic",
                         ]),
