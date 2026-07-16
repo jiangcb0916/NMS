@@ -471,17 +471,22 @@ def lookup_interface_macs(session, interface, hop):
         if entries is None:
             entries = lookup_cisco_mac_table(session, hop, interface=interface)
     else:
-        command = session.interface_macs_command(interface)
-        output = run_command(session, hop, command)
-        if output_has_cli_error(output):
-            hop["commands"][-1]["summary"] = "命令返回错误"
+        entries = None
+        for command in non_cisco_interface_macs_commands(session, interface):
+            output = run_command(session, hop, command)
+            if output_has_cli_error(output):
+                hop["commands"][-1]["summary"] = "接口命令不兼容，尝试下一种格式"
+                continue
+            entries = parse_mac_entries(output)
+            break
+        if entries is None:
+            hop["commands"][-1]["summary"] = "接口命令均不兼容"
             return {
                 "command_failed": True,
                 "mac_count": None,
                 "mac_samples": [],
                 "macs": [],
             }
-        entries = parse_mac_entries(output)
     unique_macs = sorted({entry["mac"] for entry in entries if entry.get("mac")})
     if not unique_macs and hop.get("target_mac"):
         unique_macs = [hop["target_mac"]]
@@ -492,6 +497,14 @@ def lookup_interface_macs(session, interface, hop):
         "mac_samples": unique_macs[:8],
         "macs": unique_macs,
     }
+
+
+def non_cisco_interface_macs_commands(session, interface):
+    command_interface = command_interface_name(interface)
+    return unique_commands([
+        session.interface_macs_command(interface),
+        f"display mac-address interface {command_interface}",
+    ])
 
 
 def lookup_cisco_mac_table(session, hop, target_mac=None, interface=None):

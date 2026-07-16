@@ -608,6 +608,31 @@ def main():
         assert huawei_session.interface_macs_command("Eth-Trunk14") == (
             "display mac-address Eth-Trunk 14"
         )
+
+        class FakeH3cInterfaceSession:
+            platform = "huawei"
+
+            def interface_macs_command(self, interface):
+                return f"display mac-address {switch_trace.command_interface_name(interface)}"
+
+            def run(self, command):
+                if command == "display mac-address GigabitEthernet 1/0/4":
+                    return "^\n% Wrong parameter found at '^' position."
+                assert command == "display mac-address interface GigabitEthernet 1/0/4"
+                return "a860-b61a-4ed8 21 LEARNED GigabitEthernet1/0/4 AGING"
+
+        h3c_hop = switch_trace.new_hop(2, "172.16.100.13")
+        h3c_hop["target_mac"] = "a860-b61a-4ed8"
+        h3c_result = switch_trace.lookup_interface_macs(
+            FakeH3cInterfaceSession(),
+            "GigabitEthernet1/0/4",
+            h3c_hop,
+        )
+        assert h3c_result["mac_count"] == 1
+        assert [item["command"] for item in h3c_hop["commands"]] == [
+            "display mac-address GigabitEthernet 1/0/4",
+            "display mac-address interface GigabitEthernet 1/0/4",
+        ]
         assert switch_trace.normalize_mac("90:09:D0:91:47:8F") == "9009-d091-478f"
         assert switch_trace.normalize_mac("9009.D091.478F") == "9009-d091-478f"
 
