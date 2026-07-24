@@ -3,29 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#101518">
     <title>登录 - 网络管理系统</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="{{ url_for('static', filename='css/app.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/app.css', v=config.VERSION) }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/workbench.css', v=config.VERSION) }}" rel="stylesheet">
 </head>
 <body class="login-body">
-    <main class="login-card">
-        <div class="login-brand">
-            <i class="bi bi-shield-check"></i>
+    <main class="login-frame">
+        <header class="login-brand">
+            <span class="login-brand-mark"><i class="bi bi-shield-check" aria-hidden="true"></i></span>
             <div>
                 <h1>网络管理系统</h1>
-                <p>{{ config.VERSION }}</p>
+                <p>运维控制台 · {{ config.VERSION }}</p>
             </div>
-        </div>
+        </header>
 
-        <form id="login-form" class="login-form">
-            <label>
-                <span>用户名</span>
-                <input id="username" name="username" autocomplete="username" required>
-            </label>
-            <label>
-                <span>密码</span>
-                <input id="password" name="password" type="password" autocomplete="current-password" required>
-            </label>
+        <form id="login-form" class="login-form" aria-labelledby="login-title">
+            <div class="login-form-heading">
+                <h2 id="login-title">管理员登录</h2>
+                <p>请输入系统账号继续</p>
+            </div>
+            <div class="login-field">
+                <label for="username">用户名</label>
+                <span class="login-input">
+                    <i class="bi bi-person" aria-hidden="true"></i>
+                    <input id="username" name="username" autocomplete="username" required autofocus>
+                </span>
+            </div>
+            <div class="login-field">
+                <label for="password">密码</label>
+                <span class="login-input login-password-input">
+                    <i class="bi bi-lock" aria-hidden="true"></i>
+                    <input id="password" name="password" type="password" autocomplete="current-password" required>
+                    <button id="toggle-password" type="button" aria-label="显示密码" title="显示密码">
+                        <i class="bi bi-eye" aria-hidden="true"></i>
+                    </button>
+                </span>
+            </div>
             <label class="checkbox-line">
                 <input id="remember-me" name="remember_me" type="checkbox">
                 <span>保持登录</span>
@@ -36,8 +52,12 @@
             </button>
             <div class="form-message" id="login-message" role="alert"></div>
         </form>
+        <footer class="login-footer">
+            <span>仅限授权用户访问</span>
+            <span>内网环境</span>
+        </footer>
     </main>
 
-    <script src="{{ url_for('static', filename='js/login.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/login.js', v=config.VERSION) }}"></script>
 </body>
 </html>

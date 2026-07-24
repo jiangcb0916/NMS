@@ -1,0 +1,1827 @@
+/*
+ * NMS unified operations workspace.
+ * This file intentionally loads after app.css so legacy view-specific styles
+ * can be retired gradually without changing data rendering or event bindings.
+ */
+
+:root {
+    color-scheme: dark;
+    --nms-bg: #0e1316;
+    --nms-sidebar: #111719;
+    --nms-surface: #171d20;
+    --nms-surface-soft: #13191c;
+    --nms-surface-raised: #1c2428;
+    --nms-line: #303a3f;
+    --nms-line-soft: #252e33;
+    --nms-text: #e7ecee;
+    --nms-text-secondary: #aab4b9;
+    --nms-muted: #7d8a91;
+    --nms-green: #58b88b;
+    --nms-green-soft: #1a3027;
+    --nms-blue: #62a4d8;
+    --nms-blue-soft: #192b38;
+    --nms-amber: #d4a54f;
+    --nms-amber-soft: #30291d;
+    --nms-red: #d97373;
+    --nms-red-soft: #342222;
+    --nms-sidebar-width: 232px;
+    --nms-sidebar-collapsed-width: 68px;
+    --bg: var(--nms-bg);
+    --panel: var(--nms-surface);
+    --panel-border: var(--nms-line);
+    --text: var(--nms-text);
+    --muted: var(--nms-muted);
+    --nav: var(--nms-sidebar);
+    --nav-soft: var(--nms-surface-raised);
+    --accent: var(--nms-green);
+    --accent-soft: var(--nms-green-soft);
+    --blue: var(--nms-blue);
+    --amber: var(--nms-amber);
+    --red: var(--nms-red);
+}
+
+html {
+    min-width: 320px;
+    background: var(--nms-bg);
+}
+
+body.app-body {
+    min-width: 320px;
+    background: var(--nms-bg);
+    color: var(--nms-text);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.app-body button,
+.app-body input,
+.app-body select,
+.app-body textarea {
+    letter-spacing: 0;
+}
+
+.app-body :where(button, a, input, select, textarea, summary, [tabindex]):focus-visible,
+.login-body :where(button, input, [tabindex]):focus-visible {
+    outline: 2px solid rgba(88, 184, 139, 0.72);
+    outline-offset: 2px;
+}
+
+.app-body .app-shell {
+    grid-template-columns: var(--nms-sidebar-width) minmax(0, 1fr);
+    min-height: 100dvh;
+    background: var(--nms-bg);
+    transition: grid-template-columns 160ms ease;
+}
+
+.app-body.sidebar-collapsed .app-shell {
+    grid-template-columns: var(--nms-sidebar-collapsed-width) minmax(0, 1fr);
+}
+
+.app-body .sidebar {
+    z-index: 40;
+    height: 100dvh;
+    padding: 12px 10px;
+    border-right: 1px solid var(--nms-line);
+    background: var(--nms-sidebar);
+    color: var(--nms-text);
+    box-shadow: none;
+}
+
+.app-body .brand {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 28px;
+    align-items: center;
+    gap: 10px;
+    min-height: 54px;
+    padding: 4px 4px 12px;
+    border-bottom: 1px solid var(--nms-line);
+}
+
+.app-body .brand-mark {
+    width: 34px;
+    height: 34px;
+    border: 1px solid #365448;
+    border-radius: 4px;
+    background: var(--nms-green-soft);
+    color: #73c79f;
+}
+
+.app-body .brand-mark i {
+    font-size: 19px;
+}
+
+.app-body .brand-copy,
+.app-body .current-user-copy {
+    min-width: 0;
+}
+
+.app-body .brand-title {
+    overflow: hidden;
+    color: #eef2f3;
+    font-size: 14px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.app-body .brand-version,
+.app-body #current-user-role {
+    margin-top: 2px;
+    color: var(--nms-muted);
+    font-size: 10px;
+}
+
+.sidebar-collapse-toggle {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--nms-muted);
+    cursor: pointer;
+}
+
+.sidebar-collapse-toggle:hover {
+    border-color: var(--nms-line);
+    background: var(--nms-surface-raised);
+    color: var(--nms-text);
+}
+
+.app-body .nav-list {
+    gap: 13px;
+    margin-top: 13px;
+    padding: 0 1px 8px 0;
+    scrollbar-color: #3a454a transparent;
+    scrollbar-width: thin;
+}
+
+.app-body .nav-section {
+    gap: 3px;
+}
+
+.app-body .nav-section-title {
+    min-height: 18px;
+    padding: 0 8px;
+    color: #69767d;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 18px;
+}
+
+.app-body .nav-item {
+    min-height: 36px;
+    gap: 9px;
+    padding: 0 9px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    color: #aab4b9;
+}
+
+.app-body .nav-item i {
+    width: 24px;
+    height: 24px;
+    border-radius: 3px;
+    background: transparent;
+    color: #7e8b91;
+    font-size: 15px;
+}
+
+.app-body .nav-item:hover {
+    border-color: #293237;
+    background: #182024;
+    color: #dfe5e7;
+}
+
+.app-body .nav-item.active {
+    border-color: #38433f;
+    background: #202925;
+    color: #f0f3f4;
+}
+
+.app-body .nav-item.active::before {
+    left: -1px;
+    width: 3px;
+    height: 20px;
+    border-radius: 0 2px 2px 0;
+    background: var(--nms-green);
+}
+
+.app-body .nav-item.active i {
+    background: transparent;
+    color: #75c79f;
+}
+
+.app-body .sidebar-footer {
+    border-top-color: var(--nms-line);
+    padding-top: 10px;
+}
+
+.app-body .current-user {
+    min-height: 48px;
+    gap: 9px;
+    padding: 7px;
+    border: 1px solid var(--nms-line-soft);
+    border-radius: 4px;
+    background: #151c1f;
+}
+
+.app-body .current-user > i {
+    color: #a8b2b7;
+    font-size: 21px;
+}
+
+.app-body #current-user-name {
+    color: #e2e7e9;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.app-body .logout-icon-button {
+    width: 30px;
+    height: 30px;
+    border-color: var(--nms-line);
+    border-radius: 3px;
+    background: var(--nms-surface);
+    color: var(--nms-text-secondary);
+}
+
+.app-body .logout-icon-button:hover {
+    border-color: #4b585e;
+    background: var(--nms-surface-raised);
+}
+
+.app-body.sidebar-collapsed .sidebar {
+    padding-right: 8px;
+    padding-left: 8px;
+}
+
+.app-body.sidebar-collapsed .brand {
+    display: flex;
+    min-height: 88px;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 10px;
+}
+
+.app-body.sidebar-collapsed .brand-copy,
+.app-body.sidebar-collapsed .nav-section-title,
+.app-body.sidebar-collapsed .nav-item span,
+.app-body.sidebar-collapsed .current-user-copy {
+    display: none;
+}
+
+.app-body.sidebar-collapsed .nav-list {
+    gap: 9px;
+    overflow: visible;
+}
+
+.app-body.sidebar-collapsed .nav-section {
+    gap: 4px;
+}
+
+.app-body.sidebar-collapsed .nav-item {
+    justify-content: center;
+    width: 42px;
+    min-height: 38px;
+    margin: 0 auto;
+    padding: 0;
+}
+
+.app-body.sidebar-collapsed .nav-item::after {
+    position: absolute;
+    z-index: 70;
+    top: 50%;
+    left: calc(100% + 12px);
+    display: none;
+    min-width: max-content;
+    padding: 6px 9px;
+    border: 1px solid var(--nms-line);
+    border-radius: 3px;
+    background: #1c2428;
+    color: var(--nms-text);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+    content: attr(title);
+    font-size: 11px;
+    pointer-events: none;
+    transform: translateY(-50%);
+}
+
+.app-body.sidebar-collapsed .nav-item:hover::after,
+.app-body.sidebar-collapsed .nav-item:focus-visible::after {
+    display: block;
+}
+
+.app-body.sidebar-collapsed .current-user {
+    flex-direction: column;
+    gap: 6px;
+    padding: 7px 4px;
+}
+
+.app-body .main-panel,
+body.ops-screen-active .main-panel,
+body.dashboard-screen-active .main-panel,
+body.firewall-screen-active .main-panel,
+body.traffic-screen-active .main-panel,
+body.workspace-screen-active .main-panel {
+    min-width: 0;
+    padding: 12px 14px 18px;
+    background: var(--nms-bg);
+}
+
+.global-view-context {
+    display: none !important;
+}
+
+.app-body .app-view {
+    min-width: 0;
+    max-width: none;
+}
+
+.app-body .situation-screen,
+.app-body .firewall-ops-screen,
+.app-body .traffic-ops-screen {
+    width: 100%;
+    max-width: none;
+    gap: 9px;
+    margin: 0;
+    padding: 0;
+}
+
+/* Shared module heading */
+
+.app-body .situation-hero,
+.app-body .firewall-ops-header,
+.app-body .traffic-ops-header,
+.app-body .ops-module-header {
+    min-height: 66px;
+    padding: 11px 13px;
+    border: 1px solid var(--nms-line);
+    border-left: 3px solid var(--nms-green);
+    border-radius: 4px;
+    background: var(--nms-surface);
+    box-shadow: none;
+}
+
+.app-body .ops-admin-view .ops-module-header {
+    border-left-color: #6f818a;
+}
+
+.app-body .situation-hero h2,
+.app-body .firewall-ops-heading h1,
+.app-body .traffic-ops-heading h1,
+.app-body .ops-module-header h2 {
+    margin: 0;
+    color: var(--nms-text);
+    font-size: 20px;
+    font-weight: 650;
+    letter-spacing: 0;
+    line-height: 1.25;
+}
+
+.app-body .situation-hero p,
+.app-body .firewall-ops-heading p,
+.app-body .traffic-ops-heading p,
+.app-body .ops-module-header .panel-subtitle {
+    margin: 3px 0 0;
+    color: var(--nms-muted);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.app-body .firewall-ops-kicker,
+.app-body .traffic-ops-kicker {
+    display: block;
+    margin: 0 0 3px;
+    color: #79b99b;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0;
+}
+
+.app-body .situation-hero-meta {
+    display: flex;
+    align-items: center;
+    justify-items: initial;
+    gap: 10px;
+    min-width: 0;
+}
+
+.app-body .situation-hero-meta > div {
+    display: grid;
+    justify-items: end;
+    gap: 4px;
+}
+
+.app-body .situation-refresh-button {
+    flex: 0 0 auto;
+}
+
+.app-body .firewall-ops-actions,
+.app-body .traffic-ops-actions,
+.app-body .ops-module-header .button-row {
+    gap: 8px;
+}
+
+.app-body .firewall-status-block,
+.app-body .traffic-status-block {
+    min-height: 40px;
+    padding: 0 10px;
+    border: 1px solid var(--nms-line-soft);
+    border-radius: 3px;
+    background: var(--nms-surface-soft);
+}
+
+.app-body .firewall-status-block > span,
+.app-body .traffic-status-block > span,
+.app-body .firewall-status-block small,
+.app-body .traffic-status-block small {
+    color: var(--nms-muted);
+    font-size: 10px;
+}
+
+/* Controls */
+
+.app-body .small-button,
+.app-body .icon-button,
+.app-body .refresh-button,
+.app-body .row-button,
+.app-body .icon-action,
+.app-body .filter-chip,
+.app-body .range-dropdown-trigger {
+    min-height: 32px;
+    border: 1px solid #3a454a;
+    border-radius: 3px;
+    background: var(--nms-surface);
+    color: #ccd4d7;
+    box-shadow: none;
+}
+
+.app-body .small-button,
+.app-body .row-button,
+.app-body .filter-chip {
+    gap: 6px;
+    padding-right: 10px;
+    padding-left: 10px;
+}
+
+.app-body .small-button:hover,
+.app-body .small-button:focus-visible,
+.app-body .icon-button:hover,
+.app-body .refresh-button:hover,
+.app-body .row-button:hover,
+.app-body .icon-action:hover,
+.app-body .filter-chip:hover {
+    border-color: #536168;
+    background: #20282c;
+    color: #f0f3f4;
+}
+
+.app-body .small-button.primary,
+.app-body .row-button.primary {
+    border-color: #397458;
+    background: #25563f;
+    color: #e8f5ee;
+}
+
+.app-body .small-button.primary:hover,
+.app-body .row-button.primary:hover {
+    border-color: #58a97f;
+    background: #2d684c;
+}
+
+.app-body .small-button.danger,
+.app-body .row-button.danger {
+    border-color: #724747;
+    background: var(--nms-red-soft);
+    color: #ee9a9a;
+}
+
+.app-body button:disabled,
+.app-body .small-button:disabled,
+.app-body .row-button:disabled {
+    border-color: #2b3438;
+    background: #151b1e;
+    color: #68757c;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.app-body input:not([type="checkbox"]):not([type="radio"]),
+.app-body select,
+.app-body textarea {
+    min-height: 34px;
+    border: 1px solid #39454b;
+    border-radius: 3px;
+    background: #11171a;
+    color: var(--nms-text);
+    box-shadow: none;
+}
+
+.app-body input:not([type="checkbox"]):not([type="radio"]):hover,
+.app-body select:hover,
+.app-body textarea:hover {
+    border-color: #4b5960;
+}
+
+.app-body input::placeholder,
+.app-body textarea::placeholder {
+    color: #68757c;
+}
+
+.app-body select option {
+    background: #161d20;
+    color: var(--nms-text);
+}
+
+.app-body input[type="checkbox"],
+.app-body input[type="radio"],
+.login-body input[type="checkbox"] {
+    accent-color: var(--nms-green);
+}
+
+.app-body .range-dropdown-menu,
+.app-body .topology-device-picker {
+    border: 1px solid #3a454a;
+    border-radius: 3px;
+    background: #171e21;
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.38);
+}
+
+.app-body .range-option,
+.app-body .topology-picker-option {
+    color: #c5ced2;
+}
+
+.app-body .range-option:hover,
+.app-body .range-option:focus-visible,
+.app-body .range-option.active,
+.app-body .topology-picker-option:hover,
+.app-body .topology-picker-option:focus-visible,
+.app-body .topology-picker-option.active {
+    background: #222b2f;
+    color: #7bcba3;
+}
+
+/* Status language */
+
+.app-body .status-badge,
+.app-body .status-pill,
+.app-body .firewall-page-status,
+.app-body .traffic-page-status,
+.app-body .situation-alert-badge,
+.app-body .situation-hero-meta strong {
+    min-height: 22px;
+    padding: 0 7px;
+    border: 1px solid #445057;
+    border-radius: 3px;
+    background: #20272b;
+    color: #c8d0d3;
+    box-shadow: none;
+    font-size: 10px;
+    line-height: 20px;
+}
+
+.app-body :is(.status-badge, .status-pill, .firewall-page-status, .traffic-page-status).ok,
+.app-body .status-badge.online,
+.app-body .situation-dashboard[data-situation-level="normal"] .situation-hero-meta strong {
+    border-color: #38634f;
+    background: var(--nms-green-soft);
+    color: #7bd0a7;
+}
+
+.app-body :is(.status-badge, .status-pill, .firewall-page-status, .traffic-page-status).warn,
+.app-body :is(.firewall-page-status, .traffic-page-status).warning,
+.app-body .situation-dashboard[data-situation-level="warning"] .situation-hero-meta strong {
+    border-color: #675638;
+    background: var(--nms-amber-soft);
+    color: #e1b969;
+}
+
+.app-body :is(.status-badge, .status-pill, .firewall-page-status, .traffic-page-status).bad,
+.app-body .status-badge.offline,
+.app-body .situation-dashboard[data-situation-level="critical"] .situation-hero-meta strong {
+    border-color: #734545;
+    background: var(--nms-red-soft);
+    color: #e99191;
+}
+
+.app-body .error-text,
+.app-body .form-message {
+    color: #e78d8d;
+}
+
+/* Shared panels, metrics and tables */
+
+.app-body .situation-kpi-grid,
+.app-body .firewall-stat-strip,
+.app-body .traffic-stat-strip,
+.app-body .ops-stat-strip,
+.app-body .ops-summary-strip,
+.app-body .switch-stat-strip {
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--nms-line);
+    border-radius: 4px;
+    background: var(--nms-surface);
+    box-shadow: none;
+}
+
+.app-body .situation-kpi,
+.app-body .firewall-stat,
+.app-body .traffic-stat,
+.app-body .ops-stat-strip .ops-stat,
+.app-body .ops-summary-strip > div,
+.app-body .switch-stat-strip > div {
+    min-height: 66px;
+    padding: 10px 12px;
+    border: 0;
+    border-right: 1px solid var(--nms-line-soft);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.app-body :is(.situation-kpi, .firewall-stat, .traffic-stat, .ops-stat) > span,
+.app-body .metric-label,
+.app-body .ops-summary-strip dt,
+.app-body .switch-stat-strip dt {
+    color: var(--nms-muted);
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.app-body .situation-kpi strong,
+.app-body .firewall-stat > strong,
+.app-body .traffic-stat > strong,
+.app-body .ops-stat-strip .metric-value,
+.app-body .ops-summary-strip dd,
+.app-body .switch-stat-strip dd {
+    color: var(--nms-text);
+    font-size: 21px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 650;
+    letter-spacing: 0;
+}
+
+.app-body .situation-kpi small,
+.app-body .firewall-stat small,
+.app-body .traffic-stat small {
+    color: var(--nms-muted);
+    font-size: 10px;
+}
+
+.app-body .situation-panel,
+.app-body .firewall-chart-panel,
+.app-body .firewall-live-panel,
+.app-body .traffic-list-panel,
+.app-body .ops-chart-panel,
+.app-body .ops-list-panel,
+.app-body .topology-command-panel,
+.app-body .topology-graph-panel,
+.app-body .topology-detail-panel,
+.app-body .switch-chart-section {
+    border: 1px solid var(--nms-line);
+    border-radius: 4px;
+    background: var(--nms-surface);
+    box-shadow: none;
+}
+
+.app-body .situation-panel-header,
+.app-body .firewall-panel-header,
+.app-body .traffic-list-header,
+.app-body .ops-list-heading,
+.app-body .topology-graph-header,
+.app-body .topology-detail-heading {
+    border-color: var(--nms-line-soft);
+}
+
+.app-body :is(.situation-panel-header, .firewall-panel-header, .traffic-list-header, .ops-list-heading, .topology-graph-header, .topology-detail-heading) h2,
+.app-body :is(.situation-panel-header, .firewall-panel-header, .traffic-list-header, .ops-list-heading, .topology-graph-header, .topology-detail-heading) h3 {
+    color: var(--nms-text);
+    font-size: 14px;
+    font-weight: 650;
+}
+
+.app-body :is(.situation-panel-header, .firewall-panel-header, .traffic-list-header, .ops-list-heading, .topology-graph-header, .topology-detail-heading) p,
+.app-body .list-summary,
+.app-body .panel-subtitle {
+    color: var(--nms-muted);
+    font-size: 10px;
+}
+
+.app-body .table-wrap,
+.app-body .traffic-table-wrap {
+    border-color: var(--nms-line-soft);
+    background: var(--nms-surface);
+    scrollbar-color: #414d53 #161c1f;
+    scrollbar-width: thin;
+}
+
+.app-body table,
+.app-body .ops-data-table,
+.app-body .traffic-ops-table {
+    color: #d8dee1;
+    font-size: 11px;
+}
+
+.app-body table th,
+.app-body table td,
+.app-body .ops-data-table th,
+.app-body .ops-data-table td,
+.app-body .traffic-ops-table th,
+.app-body .traffic-ops-table td {
+    height: 38px;
+    padding: 7px 9px;
+    border-color: var(--nms-line-soft);
+    vertical-align: middle;
+}
+
+.app-body table th,
+.app-body .ops-data-table th,
+.app-body .traffic-ops-table th {
+    background: #141a1d;
+    color: #87949a;
+    font-size: 10px;
+    font-weight: 650;
+    white-space: nowrap;
+}
+
+.app-body table tbody tr,
+.app-body .ops-data-table tbody tr,
+.app-body .traffic-ops-table tbody tr {
+    background: transparent;
+}
+
+.app-body table tbody tr:hover,
+.app-body .ops-data-table tbody tr:hover,
+.app-body .traffic-ops-table tbody tr:hover {
+    background: #1b2327;
+}
+
+.app-body table tbody tr:last-child td {
+    border-bottom-color: transparent;
+}
+
+.app-body table td[colspan] {
+    height: 68px;
+    color: var(--nms-muted);
+    text-align: center;
+}
+
+.app-body .pagination-row {
+    min-height: 48px;
+    margin-top: 0;
+    padding: 8px 10px;
+    border-top: 1px solid var(--nms-line-soft);
+    color: var(--nms-muted);
+    font-size: 11px;
+}
+
+.app-body .toolbar-row,
+.app-body .ops-toolbar,
+.app-body .traffic-analysis-toolbar {
+    gap: 7px;
+}
+
+.app-body .quick-filter-row {
+    gap: 6px;
+}
+
+.app-body .filter-chip {
+    min-height: 28px;
+    color: #a8b2b7;
+}
+
+.app-body .filter-chip.active {
+    border-color: #3f745c;
+    background: var(--nms-green-soft);
+    color: #7cd0a7;
+}
+
+/* Dashboard */
+
+.app-body .situation-dashboard {
+    --ops-bg: var(--nms-bg);
+    --ops-panel: var(--nms-surface);
+    --ops-panel-soft: var(--nms-surface-soft);
+    --ops-line: var(--nms-line);
+    --ops-line-soft: var(--nms-line-soft);
+    --ops-text: var(--nms-text);
+    --ops-muted: var(--nms-muted);
+    --ops-green: var(--nms-green);
+    --ops-blue: var(--nms-blue);
+    --ops-amber: var(--nms-amber);
+    --ops-red: var(--nms-red);
+}
+
+.app-body .situation-kpi-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.app-body .situation-main-grid {
+    grid-template-columns: minmax(290px, 0.88fr) minmax(450px, 1.3fr) minmax(300px, 0.92fr);
+    gap: 9px;
+}
+
+.app-body .situation-side-stack,
+.app-body .situation-bottom-grid {
+    gap: 9px;
+}
+
+.app-body .situation-panel {
+    padding: 11px;
+}
+
+.app-body .situation-panel-header {
+    min-height: 38px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+}
+
+.app-body .situation-core-map {
+    grid-template-columns: 138px minmax(0, 1fr);
+    min-height: 205px;
+    border-color: var(--nms-line-soft);
+    background: var(--nms-surface-soft);
+}
+
+.app-body .situation-score-ring {
+    padding: 15px;
+    border-right-color: var(--nms-line-soft);
+}
+
+.app-body .situation-score-ring strong {
+    font-size: 42px;
+}
+
+.app-body .situation-node {
+    min-height: 39px;
+    padding: 7px 10px;
+    border-color: var(--nms-line-soft);
+    background: transparent;
+}
+
+.app-body .situation-node:hover {
+    background: #1b2327;
+}
+
+.app-body .situation-node span,
+.app-body .situation-node strong {
+    font-size: 11px;
+}
+
+.app-body .situation-summary {
+    margin-top: 8px;
+    font-size: 10px;
+}
+
+.app-body .situation-micro-grid {
+    margin-top: 8px;
+}
+
+.app-body .situation-micro-grid div,
+.app-body .situation-mini-grid div,
+.app-body .situation-flow-grid div,
+.app-body .situation-bandwidth-card {
+    border-color: var(--nms-line-soft);
+}
+
+.app-body .situation-bandwidth-card strong {
+    font-size: 19px;
+}
+
+.app-body .situation-mini-grid strong,
+.app-body .situation-flow-grid strong,
+.app-body .situation-micro-grid strong {
+    font-size: 13px;
+}
+
+.app-body .situation-dashboard .workbench-action {
+    border-color: var(--nms-line-soft);
+    background: var(--nms-surface-soft);
+}
+
+.app-body .situation-dashboard .workbench-action:hover {
+    border-color: #46545a;
+    background: #1d2529;
+}
+
+.app-body .situation-bottom-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+/* Firewall and traffic */
+
+.app-body .firewall-ops-view {
+    --firewall-bg: var(--nms-bg);
+    --firewall-panel: var(--nms-surface);
+    --firewall-panel-soft: var(--nms-surface-soft);
+    --firewall-line: var(--nms-line);
+    --firewall-line-soft: var(--nms-line-soft);
+    --firewall-text: var(--nms-text);
+    --firewall-muted: var(--nms-muted);
+}
+
+.app-body .traffic-ops-view {
+    --traffic-bg: var(--nms-bg);
+    --traffic-panel: var(--nms-surface);
+    --traffic-panel-soft: var(--nms-surface-soft);
+    --traffic-line: var(--nms-line);
+    --traffic-line-soft: var(--nms-line-soft);
+    --traffic-text: var(--nms-text);
+    --traffic-muted: var(--nms-muted);
+}
+
+.app-body .firewall-stat-strip {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.app-body .traffic-stat-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.app-body .firewall-stat:last-child,
+.app-body .traffic-stat:last-child {
+    border-right: 0;
+}
+
+.app-body .firewall-main-grid {
+    grid-template-columns: minmax(0, 1fr) 270px;
+    gap: 9px;
+}
+
+.app-body .firewall-provider-grid {
+    gap: 9px;
+}
+
+.app-body .firewall-chart-panel,
+.app-body .firewall-live-panel {
+    padding: 11px;
+}
+
+.app-body .firewall-main-chart {
+    height: 288px;
+}
+
+.app-body .firewall-provider-chart {
+    height: 225px;
+}
+
+.app-body .firewall-provider-row,
+.app-body .firewall-collection-meta {
+    border-color: var(--nms-line-soft);
+    background: var(--nms-surface-soft);
+}
+
+.app-body .traffic-list-panel {
+    padding: 0 11px;
+}
+
+.app-body .traffic-list-header {
+    min-height: 64px;
+    margin: 0 -11px;
+    padding: 10px 11px;
+}
+
+.app-body .traffic-search-field {
+    min-height: 34px;
+    border-color: #39454b;
+    border-radius: 3px;
+    background: #11171a;
+}
+
+.app-body .traffic-search-field:focus-within {
+    border-color: var(--nms-green);
+    box-shadow: 0 0 0 2px rgba(88, 184, 139, 0.14);
+}
+
+.app-body .traffic-pagination {
+    margin-right: -11px;
+    margin-left: -11px;
+}
+
+/* Shared module workspaces */
+
+.app-body .ops-workspace-view {
+    --workspace-panel: var(--nms-surface);
+    --workspace-panel-soft: var(--nms-surface-soft);
+    --workspace-panel-raised: var(--nms-surface-raised);
+    --workspace-line: var(--nms-line);
+    --workspace-line-soft: var(--nms-line-soft);
+    --workspace-text: var(--nms-text);
+    --workspace-muted: var(--nms-muted);
+    --workspace-green: var(--nms-green);
+    --workspace-blue: var(--nms-blue);
+    --workspace-amber: var(--nms-amber);
+    --workspace-red: var(--nms-red);
+    gap: 9px;
+    color: var(--nms-text);
+}
+
+.app-body .ops-module-header {
+    min-height: 66px;
+}
+
+.app-body .ops-stat-strip .metric-icon {
+    width: 30px;
+    height: 30px;
+    border: 1px solid #354148;
+    border-radius: 3px;
+    background: #1a2226;
+    color: #8ea0a9;
+}
+
+.app-body .ops-chart-grid {
+    gap: 9px;
+}
+
+.app-body .ops-workspace-view .ops-chart-panel,
+.app-body .ops-workspace-view .switch-chart-section {
+    padding: 11px;
+}
+
+.app-body .ops-list-panel {
+    padding: 0 11px;
+}
+
+.app-body .ops-list-heading {
+    min-height: 56px;
+    margin: 0 -11px;
+    padding: 9px 11px;
+}
+
+.app-body .ops-workspace-view .ops-toolbar {
+    margin: 0;
+    padding: 9px 0;
+}
+
+.app-body .ops-workspace-view .table-wrap {
+    margin: 0 -11px;
+}
+
+.app-body .ops-workspace-view .pagination-row {
+    margin: 0 -11px;
+}
+
+.app-body .ops-segmented {
+    padding: 2px;
+    border-color: #3a454a;
+    border-radius: 3px;
+    background: var(--nms-surface-soft);
+}
+
+.app-body .ops-segmented .small-button.active {
+    background: #24312b;
+    color: #7bcda5;
+}
+
+.app-body .freshness-banner,
+.app-body .topology-warning {
+    border-color: #665638;
+    border-radius: 3px;
+    background: var(--nms-amber-soft);
+    color: #dfb867;
+}
+
+.app-body .device-port-card {
+    min-width: 0;
+    border: 1px solid #364148;
+    border-radius: 3px;
+    background: #171e21;
+    color: var(--nms-text-secondary);
+    box-shadow: none;
+}
+
+.app-body .device-port-switch {
+    color: #aab5ba;
+}
+
+.app-body .device-port-interface {
+    color: #7fc6a3;
+}
+
+.app-body .device-port-icon-button {
+    border-color: var(--nms-line);
+    border-radius: 3px;
+    background: var(--nms-surface);
+    color: var(--nms-muted);
+}
+
+.app-body .device-port-icon-button:hover,
+.app-body .device-port-icon-button:focus-visible {
+    border-color: #536168;
+    background: var(--nms-surface-raised);
+    color: var(--nms-text);
+}
+
+.app-body .switch-trace-section,
+.app-body .switch-detail-section {
+    border-color: var(--nms-line);
+}
+
+.app-body .switch-trace-result,
+.app-body .trace-empty,
+.app-body .trace-summary-table-wrap {
+    border-color: var(--nms-line-soft);
+    background: var(--nms-surface-soft);
+    color: var(--nms-text-secondary);
+}
+
+/* Topology keeps its domain layout while using the shared visual language. */
+
+.app-body .topology-command-panel {
+    padding: 9px 11px;
+}
+
+.app-body .topology-command-icon {
+    border-color: #365247;
+    background: var(--nms-green-soft);
+    color: #76c8a0;
+}
+
+.app-body .topology-search-control input {
+    border-color: #39454b;
+    background: #11171a;
+}
+
+.app-body .topology-workspace {
+    gap: 9px;
+}
+
+.app-body .topology-graph-panel,
+.app-body .topology-detail-panel {
+    background: var(--nms-surface);
+}
+
+.app-body .topology-stage {
+    background: #111719;
+}
+
+.app-body .topology-node {
+    border-color: #3a464c;
+    border-radius: 3px;
+    background: #192024;
+    box-shadow: none;
+}
+
+.app-body .topology-node:hover,
+.app-body .topology-node.selected {
+    border-color: #6397b8;
+    background: #1d272c;
+}
+
+.app-body .topology-node.online {
+    border-left-color: var(--nms-green);
+}
+
+.app-body .topology-node.offline {
+    border-left-color: var(--nms-red);
+}
+
+.app-body .topology-node.unknown {
+    border-left-color: var(--nms-amber);
+}
+
+/* Modal system */
+
+.app-body .ops-modal-backdrop,
+.app-body .modal-backdrop {
+    background: rgba(7, 10, 12, 0.78);
+}
+
+.app-body .ops-modal-backdrop .modal-card,
+.app-body .modal-backdrop .modal-card {
+    border: 1px solid #3a454a;
+    border-radius: 4px;
+    background: #171d20;
+    color: var(--nms-text);
+    box-shadow: 0 24px 54px rgba(0, 0, 0, 0.46);
+}
+
+.app-body .modal-header {
+    min-height: 46px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--nms-line);
+}
+
+.app-body .modal-header h2 {
+    color: var(--nms-text);
+    font-size: 17px;
+    font-weight: 650;
+}
+
+.app-body .modal-actions {
+    padding-top: 11px;
+    border-top: 1px solid var(--nms-line);
+}
+
+.app-body .form-grid label,
+.app-body .single-field {
+    color: var(--nms-text-secondary);
+    font-size: 11px;
+}
+
+.app-body .device-lookup-status {
+    border-color: var(--nms-line);
+    border-radius: 3px;
+    background: var(--nms-surface-raised);
+}
+
+/* Toasts */
+
+.app-body .toast-stack {
+    z-index: 110;
+}
+
+.app-body .toast-message {
+    min-width: 240px;
+    border: 1px solid #3a454a;
+    border-left: 3px solid var(--nms-blue);
+    border-radius: 3px;
+    background: #1b2327;
+    color: var(--nms-text);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
+}
+
+.app-body .toast-message.error {
+    border-left-color: var(--nms-red);
+}
+
+.app-body .toast-message.success {
+    border-left-color: var(--nms-green);
+}
+
+/* Login */
+
+.login-body {
+    display: grid;
+    min-width: 320px;
+    min-height: 100dvh;
+    place-items: center;
+    padding: 24px;
+    background: #0e1316;
+    color: var(--nms-text);
+}
+
+.login-frame {
+    width: min(410px, 100%);
+    overflow: hidden;
+    border: 1px solid var(--nms-line);
+    border-radius: 4px;
+    background: var(--nms-surface);
+    box-shadow: 0 22px 60px rgba(0, 0, 0, 0.34);
+}
+
+.login-body .login-brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    margin: 0;
+    padding: 17px 19px;
+    border-bottom: 1px solid var(--nms-line);
+    background: #141a1d;
+}
+
+.login-brand-mark {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid #39604e;
+    border-radius: 4px;
+    background: var(--nms-green-soft);
+    color: #76caa1;
+    font-size: 20px;
+}
+
+.login-body .login-brand-mark i {
+    display: inline;
+    width: auto;
+    height: auto;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font-size: inherit;
+}
+
+.login-body .login-brand > i {
+    display: none;
+}
+
+.login-body .login-brand h1 {
+    margin: 0;
+    color: var(--nms-text);
+    font-size: 17px;
+    font-weight: 650;
+}
+
+.login-body .login-brand p {
+    margin: 2px 0 0;
+    color: var(--nms-muted);
+    font-size: 10px;
+}
+
+.login-body .login-form {
+    gap: 13px;
+    padding: 19px;
+}
+
+.login-form-heading {
+    margin-bottom: 2px;
+}
+
+.login-form-heading h2 {
+    margin: 0;
+    color: var(--nms-text);
+    font-size: 16px;
+    font-weight: 650;
+}
+
+.login-form-heading p {
+    margin: 3px 0 0;
+    color: var(--nms-muted);
+    font-size: 11px;
+}
+
+.login-body .login-form label,
+.login-field {
+    gap: 6px;
+    color: var(--nms-text-secondary);
+    font-size: 11px;
+}
+
+.login-field {
+    display: grid;
+}
+
+.login-field > label {
+    display: block;
+}
+
+.login-input {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    align-items: center;
+    min-height: 38px;
+    overflow: hidden;
+    border: 1px solid #3a454a;
+    border-radius: 3px;
+    background: #11171a;
+}
+
+.login-input:focus-within {
+    border-color: var(--nms-green);
+    box-shadow: 0 0 0 2px rgba(88, 184, 139, 0.14);
+}
+
+.login-input > i {
+    color: #718087;
+    text-align: center;
+}
+
+.login-body .login-form .login-input input {
+    width: 100%;
+    height: 36px;
+    min-height: 36px;
+    padding: 0 9px 0 0;
+    border: 0;
+    border-radius: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--nms-text);
+}
+
+.login-password-input {
+    grid-template-columns: 30px minmax(0, 1fr) 34px;
+}
+
+.login-password-input button {
+    display: grid;
+    width: 34px;
+    min-height: 36px;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-left: 1px solid var(--nms-line-soft);
+    border-radius: 0;
+    background: transparent;
+    color: #7d8a91;
+}
+
+.login-password-input button:hover {
+    background: #1d2529;
+    color: var(--nms-text);
+}
+
+.login-body .checkbox-line {
+    color: var(--nms-text-secondary);
+}
+
+.login-body .login-form > button[type="submit"] {
+    min-height: 38px;
+    border: 1px solid #397458;
+    border-radius: 3px;
+    background: #285a43;
+    color: #edf7f1;
+    font-weight: 600;
+}
+
+.login-body .login-form > button[type="submit"]:hover {
+    background: #2f694d;
+}
+
+.login-body .login-form > button[type="submit"]:disabled {
+    border-color: #34413b;
+    background: #22382e;
+    color: #80998c;
+    cursor: progress;
+}
+
+.login-body .form-message {
+    min-height: 18px;
+    color: #e68b8b;
+    font-size: 11px;
+}
+
+.login-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 19px;
+    border-top: 1px solid var(--nms-line-soft);
+    color: #66747b;
+    font-size: 10px;
+}
+
+/* Responsive behavior */
+
+@media (max-width: 1400px) {
+    .app-body .situation-main-grid {
+        grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.2fr);
+    }
+
+    .app-body .situation-main-grid > .situation-side-stack:last-child {
+        grid-column: 1 / -1;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .app-body .topology-workspace {
+        grid-template-columns: minmax(0, 1fr) 260px;
+    }
+}
+
+@media (max-width: 1100px) {
+    .app-body .situation-main-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .app-body .situation-main-grid > .situation-side-stack:last-child {
+        grid-column: auto;
+    }
+
+    .app-body .firewall-main-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .app-body .firewall-live-panel {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 10px;
+    }
+
+    .app-body .firewall-live-panel > .firewall-panel-header {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 920px) {
+    .app-body .app-shell,
+    .app-body.sidebar-collapsed .app-shell {
+        display: block;
+        min-height: 100dvh;
+    }
+
+    .app-body .mobile-topbar {
+        z-index: 45;
+        display: flex;
+        min-height: 56px;
+        padding: calc(8px + env(safe-area-inset-top)) 11px 8px;
+        border-bottom: 1px solid var(--nms-line);
+        background: #12181b;
+        color: var(--nms-text);
+        backdrop-filter: none;
+    }
+
+    .app-body .mobile-nav-toggle {
+        width: 36px;
+        height: 36px;
+        border-color: var(--nms-line);
+        border-radius: 3px;
+        background: var(--nms-surface);
+        color: var(--nms-text-secondary);
+    }
+
+    .app-body .mobile-title {
+        color: var(--nms-text);
+        font-size: 13px;
+        font-weight: 650;
+    }
+
+    .app-body .mobile-subtitle {
+        max-width: calc(100vw - 76px);
+        overflow: hidden;
+        color: var(--nms-muted);
+        font-size: 9px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .app-body .sidebar,
+    .app-body.sidebar-collapsed .sidebar {
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: min(272px, 84vw);
+        height: 100dvh;
+        max-height: 100dvh;
+        padding: 12px 10px;
+        overflow-y: auto;
+        transform: translateX(-102%);
+        transition: transform 180ms ease;
+    }
+
+    .app-body.sidebar-open .sidebar {
+        transform: translateX(0);
+    }
+
+    .app-body .sidebar-scrim {
+        position: fixed;
+        inset: 0;
+        z-index: 35;
+        display: block;
+        border: 0;
+        background: rgba(5, 8, 10, 0.68);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 180ms ease;
+    }
+
+    .app-body.sidebar-open .sidebar-scrim {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .app-body.sidebar-collapsed .brand {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        min-height: 54px;
+        flex-direction: initial;
+    }
+
+    .app-body.sidebar-collapsed .brand-copy,
+    .app-body.sidebar-collapsed .nav-section-title,
+    .app-body.sidebar-collapsed .nav-item span,
+    .app-body.sidebar-collapsed .current-user-copy {
+        display: block;
+    }
+
+    .app-body.sidebar-collapsed .nav-list {
+        gap: 13px;
+        overflow: visible;
+    }
+
+    .app-body.sidebar-collapsed .nav-item {
+        justify-content: flex-start;
+        width: auto;
+        min-height: 36px;
+        margin: 0;
+        padding: 0 9px;
+    }
+
+    .app-body.sidebar-collapsed .nav-item::after {
+        display: none !important;
+    }
+
+    .app-body.sidebar-collapsed .current-user {
+        flex-direction: row;
+        gap: 9px;
+        padding: 7px;
+    }
+
+    .sidebar-collapse-toggle {
+        display: none;
+    }
+
+    .app-body .main-panel,
+    body.ops-screen-active .main-panel,
+    body.dashboard-screen-active .main-panel,
+    body.firewall-screen-active .main-panel,
+    body.traffic-screen-active .main-panel,
+    body.workspace-screen-active .main-panel {
+        padding: 10px;
+    }
+
+    .app-body .situation-hero,
+    .app-body .firewall-ops-header,
+    .app-body .traffic-ops-header,
+    .app-body .ops-module-header {
+        align-items: flex-start;
+        min-height: 0;
+        flex-direction: column;
+    }
+
+    .app-body .situation-hero-meta,
+    .app-body .firewall-ops-actions,
+    .app-body .traffic-ops-actions,
+    .app-body .ops-module-header .button-row {
+        width: 100%;
+        max-width: none;
+        justify-content: flex-start;
+    }
+
+    .app-body .situation-hero-meta {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+        justify-content: initial;
+    }
+
+    .app-body .situation-hero-meta > div {
+        justify-items: start;
+    }
+
+    .app-body .situation-refresh-button {
+        display: inline-flex;
+        flex: 0 0 auto;
+    }
+
+    .app-body .situation-kpi-grid,
+    .app-body .firewall-stat-strip,
+    .app-body .traffic-stat-strip,
+    .app-body .ops-stat-strip,
+    .app-body .ops-summary-strip,
+    .app-body .switch-stat-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .app-body .situation-kpi,
+    .app-body .firewall-stat,
+    .app-body .traffic-stat,
+    .app-body .ops-stat-strip .ops-stat,
+    .app-body .ops-summary-strip > div,
+    .app-body .switch-stat-strip > div {
+        border-right: 1px solid var(--nms-line-soft);
+        border-bottom: 1px solid var(--nms-line-soft);
+    }
+
+    .app-body .situation-kpi:nth-child(2n),
+    .app-body .firewall-stat:nth-child(2n),
+    .app-body .traffic-stat:nth-child(2n),
+    .app-body .ops-stat-strip .ops-stat:nth-child(2n),
+    .app-body .ops-summary-strip > div:nth-child(2n),
+    .app-body .switch-stat-strip > div:nth-child(2n) {
+        border-right: 0;
+    }
+
+    .app-body .situation-main-grid,
+    .app-body .situation-bottom-grid,
+    .app-body .situation-main-grid > .situation-side-stack:last-child,
+    .app-body .firewall-provider-grid,
+    .app-body .ops-chart-grid,
+    .app-body .topology-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .app-body .firewall-live-panel {
+        display: block;
+    }
+
+    .app-body .traffic-list-header,
+    .app-body .ops-list-heading {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .app-body .traffic-analysis-toolbar,
+    .app-body .ops-workspace-view .ops-toolbar,
+    .app-body .toolbar-row {
+        grid-template-columns: 1fr;
+        width: 100%;
+    }
+
+    .app-body .traffic-analysis-toolbar input,
+    .app-body .traffic-analysis-toolbar select,
+    .app-body .ops-toolbar input,
+    .app-body .ops-toolbar select,
+    .app-body .ops-toolbar button {
+        width: 100%;
+    }
+
+    .app-body .topology-command-panel {
+        grid-template-areas:
+            "heading"
+            "search"
+            "summary";
+        grid-template-columns: 1fr;
+    }
+
+    .app-body .topology-command-heading {
+        border-right: 0;
+        border-bottom: 1px solid var(--nms-line-soft);
+        padding: 0 0 9px;
+    }
+
+    .app-body .topology-search-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 700px) {
+    .app-body .ops-data-table td,
+    .app-body .traffic-ops-table td {
+        height: auto;
+        min-height: 34px;
+        padding-top: 7px;
+        padding-bottom: 7px;
+    }
+
+    .app-body .situation-hero h2,
+    .app-body .firewall-ops-heading h1,
+    .app-body .traffic-ops-heading h1,
+    .app-body .ops-module-header h2 {
+        font-size: 18px;
+    }
+
+    .app-body .situation-kpi,
+    .app-body .firewall-stat,
+    .app-body .traffic-stat,
+    .app-body .ops-stat-strip .ops-stat,
+    .app-body .ops-summary-strip > div,
+    .app-body .switch-stat-strip > div {
+        min-height: 62px;
+        padding: 9px 10px;
+    }
+
+    .app-body .situation-kpi:last-child:nth-child(odd),
+    .app-body .firewall-stat:last-child:nth-child(odd),
+    .app-body .ops-stat-strip .ops-stat:last-child:nth-child(odd),
+    .app-body .ops-summary-strip > div:last-child:nth-child(odd) {
+        grid-column: 1 / -1;
+        border-right: 0;
+    }
+
+    .app-body .situation-core-map {
+        grid-template-columns: 98px minmax(0, 1fr);
+    }
+
+    .app-body .situation-score-ring {
+        padding: 10px;
+    }
+
+    .app-body .situation-score-ring strong {
+        font-size: 34px;
+    }
+
+    .app-body .top-columns {
+        grid-template-columns: 1fr;
+    }
+
+    .app-body .button-row,
+    .app-body .firewall-ops-actions,
+    .app-body .traffic-ops-actions {
+        flex-wrap: wrap;
+    }
+
+    .app-body .button-row .small-button {
+        flex: 1 1 auto;
+    }
+
+    .app-body .modal-backdrop {
+        padding: calc(10px + env(safe-area-inset-top)) 8px calc(10px + env(safe-area-inset-bottom));
+    }
+
+    .app-body .modal-card {
+        width: 100%;
+        max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+        padding: 14px;
+    }
+
+    .login-body {
+        padding: 12px;
+    }
+
+    .login-frame {
+        width: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-body .app-shell,
+    .app-body .sidebar,
+    .app-body .sidebar-scrim {
+        transition: none;
+    }
+}

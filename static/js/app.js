@@ -307,6 +307,7 @@ const WORKSPACE_VIEW_IDS = new Set([
     'clients-panel',
     'users-panel',
 ]);
+const SIDEBAR_COLLAPSED_KEY = 'nms.sidebar.collapsed';
 
 function showView(viewId, navId, titleKey) {
     document.querySelectorAll('.app-view').forEach((view) => {
@@ -315,6 +316,7 @@ function showView(viewId, navId, titleKey) {
     const dashboardActive = viewId === 'dashboard-panel';
     const firewallActive = viewId === 'firewall-bandwidth-panel';
     const trafficActive = viewId === 'traffic-analysis-panel';
+    document.body.dataset.view = titleKey;
     document.body.classList.toggle('ops-screen-active', OPS_VIEW_IDS.has(viewId));
     document.body.classList.toggle('workspace-screen-active', WORKSPACE_VIEW_IDS.has(viewId));
     document.body.classList.toggle('dashboard-screen-active', dashboardActive);
@@ -333,6 +335,15 @@ function showView(viewId, navId, titleKey) {
     const title = viewTitles[titleKey] || viewTitles.dashboard;
     document.getElementById('page-title').textContent = title[0];
     document.getElementById('page-subtitle').textContent = title[1];
+    document.title = `${title[0]} - 网络管理系统`;
+    const mobileTitle = document.querySelector('.mobile-title');
+    const mobileSubtitle = document.querySelector('.mobile-subtitle');
+    if (mobileTitle) {
+        mobileTitle.textContent = title[0];
+    }
+    if (mobileSubtitle) {
+        mobileSubtitle.textContent = title[1];
+    }
     const navItem = document.getElementById(navId);
     const hash = navItem?.getAttribute('href');
     if (hash && hash.startsWith('#') && window.location.hash !== hash) {
@@ -365,6 +376,40 @@ function toggleSidebar() {
     } else {
         openSidebar();
     }
+}
+
+function setDesktopSidebarCollapsed(collapsed, persist = true) {
+    const nextCollapsed = Boolean(collapsed);
+    document.body.classList.toggle('sidebar-collapsed', nextCollapsed);
+    const toggle = document.getElementById('sidebar-collapse-toggle');
+    if (toggle) {
+        toggle.setAttribute('aria-expanded', String(!nextCollapsed));
+        toggle.setAttribute('aria-label', nextCollapsed ? '展开侧栏' : '收起侧栏');
+        toggle.setAttribute('title', nextCollapsed ? '展开侧栏' : '收起侧栏');
+        const icon = toggle.querySelector('i');
+        if (icon) {
+            icon.className = nextCollapsed
+                ? 'bi bi-chevron-double-right'
+                : 'bi bi-chevron-double-left';
+        }
+    }
+    if (persist) {
+        try {
+            window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(nextCollapsed));
+        } catch (error) {
+            // The layout still works when storage is unavailable.
+        }
+    }
+}
+
+function initializeDesktopSidebar() {
+    let collapsed = false;
+    try {
+        collapsed = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+    } catch (error) {
+        collapsed = false;
+    }
+    setDesktopSidebarCollapsed(collapsed, false);
 }
 
 function setButtonBusy(button, busy) {
@@ -5357,6 +5402,8 @@ async function boot() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    initializeDesktopSidebar();
+
     const mobileNavToggle = document.getElementById('mobile-nav-toggle');
     if (mobileNavToggle) {
         mobileNavToggle.addEventListener('click', toggleSidebar);
@@ -5365,6 +5412,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebarScrim = document.getElementById('sidebar-scrim');
     if (sidebarScrim) {
         sidebarScrim.addEventListener('click', closeSidebar);
+    }
+
+    const sidebarCollapseToggle = document.getElementById('sidebar-collapse-toggle');
+    if (sidebarCollapseToggle) {
+        sidebarCollapseToggle.addEventListener('click', () => {
+            setDesktopSidebarCollapsed(!document.body.classList.contains('sidebar-collapsed'));
+        });
     }
 
     const logoutButton = document.getElementById('logout-button');

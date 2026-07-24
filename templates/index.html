@@ -3,14 +3,11 @@
 {% block title %}网络运行总览 - 网络管理系统{% endblock %}
 
 {% block content %}
-<header class="page-header">
+<header class="page-header global-view-context" aria-hidden="true">
     <div>
         <h1 id="page-title">网络运行总览</h1>
         <p id="page-subtitle">核心网络与接入资产运行状态</p>
     </div>
-    <button class="refresh-button" id="refresh-summary" type="button" title="刷新" aria-label="刷新当前视图">
-        <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
-    </button>
 </header>
 
 <section class="dashboard-view situation-dashboard app-view" id="dashboard-panel">
@@ -21,8 +18,14 @@
                 <p>核心链路、网络设备与接入资产</p>
             </div>
             <div class="situation-hero-meta">
-                <span id="situation-updated-at">等待同步</span>
-                <strong id="situation-health-level">评估中</strong>
+                <div>
+                    <span id="situation-updated-at">等待同步</span>
+                    <strong id="situation-health-level">评估中</strong>
+                </div>
+                <button class="small-button situation-refresh-button" id="refresh-summary" type="button" title="刷新运行总览" aria-label="刷新运行总览">
+                    <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+                    <span>刷新</span>
+                </button>
             </div>
         </section>
 
