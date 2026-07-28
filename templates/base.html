@@ -9,7 +9,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/app.css', v=config.VERSION ~ '-base-v5') }}" rel="stylesheet">
-    <link href="{{ url_for('static', filename='css/workspace.css', v=config.VERSION ~ '-workspace-v5-topology') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/workspace.css', v=config.VERSION ~ '-workspace-v5-topology-edges') }}" rel="stylesheet">
 </head>
 <body class="app-body">
     <a class="skip-link" href="#main-content">跳到主内容</a>
@@ -134,7 +134,7 @@
     </div>
 
     <div class="toast-stack" id="toast-stack" role="status" aria-live="polite" aria-atomic="true"></div>
-    <script src="{{ url_for('static', filename='js/app.js', v=config.VERSION ~ '-ui-v5-topology') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js', v=config.VERSION ~ '-ui-v5-topology-edges') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

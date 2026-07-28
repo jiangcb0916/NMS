@@ -2736,8 +2736,14 @@ function renderTopologyGraph() {
         ))
         .join('');
     edgeLayer.setAttribute('viewBox', `0 0 ${layout.width} ${layout.height}`);
+    edgeLayer.setAttribute('preserveAspectRatio', 'xMinYMin meet');
     edgeLayer.setAttribute('width', String(layout.width));
     edgeLayer.setAttribute('height', String(layout.height));
+    // Keep SVG coordinates in a 1:1 pixel space even if the stage is taller
+    // than the calculated graph layout. Otherwise the default centered SVG
+    // viewport shifts every edge while the HTML nodes remain fixed.
+    edgeLayer.style.width = `${layout.width}px`;
+    edgeLayer.style.height = `${layout.height}px`;
     edgeLayer.innerHTML = [
         ...graph.edges.map((edge) => renderTopologyEdge(
             edge,
