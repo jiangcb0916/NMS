@@ -1,16 +1,16 @@
 :root {
-    --bg: #f5f7f8;
+    --bg: #e9eef3;
     --panel: #ffffff;
-    --panel-border: #d9e0e4;
-    --text: #20272c;
-    --muted: #66737d;
-    --nav: #1f2529;
-    --nav-soft: #2d353b;
-    --accent: #0f766e;
-    --accent-soft: #e2f3f1;
-    --blue: #2563eb;
-    --amber: #b45309;
-    --red: #b91c1c;
+    --panel-border: #d2dce5;
+    --text: #253247;
+    --muted: #526071;
+    --nav: #101820;
+    --nav-soft: #1b2a3a;
+    --accent: #0969da;
+    --accent-soft: #e7f0fd;
+    --blue: #0969da;
+    --amber: #956000;
+    --red: #b4233a;
 }
 
 /* Network topology workspace */
@@ -900,7 +900,7 @@ body {
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     overflow-x: hidden;
-    -webkit-tap-highlight-color: rgba(15, 118, 110, 0.16);
+    -webkit-tap-highlight-color: rgba(9, 105, 218, 0.16);
 }
 
 button,
@@ -918,7 +918,7 @@ textarea {
 }
 
 :where(button, a, input, select, textarea, [tabindex]):focus-visible {
-    outline: 3px solid rgba(15, 118, 110, 0.34);
+    outline: 3px solid rgba(9, 105, 218, 0.28);
     outline-offset: 2px;
 }
 

@@ -1200,8 +1200,8 @@ function renderFirewallMetricSnapshot(latest, configured, hasMetricData, hasReso
 
 function renderFirewallBandwidthCharts(samples, emptyMessage = '暂无带宽历史样本') {
     const options = {theme: 'light', emptyMessage};
-    const downloadSeries = {label: '下行', color: '#2563a6', fill: 'rgba(37, 99, 166, 0.10)', width: 1.8};
-    const uploadSeries = {label: '上行', color: '#79a9d3', fill: 'rgba(121, 169, 211, 0.09)', width: 1.8};
+    const downloadSeries = {label: '下行', color: '#0969da', fill: 'rgba(9, 105, 218, 0.10)', width: 2.25};
+    const uploadSeries = {label: '上行', color: '#5b5fc7', fill: 'rgba(91, 95, 199, 0.10)', width: 2.25};
     drawBandwidthChart('firewall-total-chart', samples, [
         {...downloadSeries, key: 'total_download'},
         {...uploadSeries, key: 'total_upload'},
@@ -1666,8 +1666,8 @@ function renderOsdwanLatestMetric(elementId, sample) {
 
 function osdwanChartSeries() {
     return [
-        {key: 'download_mbps', label: '下行', color: '#2563a6', fill: 'rgba(37, 99, 166, 0.10)', width: 1.8},
-        {key: 'upload_mbps', label: '上行', color: '#79a9d3', fill: 'rgba(121, 169, 211, 0.09)', width: 1.8},
+        {key: 'download_mbps', label: '下行', color: '#0969da', fill: 'rgba(9, 105, 218, 0.10)', width: 2.25},
+        {key: 'upload_mbps', label: '上行', color: '#5b5fc7', fill: 'rgba(91, 95, 199, 0.10)', width: 2.25},
     ];
 }
 
@@ -1791,9 +1791,9 @@ function drawBandwidthChart(canvasId, samples, series, options = {}) {
         text: '#8c989e',
     } : {
         background: '#ffffff',
-        grid: '#edf1f3',
-        axis: '#d9e0e4',
-        text: '#66737d',
+        grid: '#d7dee6',
+        axis: '#aebbc8',
+        text: '#526071',
     };
     const rect = canvas.getBoundingClientRect();
     const width = Math.max(320, rect.width || canvas.clientWidth || 720);
@@ -2717,6 +2717,10 @@ function renderTopologyGraph() {
     }
 
     const layout = calculateTopologyLayout(graph.nodes, graph.edges, stage.clientWidth || 900);
+    const workspace = stage.closest('.topology-workspace');
+    if (workspace) {
+        workspace.style.setProperty('--topology-canvas-height', `${layout.height}px`);
+    }
     stage.style.height = `${layout.height}px`;
     if (layerGuides) {
         layerGuides.innerHTML = layout.layers.map((layer) => `
@@ -3145,7 +3149,7 @@ function renderTopologyDetailEdge(edge, nodeId, nodes) {
     const links = edge.links || [];
     return `
         <div class="topology-link-detail">
-            <div><strong>${escapeHtml(peer.name || peer.ip || '相邻节点')}</strong><span>${escapeHtml(topologyStatusLabel(edge.status))}</span></div>
+            <div><strong>${escapeHtml(peer.name || peer.ip || '相邻节点')}</strong><span class="topology-link-status ${normalizeTopologyStatus(edge.status)}">${escapeHtml(topologyStatusLabel(edge.status))}</span></div>
             ${links.map((link) => {
                 const evidence = link.source === 'configured'
                     ? (edge.relationship_type === 'carrier'
@@ -3953,8 +3957,8 @@ function renderSwitchTrafficData(data) {
     switchState.trafficRange = data.range || switchState.trafficRange;
     renderSwitchTrafficRangeButtons();
     drawBandwidthChart('switch-traffic-chart', samples, [
-        {key: 'total_in_mbps', label: '入方向', color: '#2563a6', fill: 'rgba(37, 99, 166, 0.10)'},
-        {key: 'total_out_mbps', label: '出方向', color: '#79a9d3', fill: 'rgba(121, 169, 211, 0.09)'},
+        {key: 'total_in_mbps', label: '入方向', color: '#0969da', fill: 'rgba(9, 105, 218, 0.10)', width: 2.25},
+        {key: 'total_out_mbps', label: '出方向', color: '#5b5fc7', fill: 'rgba(91, 95, 199, 0.10)', width: 2.25},
     ], {theme: 'light', emptyMessage: '暂无端口流量样本'});
 }
 
@@ -3965,8 +3969,8 @@ function renderSwitchTrafficError(message) {
         source.textContent = message;
     }
     drawBandwidthChart('switch-traffic-chart', [], [
-        {key: 'total_in_mbps', label: '入方向', color: '#2563a6', fill: 'rgba(37, 99, 166, 0.10)'},
-        {key: 'total_out_mbps', label: '出方向', color: '#79a9d3', fill: 'rgba(121, 169, 211, 0.09)'},
+        {key: 'total_in_mbps', label: '入方向', color: '#0969da', fill: 'rgba(9, 105, 218, 0.10)', width: 2.25},
+        {key: 'total_out_mbps', label: '出方向', color: '#5b5fc7', fill: 'rgba(91, 95, 199, 0.10)', width: 2.25},
     ], {theme: 'light', emptyMessage: message || '暂无端口流量样本'});
 }
 
