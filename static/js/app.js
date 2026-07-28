@@ -123,6 +123,19 @@ const viewTitles = {
     users: ['用户管理', '系统账号与权限']
 };
 
+const viewSections = {
+    dashboard: '运行总览',
+    firewallBandwidth: '网络监控',
+    trafficAnalysis: '网络监控',
+    osdwan: '网络监控',
+    topology: '网络监控',
+    switches: '网络监控',
+    wireless: '网络监控',
+    devices: '准入资产',
+    clients: '准入资产',
+    users: '系统管理',
+};
+
 const clientState = {
     page: 1,
     perPage: 10,
@@ -307,7 +320,7 @@ const WORKSPACE_VIEW_IDS = new Set([
     'clients-panel',
     'users-panel',
 ]);
-const SIDEBAR_COLLAPSED_KEY = 'nms.sidebar.collapsed';
+const SIDEBAR_COLLAPSED_KEY = 'nms.sidebar.v2.collapsed';
 
 function showView(viewId, navId, titleKey) {
     document.querySelectorAll('.app-view').forEach((view) => {
@@ -335,6 +348,10 @@ function showView(viewId, navId, titleKey) {
     const title = viewTitles[titleKey] || viewTitles.dashboard;
     document.getElementById('page-title').textContent = title[0];
     document.getElementById('page-subtitle').textContent = title[1];
+    const pageSection = document.getElementById('page-section');
+    if (pageSection) {
+        pageSection.textContent = viewSections[titleKey] || viewSections.dashboard;
+    }
     document.title = `${title[0]} - 网络管理系统`;
     const mobileTitle = document.querySelector('.mobile-title');
     const mobileSubtitle = document.querySelector('.mobile-subtitle');
@@ -1182,9 +1199,9 @@ function renderFirewallMetricSnapshot(latest, configured, hasMetricData, hasReso
 }
 
 function renderFirewallBandwidthCharts(samples, emptyMessage = '暂无带宽历史样本') {
-    const options = {theme: 'dark', emptyMessage};
-    const downloadSeries = {label: '下行', color: '#58b88b', fill: 'rgba(88, 184, 139, 0.10)', width: 1.8};
-    const uploadSeries = {label: '上行', color: '#63a7df', fill: 'rgba(99, 167, 223, 0.08)', width: 1.8};
+    const options = {theme: 'light', emptyMessage};
+    const downloadSeries = {label: '下行', color: '#2563a6', fill: 'rgba(37, 99, 166, 0.10)', width: 1.8};
+    const uploadSeries = {label: '上行', color: '#79a9d3', fill: 'rgba(121, 169, 211, 0.09)', width: 1.8};
     drawBandwidthChart('firewall-total-chart', samples, [
         {...downloadSeries, key: 'total_download'},
         {...uploadSeries, key: 'total_upload'},
@@ -1559,7 +1576,7 @@ function renderOsdwanMetrics(data, options = {}) {
     document.getElementById('osdwan-all-source').textContent = `${renderOsdwanPeriod(data.all_period)} · 样本 ${data.all_stats?.sample_count ?? 0} 个`;
     document.getElementById('osdwan-node-source').textContent = `${data.node?.name || '办公开发'} · ${renderOsdwanPeriod(data.node?.period)} · 样本 ${data.node?.stats?.sample_count ?? 0} 个`;
 
-    const chartOptions = {theme: 'dark', emptyMessage: '暂无流量样本'};
+    const chartOptions = {theme: 'light', emptyMessage: '暂无流量样本'};
     drawBandwidthChart('osdwan-all-chart', osdwanState.allSamples, osdwanChartSeries(), chartOptions);
     drawBandwidthChart('osdwan-node-chart', osdwanState.nodeSamples, osdwanChartSeries(), chartOptions);
 }
@@ -1611,7 +1628,7 @@ function renderOsdwanMetricsError(message, data = {}, options = {}) {
     }
     document.getElementById('osdwan-all-source').textContent = message;
     document.getElementById('osdwan-node-source').textContent = message;
-    const chartOptions = {theme: 'dark', emptyMessage: message || '暂无流量样本'};
+    const chartOptions = {theme: 'light', emptyMessage: message || '暂无流量样本'};
     drawBandwidthChart('osdwan-all-chart', [], osdwanChartSeries(), chartOptions);
     drawBandwidthChart('osdwan-node-chart', [], osdwanChartSeries(), chartOptions);
     osdwanState.proxyStatus = null;
@@ -1649,8 +1666,8 @@ function renderOsdwanLatestMetric(elementId, sample) {
 
 function osdwanChartSeries() {
     return [
-        {key: 'download_mbps', label: '下行', color: '#58b88b', fill: 'rgba(88, 184, 139, 0.10)', width: 1.8},
-        {key: 'upload_mbps', label: '上行', color: '#63a7df', fill: 'rgba(99, 167, 223, 0.08)', width: 1.8},
+        {key: 'download_mbps', label: '下行', color: '#2563a6', fill: 'rgba(37, 99, 166, 0.10)', width: 1.8},
+        {key: 'upload_mbps', label: '上行', color: '#79a9d3', fill: 'rgba(121, 169, 211, 0.09)', width: 1.8},
     ];
 }
 
@@ -3936,9 +3953,9 @@ function renderSwitchTrafficData(data) {
     switchState.trafficRange = data.range || switchState.trafficRange;
     renderSwitchTrafficRangeButtons();
     drawBandwidthChart('switch-traffic-chart', samples, [
-        {key: 'total_in_mbps', label: '入方向', color: '#63a7df', fill: 'rgba(99, 167, 223, 0.08)'},
-        {key: 'total_out_mbps', label: '出方向', color: '#58b88b', fill: 'rgba(88, 184, 139, 0.10)'},
-    ], {theme: 'dark', emptyMessage: '暂无端口流量样本'});
+        {key: 'total_in_mbps', label: '入方向', color: '#2563a6', fill: 'rgba(37, 99, 166, 0.10)'},
+        {key: 'total_out_mbps', label: '出方向', color: '#79a9d3', fill: 'rgba(121, 169, 211, 0.09)'},
+    ], {theme: 'light', emptyMessage: '暂无端口流量样本'});
 }
 
 function renderSwitchTrafficError(message) {
@@ -3948,9 +3965,9 @@ function renderSwitchTrafficError(message) {
         source.textContent = message;
     }
     drawBandwidthChart('switch-traffic-chart', [], [
-        {key: 'total_in_mbps', label: '入方向', color: '#63a7df', fill: 'rgba(99, 167, 223, 0.08)'},
-        {key: 'total_out_mbps', label: '出方向', color: '#58b88b', fill: 'rgba(88, 184, 139, 0.10)'},
-    ], {theme: 'dark', emptyMessage: message || '暂无端口流量样本'});
+        {key: 'total_in_mbps', label: '入方向', color: '#2563a6', fill: 'rgba(37, 99, 166, 0.10)'},
+        {key: 'total_out_mbps', label: '出方向', color: '#79a9d3', fill: 'rgba(121, 169, 211, 0.09)'},
+    ], {theme: 'light', emptyMessage: message || '暂无端口流量样本'});
 }
 
 function renderSwitchTrafficRangeButtons() {

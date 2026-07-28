@@ -3,25 +3,15 @@
 {% block title %}网络运行总览 - 网络管理系统{% endblock %}
 
 {% block content %}
-<header class="page-header global-view-context" aria-hidden="true">
-    <div>
-        <h1 id="page-title">网络运行总览</h1>
-        <p id="page-subtitle">核心网络与接入资产运行状态</p>
-    </div>
-</header>
-
 <section class="dashboard-view situation-dashboard app-view" id="dashboard-panel">
     <div class="situation-screen" aria-label="网络运行值守看板">
         <section class="situation-hero">
-            <div>
-                <h2>网络运行总览</h2>
-                <p>核心链路、网络设备与接入资产</p>
+            <div class="overview-status-copy">
+                <span><i aria-hidden="true"></i>当前运行状态</span>
+                <strong id="situation-health-level">评估中</strong>
             </div>
             <div class="situation-hero-meta">
-                <div>
-                    <span id="situation-updated-at">等待同步</span>
-                    <strong id="situation-health-level">评估中</strong>
-                </div>
+                <span id="situation-updated-at">等待同步</span>
                 <button class="small-button situation-refresh-button" id="refresh-summary" type="button" title="刷新运行总览" aria-label="刷新运行总览">
                     <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
                     <span>刷新</span>
@@ -31,26 +21,31 @@
 
         <section class="situation-kpi-grid dashboard-metrics" id="metric-grid" aria-label="关键运行状态">
             <article class="situation-kpi">
+                <span class="situation-kpi-icon"><i class="bi bi-hdd-network" aria-hidden="true"></i></span>
                 <span class="situation-kpi-label">设备在线</span>
                 <strong id="metric-devices">-</strong>
                 <small id="situation-device-risk">状态同步中</small>
             </article>
             <article class="situation-kpi">
+                <span class="situation-kpi-icon"><i class="bi bi-people" aria-hidden="true"></i></span>
                 <span class="situation-kpi-label">无线用户</span>
                 <strong id="metric-wireless-users">-</strong>
                 <small>实时在线终端</small>
             </article>
             <article class="situation-kpi">
+                <span class="situation-kpi-icon"><i class="bi bi-broadcast-pin" aria-hidden="true"></i></span>
                 <span class="situation-kpi-label">在线 AP</span>
                 <strong id="metric-wireless-ap">-</strong>
                 <small>无线覆盖节点</small>
             </article>
             <article class="situation-kpi">
+                <span class="situation-kpi-icon"><i class="bi bi-person-check" aria-hidden="true"></i></span>
                 <span class="situation-kpi-label">OSDWAN 用户</span>
                 <strong id="metric-osdwan-users">-</strong>
                 <small>当前在线容量</small>
             </article>
             <article class="situation-kpi">
+                <span class="situation-kpi-icon"><i class="bi bi-cloud-check" aria-hidden="true"></i></span>
                 <span class="situation-kpi-label">OSDWAN 出口</span>
                 <strong id="metric-osdwan-exits">-</strong>
                 <small>出口连通性</small>
@@ -240,7 +235,7 @@
         <header class="firewall-ops-header">
             <div class="firewall-ops-heading">
                 <span class="firewall-ops-kicker">边界链路</span>
-                <h1>防火墙链路监控</h1>
+                <h2>防火墙链路监控</h2>
                 <p id="firewall-bandwidth-source">正在读取采集状态</p>
             </div>
             <div class="firewall-ops-actions">
@@ -390,7 +385,7 @@
         <header class="traffic-ops-header">
             <div class="traffic-ops-heading">
                 <span class="traffic-ops-kicker">用户流量</span>
-                <h1>用户流量分析</h1>
+                <h2>用户流量分析</h2>
                 <p id="traffic-analysis-source">正在读取深信服 AC 用户速率与应用明细</p>
             </div>
             <div class="traffic-ops-actions">
@@ -625,22 +620,24 @@
 
 <section class="panel topology-panel ops-workspace-view ops-monitor-view app-view" id="topology-panel" hidden>
     <div class="panel-header ops-module-header topology-module-header">
-        <div>
-            <h2>网络拓扑</h2>
-            <p class="panel-subtitle">核心 LLDP 关系与终端接入路径</p>
-        </div>
-        <div class="topology-header-meta">
+        <div class="topology-snapshot">
+            <span class="topology-snapshot-icon" aria-hidden="true">
+                <i class="bi bi-diagram-3"></i>
+            </span>
             <div>
-                <span>关系快照</span>
+                <span>最近拓扑快照</span>
                 <strong id="topology-generated-at">等待发现</strong>
             </div>
+        </div>
+        <div class="topology-header-meta">
+            <span class="topology-refresh-note">节点状态自动更新，链路变化可重新发现</span>
             <div class="button-row">
                 <button class="small-button" id="refresh-topology-status" type="button" title="刷新节点状态">
-                    <i class="bi bi-arrow-clockwise"></i>
+                    <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
                     <span>刷新状态</span>
                 </button>
                 <button class="small-button primary" id="rediscover-topology" type="button" title="重新读取核心交换机 LLDP">
-                    <i class="bi bi-broadcast-pin"></i>
+                    <i class="bi bi-broadcast-pin" aria-hidden="true"></i>
                     <span>重新发现</span>
                 </button>
             </div>
@@ -680,18 +677,18 @@
         <form class="topology-search-row" id="topology-search-form">
             <div class="topology-search-control">
                 <i class="bi bi-search" aria-hidden="true"></i>
-                <input id="topology-search-input" name="target" placeholder="搜索设备名称、IP 或 MAC" aria-label="搜索设备名称、IP 或 MAC" aria-autocomplete="list" aria-controls="topology-device-picker" aria-expanded="false" role="combobox" autocomplete="off">
+                <input id="topology-search-input" name="target" placeholder="搜索设备名称、IP 或 MAC…" aria-label="搜索设备名称、IP 或 MAC" aria-autocomplete="list" aria-controls="topology-device-picker" aria-expanded="false" role="combobox" autocomplete="off">
                 <button class="topology-picker-toggle" id="topology-picker-toggle" type="button" aria-label="展开设备列表" aria-controls="topology-device-picker" aria-expanded="false">
                     <i class="bi bi-chevron-down" aria-hidden="true"></i>
                 </button>
                 <div class="topology-device-picker" id="topology-device-picker" role="listbox" aria-label="设备匹配结果" hidden></div>
             </div>
             <button class="small-button primary" id="topology-trace-button" type="submit">
-                <i class="bi bi-signpost-split"></i>
+                <i class="bi bi-signpost-split" aria-hidden="true"></i>
                 <span>检测路径</span>
             </button>
             <button class="small-button" id="topology-clear-path" type="button" disabled>
-                <i class="bi bi-x-lg"></i>
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
                 <span>清除路径</span>
             </button>
         </form>
