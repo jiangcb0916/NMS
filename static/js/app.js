@@ -2790,7 +2790,9 @@ function calculateTopologyLayout(nodes, edges, availableWidth) {
     const coreY = 210;
     const switchStartY = 354;
     const switchRowGap = 112;
-    placeTopologyRow(positions, externalPeers, width, externalY);
+    const nodeWidth = window.matchMedia('(max-width: 1100px)').matches ? 158 : 172;
+    const nodeGap = 32;
+    placeTopologyRow(positions, externalPeers, width, externalY, nodeWidth, nodeGap);
     if (cores.length === 2) {
         positions.set(cores[0].id, {x: width * 0.34, y: coreY});
         positions.set(cores[1].id, {x: width * 0.66, y: coreY});
@@ -2798,14 +2800,13 @@ function calculateTopologyLayout(nodes, edges, availableWidth) {
         placeTopologyRow(positions, cores, width, coreY);
     }
 
-    const nodeWidth = width < 1100 ? 158 : 176;
     let switchRows = 1;
     if (cores.length === 2 && width >= 960) {
         const centerGap = 42;
         const leftSwitches = switches.filter((node) => coreAssignments.get(node.id) === cores[0].id);
         const rightSwitches = switches.filter((node) => coreAssignments.get(node.id) === cores[1].id);
         const groupWidth = (width - centerGap) / 2;
-        const groupColumns = Math.max(1, Math.min(4, Math.floor((groupWidth - 28) / (nodeWidth + 24))));
+        const groupColumns = Math.max(1, Math.min(4, Math.floor((groupWidth - 28) / (nodeWidth + nodeGap))));
         const leftRows = placeTopologyGroupGrid(
             positions,
             leftSwitches,
@@ -2815,6 +2816,8 @@ function calculateTopologyLayout(nodes, edges, availableWidth) {
             switchRowGap,
             groupColumns,
             18,
+            nodeWidth,
+            nodeGap,
         );
         const rightRows = placeTopologyGroupGrid(
             positions,
@@ -2825,6 +2828,8 @@ function calculateTopologyLayout(nodes, edges, availableWidth) {
             switchRowGap,
             groupColumns,
             -18,
+            nodeWidth,
+            nodeGap,
         );
         switchRows = Math.max(1, leftRows, rightRows);
     } else {
@@ -2879,10 +2884,22 @@ function calculateTopologyLayout(nodes, edges, availableWidth) {
     };
 }
 
-function placeTopologyRow(positions, nodes, width, y) {
+function placeTopologyRow(positions, nodes, width, y, nodeWidth = 0, nodeGap = 0) {
+    const distributedStep = width / (nodes.length + 1);
+    const useCompactSpacing = nodes.length > 1
+        && nodeWidth > 0
+        && (distributedStep - nodeWidth) < nodeGap;
+    const availableGap = useCompactSpacing
+        ? Math.max(0, (width - 16 - (nodes.length * nodeWidth)) / (nodes.length - 1))
+        : 0;
+    const compactGap = Math.min(nodeGap, availableGap);
+    const compactWidth = (nodes.length * nodeWidth) + ((nodes.length - 1) * compactGap);
+    const compactStartX = ((width - compactWidth) / 2) + (nodeWidth / 2);
     nodes.forEach((node, index) => {
         positions.set(node.id, {
-            x: ((index + 1) * width) / (nodes.length + 1),
+            x: useCompactSpacing
+                ? compactStartX + (index * (nodeWidth + compactGap))
+                : (index + 1) * distributedStep,
             y,
         });
     });
@@ -2899,14 +2916,27 @@ function placeTopologyGridRow(positions, nodes, width, y, columns, stagger, node
     });
 }
 
-function placeTopologyGroupGrid(positions, nodes, startX, endX, startY, rowGap, columns, rowOffset = 0) {
+function placeTopologyGroupGrid(
+    positions,
+    nodes,
+    startX,
+    endX,
+    startY,
+    rowGap,
+    columns,
+    rowOffset = 0,
+    nodeWidth = 172,
+    nodeGap = 32,
+) {
     const rows = Math.max(1, Math.ceil(nodes.length / columns));
     for (let row = 0; row < rows; row += 1) {
         const rowNodes = nodes.slice(row * columns, (row + 1) * columns);
         const offset = row > 0 && rowNodes.length === columns ? rowOffset : 0;
+        const rowWidth = (rowNodes.length * nodeWidth) + (Math.max(0, rowNodes.length - 1) * nodeGap);
+        const rowStartX = startX + ((endX - startX - rowWidth) / 2) + offset;
         rowNodes.forEach((node, index) => {
             positions.set(node.id, {
-                x: startX + (((index + 1) * (endX - startX)) / (rowNodes.length + 1)) + offset,
+                x: rowStartX + (nodeWidth / 2) + (index * (nodeWidth + nodeGap)),
                 y: startY + (row * rowGap),
             });
         });
