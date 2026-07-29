@@ -2603,6 +2603,7 @@ function buildTopologyGraph() {
     }
 
     const terminalConnectivity = trace.connectivity?.terminal || {};
+    const terminalLinkConfirmed = trace.result_type === 'terminal' && Boolean(trace.final_interface);
     const terminalId = `terminal:${trace.target_mac || trace.target_ip || 'selected'}`;
     const terminal = {
         id: terminalId,
@@ -2614,6 +2615,9 @@ function buildTopologyGraph() {
         status_text: topologyStatusLabel(terminalConnectivity.status),
         status_source: '实时 Ping',
         last_checked_at: trace.connectivity?.checked_at || '',
+        path_status: trace.connectivity?.path_status || 'unknown',
+        trace_result_type: trace.result_type || trace.connectivity?.trace?.result_type || '',
+        trace_message: topologyState.traceMessage || '',
         active: true,
     };
     nodes.push(terminal);
@@ -2621,10 +2625,16 @@ function buildTopologyGraph() {
     activeNodeIds.add(terminal.id);
     const lastPathNode = pathNodes[pathNodes.length - 1] || nodeByIp.get(trace.final_switch);
     if (lastPathNode) {
-        activateOrAddTopologyEdge(edges, lastPathNode, terminal, {
+        const terminalEdge = activateOrAddTopologyEdge(edges, lastPathNode, terminal, {
             local_interface: trace.final_interface || '',
             remote_interface: trace.target_mac || '',
+            source: 'trace',
+            confirmed: terminalLinkConfirmed,
         });
+        if (!terminalLinkConfirmed) {
+            terminalEdge.status = 'unknown';
+            terminalEdge.active = false;
+        }
     }
 
     const firewallConnectivity = trace.connectivity?.firewall || {};
@@ -2685,6 +2695,7 @@ function activateOrAddTopologyEdge(edges, sourceNode, targetNode, link) {
     }
     edge.status = topologyEdgeStatus(sourceNode.status, targetNode.status);
     edge.active = true;
+    return edge;
 }
 
 function topologyEdgeStatus(sourceStatus, targetStatus) {
@@ -3187,7 +3198,9 @@ function renderTopologyDetailEdge(edge, nodeId, nodes) {
         <div class="topology-link-detail">
             <div><strong>${escapeHtml(peer.name || peer.ip || '相邻节点')}</strong><span class="topology-link-status ${normalizeTopologyStatus(edge.status)}">${escapeHtml(topologyStatusLabel(edge.status))}</span></div>
             ${links.map((link) => {
-                const evidence = link.source === 'configured'
+                const evidence = link.source === 'trace'
+                    ? (link.confirmed ? '路径检测 · 终端端口已确认' : '路径检测 · 终端端口未确认')
+                    : link.source === 'configured'
                     ? (edge.relationship_type === 'carrier'
                         ? (link.observed ? '线路标注 · LLDP 已发现' : '线路标注 · 待确认')
                         : (link.observed ? '端口表配置 · 核心口已见防火墙 LLDP' : '仅端口表配置'))
@@ -3249,7 +3262,17 @@ async function traceTopologyTerminal(event) {
         if (clearButton) {
             clearButton.disabled = false;
         }
-        showToast(result.code === 0 ? '路径检测完成' : (result.message || '路径检测异常'), result.code === 0 ? 'info' : 'error');
+        const connectivity = result.data?.connectivity || {};
+        const pathStatus = connectivity.path_status || (result.code === 0 ? 'degraded' : 'failed');
+        const terminalOffline = connectivity.terminal?.status === 'offline';
+        const toastMessage = pathStatus === 'online'
+            ? '路径检测完成'
+            : pathStatus === 'degraded'
+                ? (result.message || '路径未完整定位')
+                : terminalOffline
+                    ? '终端 Ping 未响应，请检查终端状态'
+                    : (result.message || '路径检测异常');
+        showToast(toastMessage, pathStatus === 'failed' ? 'error' : 'info');
     } catch (error) {
         setTopologyPathStatus('failed', '检测失败');
         setText('topology-trace-summary', error.message);
@@ -3266,7 +3289,7 @@ function renderTopologyTraceSummary(trace, message, code) {
     const finalLocation = trace.final_switch && trace.final_interface
         ? `${trace.final_switch} / ${trace.final_interface}`
         : message || '未定位到最终端口';
-    setTopologyPathStatus(pathStatus, topologyPathStatusLabel(pathStatus));
+    setTopologyPathStatus(pathStatus, topologyPathStatusLabel(pathStatus, trace.result_type));
     setText(
         'topology-trace-summary',
         `${trace.target_name && trace.target_name !== '无' ? trace.target_name : trace.target_ip || trace.target_mac || '目标终端'}：${topologyStatusLabel(terminalStatus)} · ${finalLocation}`,
@@ -3333,7 +3356,17 @@ function topologyNodeFields(node) {
 
 function topologyNodeSummary(node) {
     if (node.type === 'terminal') {
-        return node.status === 'online' ? '终端 Ping 正常，接入路径已完成检测。' : '终端 Ping 未响应，请结合交换机路径状态继续排查。';
+        if (node.status === 'online' && node.path_status === 'online' && node.trace_result_type === 'terminal') {
+            return '终端 Ping 正常，接入路径和终端端口均已确认。';
+        }
+        if (node.status === 'online') {
+            const traceMessage = String(node.trace_message || '').replace(/[。！!]+$/, '');
+            return `终端 Ping 正常；${traceMessage || '已定位到最近可达交换机，终端端口尚未确认'}。`;
+        }
+        if (node.status === 'offline') {
+            return '终端 Ping 未响应，请结合交换机路径状态继续排查。';
+        }
+        return '尚未取得终端 Ping 结果，请结合已定位的交换机路径继续排查。';
     }
     if (node.type === 'firewall') {
         return node.ha_member
@@ -3398,10 +3431,10 @@ function topologyStatusLabel(status) {
     }[status] || '状态未知';
 }
 
-function topologyPathStatusLabel(status) {
+function topologyPathStatusLabel(status, resultType = '') {
     return {
         online: '路径正常',
-        degraded: '部分可达',
+        degraded: resultType === 'not_found' ? '路径未定位' : '部分定位',
         failed: '路径异常',
     }[status] || '检测完成';
 }

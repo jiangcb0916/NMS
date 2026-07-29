@@ -1004,13 +1004,35 @@ def main():
             "online",
             [{"status": "offline"}],
             {"status": "online"},
-        ) == "failed"
+        ) == "online"
         assert switch_routes.aggregate_trace_path_status(
             "online",
             "online",
             [{"status": "online"}],
             {"status": "unconfigured"},
+        ) == "online"
+        assert switch_routes.aggregate_trace_path_status(
+            "online",
+            "offline",
+            [{"status": "online"}],
+            {"status": "online"},
+        ) == "failed"
+        assert switch_routes.aggregate_trace_path_status(
+            "degraded",
+            "online",
+            [{"status": "online"}],
+            {"status": "online"},
         ) == "degraded"
+        assert switch_routes.aggregate_trace_path_status(
+            "failed",
+            "online",
+            [{"status": "online"}],
+            {"status": "online"},
+        ) == "failed"
+        assert switch_routes.trace_connectivity_status("terminal", 0) == "online"
+        assert switch_routes.trace_connectivity_status("downstream", 0) == "degraded"
+        assert switch_routes.trace_connectivity_status("partial", 1) == "degraded"
+        assert switch_routes.trace_connectivity_status("failed", 1) == "failed"
         assert switch_trace.cisco_mac("186f-2d0b-e080") == "186f.2d0b.e080"
         assert switch_trace.cisco_colon_mac("186f-2d0b-e080") == "18:6f:2d:0b:e0:80"
         assert switch_trace.cisco_interface_name("GigabitEthernet1/0/36") == "Gi1/0/36"
@@ -1271,6 +1293,26 @@ def main():
                 "show mac address-table address 9009.d091.478f"
             )
 
+            class FakePartialTwoHopMacSession(FakeTwoHopMacSession):
+                def run(self, command):
+                    if (
+                        self.host == "172.16.100.8"
+                        and command.startswith("show mac")
+                    ):
+                        return ""
+                    return super().run(command)
+
+            switch_trace.HuaweiCliSession = FakePartialTwoHopMacSession
+            with app.app_context():
+                partial_payload, partial_message, partial_code = switch_trace.trace_terminal_mac(
+                    "9009-d091-478f"
+                )
+            assert partial_code == 1
+            assert partial_payload["result_type"] == "partial"
+            assert partial_payload["final_switch"] == "172.16.100.8"
+            assert partial_payload["final_interface"] == ""
+            assert partial_message == "下联交换机未找到目标 MAC"
+
             class FakeCiscoVariantTraceSession:
                 def __init__(self, host, config, platform="huawei"):
                     self.host = host
@@ -1455,6 +1497,27 @@ def main():
             assert connectivity["trace"]["status"] == "online"
             assert connectivity["firewall"]["status"] == "online"
             assert connectivity["path_status"] == "online"
+
+            def fake_partial_trace_terminal_ip(ip):
+                payload, _, _ = fake_trace_terminal_ip(ip)
+                payload["result_type"] = "partial"
+                payload["final_interface"] = ""
+                payload["error"] = "下联交换机未找到目标 MAC"
+                return payload, "下联交换机未找到目标 MAC", 1
+
+            switch_routes.trace_terminal_ip = fake_partial_trace_terminal_ip
+            partial_connectivity_response = client.post(
+                "/api/statistics/switches/trace-terminal",
+                json={"ip": "172.16.70.17", "check_connectivity": True},
+            )
+            partial_connectivity_json = partial_connectivity_response.get_json()
+            assert partial_connectivity_json["code"] == 1
+            assert partial_connectivity_json["data"]["result_type"] == "partial"
+            partial_connectivity = partial_connectivity_json["data"]["connectivity"]
+            assert partial_connectivity["terminal"]["status"] == "online"
+            assert partial_connectivity["trace"]["status"] == "degraded"
+            assert partial_connectivity["path_status"] == "degraded"
+            switch_routes.trace_terminal_ip = fake_trace_terminal_ip
 
             assert switch_routes.parse_trace_target({"target": "9009.D091.478F"}) == ("mac", "9009-d091-478f")
             assert switch_routes.parse_trace_target({"target": "9009d091478f"}) == ("mac", "9009-d091-478f")

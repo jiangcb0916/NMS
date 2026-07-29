@@ -324,7 +324,7 @@ def build_trace_connectivity(payload, trace_code):
         })
 
     result_type = payload.get("result_type") or "failed"
-    trace_status = "online" if trace_code == 0 and result_type == "terminal" else "failed"
+    trace_status = trace_connectivity_status(result_type, trace_code)
     firewall = trace_firewall_connectivity()
     path_status = aggregate_trace_path_status(
         trace_status,
@@ -340,6 +340,14 @@ def build_trace_connectivity(payload, trace_code):
         "firewall": firewall,
         "path_status": path_status,
     }
+
+
+def trace_connectivity_status(result_type, trace_code):
+    if trace_code == 0 and result_type == "terminal":
+        return "online"
+    if result_type in {"downstream", "not_found", "partial"}:
+        return "degraded"
+    return "failed"
 
 
 def trace_firewall_connectivity():
@@ -365,16 +373,11 @@ def trace_firewall_connectivity():
 
 
 def aggregate_trace_path_status(trace_status, terminal_status, switches, firewall):
-    component_statuses = [
-        terminal_status,
-        *(item.get("status") or "unknown" for item in switches),
-        firewall.get("status") or "unknown",
-    ]
-    if trace_status == "failed" or "offline" in component_statuses:
+    # CLI 追踪与终端 Ping 直接描述本次路径。Prometheus 和防火墙 SNMP
+    # 仍作为诊断信息返回，但不能单独把一条已验证的终端路径判为异常。
+    if trace_status == "failed" or terminal_status == "offline":
         return "failed"
-    if trace_status == "online" and component_statuses and all(
-        status == "online" for status in component_statuses
-    ):
+    if trace_status == "online" and terminal_status == "online":
         return "online"
     return "degraded"
 

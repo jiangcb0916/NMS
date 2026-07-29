@@ -183,7 +183,7 @@ def trace_terminal(target_ip="", target_mac=""):
                     payload["target_mac"] = target_mac
 
                 if not lookup_result.get("found"):
-                    result_type = "not_found" if hop_index == 1 else "failed"
+                    result_type = "not_found" if hop_index == 1 else "partial"
                     if hop_index == 1:
                         message = "核心 MAC 表未找到目标 MAC" if payload["target_type"] == "mac" else "核心 ARP 未找到"
                     else:
