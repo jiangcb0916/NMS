@@ -2748,6 +2748,57 @@ body.workspace-screen-active .page-header {
     fill: #8cc8ff;
 }
 
+.app-body .topology-stage.has-active-path .topology-edge:not(.active-path) path {
+    opacity: 0.18;
+}
+
+.app-body .topology-edge.active-path {
+    --topology-path-color: #2f9cff;
+    --topology-path-flow-color: #d7f1ff;
+    --topology-path-glow: rgba(47, 156, 255, 0.72);
+}
+
+.app-body .topology-edge.active-path.offline {
+    --topology-path-color: #ef6074;
+    --topology-path-flow-color: #ffdce2;
+    --topology-path-glow: rgba(239, 96, 116, 0.68);
+}
+
+.app-body .topology-edge.active-path.unknown {
+    --topology-path-color: #e6aa3b;
+    --topology-path-flow-color: #fff0bd;
+    --topology-path-glow: rgba(230, 170, 59, 0.64);
+}
+
+.app-body .topology-edge.active-path .topology-edge-track {
+    stroke: var(--topology-path-color);
+    stroke-width: 4;
+    stroke-dasharray: none;
+    opacity: 0.82;
+    filter: drop-shadow(0 0 4px var(--topology-path-glow));
+}
+
+.app-body .topology-edge.active-path .topology-edge-flow {
+    stroke: var(--topology-path-flow-color);
+    stroke-width: 2;
+    stroke-dasharray: 7 11;
+    opacity: 1;
+    animation: topology-edge-flow 0.85s linear infinite;
+}
+
+@keyframes topology-edge-flow {
+    to {
+        stroke-dashoffset: -18;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-body .topology-edge.active-path .topology-edge-flow {
+        display: none;
+        animation: none;
+    }
+}
+
 .app-body .topology-node {
     border-color: #496176;
     background: #1a3042;
@@ -2777,6 +2828,12 @@ body.workspace-screen-active .page-header {
 .app-body .topology-node.core:focus-visible {
     border-color: #83a0b6;
     background: #254054;
+}
+
+.app-body .topology-node.core.active-path {
+    border-color: #69a8df;
+    background: #1b3b55;
+    box-shadow: 0 0 0 1px rgba(78, 157, 224, 0.24);
 }
 
 .app-body .topology-node-icon {

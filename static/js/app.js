@@ -2650,9 +2650,6 @@ function buildTopologyGraph() {
                 target.last_error = firewallConnectivity.error || '';
             }
             edge.status = topologyEdgeStatus(source.status, target.status);
-            edge.active = true;
-            target.active = true;
-            activeNodeIds.add(target.id);
         }
     });
     nodes.forEach((node) => {
@@ -2719,6 +2716,7 @@ function renderTopologyGraph() {
         return;
     }
     const graph = buildTopologyGraph();
+    stage.classList.toggle('has-active-path', graph.edges.some((edge) => edge.active));
     if (!graph.nodes.length) {
         renderTopologyEmpty('暂无可用拓扑数据');
         return;
@@ -2755,14 +2753,18 @@ function renderTopologyGraph() {
     // viewport shifts every edge while the HTML nodes remain fixed.
     edgeLayer.style.width = `${layout.width}px`;
     edgeLayer.style.height = `${layout.height}px`;
+    const orderedEdges = [...graph.edges]
+        .sort((left, right) => Number(Boolean(left.active)) - Number(Boolean(right.active)));
+    const renderEdge = (edge) => renderTopologyEdge(
+        edge,
+        layout.positions,
+        layout.nodeById,
+        layout.edgeRoles,
+    );
     edgeLayer.innerHTML = [
-        ...graph.edges.map((edge) => renderTopologyEdge(
-            edge,
-            layout.positions,
-            layout.nodeById,
-            layout.edgeRoles,
-        )),
+        ...orderedEdges.filter((edge) => !edge.active).map(renderEdge),
         renderTopologyStackLink(layout.cores, layout.positions),
+        ...orderedEdges.filter((edge) => edge.active).map(renderEdge),
     ].join('');
 
     if (topologyState.selectedNodeId) {
@@ -3089,9 +3091,15 @@ function renderTopologyEdge(edge, positions, nodeById, edgeRoles = new Map()) {
     const status = normalizeTopologyStatus(edge.status);
     const visualRole = edgeRoles.get(edge.id) || '';
     const label = Number(edge.link_count || 0) > 1 ? `${edge.link_count} 条链路` : '';
+    const paths = edge.active
+        ? `
+            <path class="topology-edge-track" d="${geometry.path}"></path>
+            <path class="topology-edge-flow" d="${geometry.path}"></path>
+        `
+        : `<path d="${geometry.path}"></path>`;
     return `
         <g class="topology-edge ${status} ${visualRole} ${edge.active ? 'active-path' : ''}">
-            <path d="${geometry.path}"></path>
+            ${paths}
             ${label ? `<text x="${geometry.labelX}" y="${geometry.labelY}">${escapeHtml(label)}</text>` : ''}
         </g>
     `;
